@@ -1,33 +1,29 @@
 use crate::api::{ChatApi, ChatCompletionChunk};
-use crate::types::{ChatCompletionRequest, ChatCompletionResponse, AiLibError};
-use crate::provider::{OpenAiAdapter, GeminiAdapter, GenericAdapter, ProviderConfigs};
-use futures::stream::Stream;
+use crate::provider::{GenericAdapter, GroqAdapter, OpenAiAdapter, ProviderConfigs};
+use crate::types::{AiLibError, ChatCompletionRequest, ChatCompletionResponse};
+use futures::stream::{Stream, StreamExt};
 use futures::Future;
 use tokio::sync::oneshot;
 
-/// 支持的AI模型提供商枚举
-/// 
-/// AI model provider enumeration
+/// AI模型提供商枚举
 #[derive(Debug, Clone, Copy)]
 pub enum Provider {
     Groq,
     OpenAI,
     DeepSeek,
-    Anthropic,
-    Gemini, // 独立适配器
+    // 特殊适配器
+    // Gemini,  // 需要独立适配器
 }
 
-/// 统一的AI客户端，支持多个提供商的混合架构实现
-/// 
-/// Unified AI client for multiple providers with hybrid architecture
-/// 
-/// Usage example:
+/// 统一AI客户端
+///
+/// 使用示例：
 /// ```rust
 /// use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
-/// 
+///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     // Switch model providers by just changing the Provider value
+///     // 切换模型提供商，只需更改 Provider 的值
 ///     let client = AiClient::new(Provider::Groq)?;
 ///     
 ///     let request = ChatCompletionRequest::new(
@@ -38,8 +34,8 @@ pub enum Provider {
 ///         }],
 ///     );
 ///     
-///     // Note: GROQ_API_KEY environment variable must be set to actually call the API
-///     // Optional: Set AI_PROXY_URL environment variable to use proxy server
+///     // 注意：这里需要设置GROQ_API_KEY环境变量才能实际调用API
+///     // 可选：设置AI_PROXY_URL环境变量使用代理服务器
 ///     // let response = client.chat_completion(request).await?;
 ///     
 ///     println!("Client created successfully with provider: {:?}", client.current_provider());
@@ -48,158 +44,163 @@ pub enum Provider {
 ///     Ok(())
 /// }
 /// ```
-/// 
-/// # Proxy Server Configuration
-/// 
-/// Configure proxy server by setting the `AI_PROXY_URL` environment variable:
-/// 
+///
+/// # 代理服务器配置
+///
+/// 通过设置 `AI_PROXY_URL` 环境变量来配置代理服务器：
+///
 /// ```bash
 /// export AI_PROXY_URL=http://proxy.example.com:8080
 /// ```
-/// 
-/// Supported proxy formats:
-/// - HTTP proxy: `http://proxy.example.com:8080`
-/// - HTTPS proxy: `https://proxy.example.com:8080`  
-/// - With authentication: `http://user:pass@proxy.example.com:8080`
+///
+/// 支持的代理格式：
+/// - HTTP代理: `http://proxy.example.com:8080`
+/// - HTTPS代理: `https://proxy.example.com:8080`  
+/// - 带认证: `http://user:pass@proxy.example.com:8080`
 pub struct AiClient {
     provider: Provider,
     adapter: Box<dyn ChatApi>,
 }
 
 impl AiClient {
-    /// Create a new AI client
-    /// 
+    /// 创建新的AI客户端
+    ///
     /// # Arguments
-    /// * `provider` - Choose the AI model provider to use
-    /// 
+    /// * `provider` - 选择要使用的AI模型提供商
+    ///
     /// # Returns
-    /// * `Result<Self, AiLibError>` - Returns client instance on success, error on failure
-    /// 
+    /// * `Result<Self, AiLibError>` - 成功时返回客户端实例，失败时返回错误
+    ///
     /// # Example
-/// ```rust
-/// use ai_lib::{AiClient, Provider};
-/// 
-/// let client = AiClient::new(Provider::Groq)?;
-/// # Ok::<(), ai_lib::AiLibError>(())
-/// ```
+    /// ```rust
+    /// use ai_lib::{AiClient, Provider};
+    ///
+    /// let client = AiClient::new(Provider::Groq)?;
+    /// # Ok::<(), ai_lib::AiLibError>(())
+    /// ```
     pub fn new(provider: Provider) -> Result<Self, AiLibError> {
         let adapter: Box<dyn ChatApi> = match provider {
-            // Configuration-driven generic adapters - proving OpenAI compatibility
-            Provider::Groq => Box::new(GenericAdapter::new(ProviderConfigs::groq_as_generic())?),
-            Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
-            Provider::Anthropic => Box::new(GenericAdapter::new(ProviderConfigs::anthropic())?),
-            
-            // Independent adapters (special API formats)
+            // 使用独立适配器
+            Provider::Groq => Box::new(GroqAdapter::new()?),
             Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
-            Provider::Gemini => Box::new(GeminiAdapter::new()?),
+
+            // 使用配置驱动的通用适配器
+            Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
         };
-        
+
         Ok(Self { provider, adapter })
     }
-    
-    /// Send chat completion request
-    /// 
+
+    /// 发送聊天完成请求
+    ///
     /// # Arguments
-    /// * `request` - Chat completion request
-    /// 
+    /// * `request` - 聊天完成请求
+    ///
     /// # Returns
-    /// * `Result<ChatCompletionResponse, AiLibError>` - Returns response on success, error on failure
+    /// * `Result<ChatCompletionResponse, AiLibError>` - 成功时返回响应，失败时返回错误
     pub async fn chat_completion(
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
         self.adapter.chat_completion(request).await
     }
-    
-    /// Streaming chat completion request
-    /// 
+
+    /// 流式聊天完成请求
+    ///
     /// # Arguments
-    /// * `request` - Chat completion request
-    /// 
+    /// * `request` - 聊天完成请求
+    ///
     /// # Returns
-    /// * `Result<impl Stream<Item = Result<ChatCompletionChunk, AiLibError>>, AiLibError>` - Returns streaming response on success
+    /// * `Result<impl Stream<Item = Result<ChatCompletionChunk, AiLibError>>, AiLibError>` - 成功时返回流式响应
     pub async fn chat_completion_stream(
         &self,
         mut request: ChatCompletionRequest,
-    ) -> Result<Box<dyn Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin>, AiLibError> {
+    ) -> Result<
+        Box<dyn Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin>,
+        AiLibError,
+    > {
         request.stream = Some(true);
         self.adapter.chat_completion_stream(request).await
     }
-    
-    /// Streaming chat completion request with cancellation control
-    /// 
+
+    /// 带取消控制的流式聊天完成请求
+    ///
     /// # Arguments
-    /// * `request` - Chat completion request
-    /// 
+    /// * `request` - 聊天完成请求
+    ///
     /// # Returns
-    /// * `(Stream, CancelHandle)` - Streaming response and cancel handle
+    /// * `(Stream, CancelHandle)` - 流式响应和取消句柄
     pub async fn chat_completion_stream_with_cancel(
         &self,
         request: ChatCompletionRequest,
-    ) -> Result<(Box<dyn Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin>, CancelHandle), AiLibError> {
+    ) -> Result<
+        (
+            Box<dyn Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin>,
+            CancelHandle,
+        ),
+        AiLibError,
+    > {
         let (cancel_tx, cancel_rx) = oneshot::channel();
         let stream = self.chat_completion_stream(request).await?;
-        
-        let cancel_handle = CancelHandle { sender: Some(cancel_tx) };
+
+        let cancel_handle = CancelHandle {
+            sender: Some(cancel_tx),
+        };
         let controlled_stream = ControlledStream::new(stream, cancel_rx);
-        
+
         Ok((Box::new(Box::pin(controlled_stream)), cancel_handle))
     }
-    
-    /// Get list of supported models
-    /// 
+
+    /// 获取支持的模型列表
+    ///
     /// # Returns
-    /// * `Result<Vec<String>, AiLibError>` - Returns model list on success, error on failure
+    /// * `Result<Vec<String>, AiLibError>` - 成功时返回模型列表，失败时返回错误
     pub async fn list_models(&self) -> Result<Vec<String>, AiLibError> {
         self.adapter.list_models().await
     }
-    
-    /// Switch AI model provider
-    /// 
+
+    /// 切换AI模型提供商
+    ///
     /// # Arguments
-    /// * `provider` - New provider
-    /// 
+    /// * `provider` - 新的提供商
+    ///
     /// # Returns
-    /// * `Result<(), AiLibError>` - Returns () on success, error on failure
-    /// 
+    /// * `Result<(), AiLibError>` - 成功时返回()，失败时返回错误
+    ///
     /// # Example
-/// ```rust
-/// use ai_lib::{AiClient, Provider};
-/// 
-/// let mut client = AiClient::new(Provider::Groq)?;
-/// // Switch from Groq to Groq (demonstrating switch functionality)
-/// client.switch_provider(Provider::Groq)?;
-/// # Ok::<(), ai_lib::AiLibError>(())
-/// ```
+    /// ```rust
+    /// use ai_lib::{AiClient, Provider};
+    ///
+    /// let mut client = AiClient::new(Provider::Groq)?;
+    /// // 从Groq切换到Groq（演示切换功能）
+    /// client.switch_provider(Provider::Groq)?;
+    /// # Ok::<(), ai_lib::AiLibError>(())
+    /// ```
     pub fn switch_provider(&mut self, provider: Provider) -> Result<(), AiLibError> {
         let new_adapter: Box<dyn ChatApi> = match provider {
-            Provider::Groq => Box::new(GenericAdapter::new(ProviderConfigs::groq_as_generic())?),
-            Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
-            Provider::Anthropic => Box::new(GenericAdapter::new(ProviderConfigs::anthropic())?),
+            Provider::Groq => Box::new(GroqAdapter::new()?),
             Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
-            Provider::Gemini => Box::new(GeminiAdapter::new()?),
+            Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
         };
-        
+
         self.provider = provider;
         self.adapter = new_adapter;
         Ok(())
     }
-    
-    /// Get the currently used provider
+
+    /// 获取当前使用的提供商
     pub fn current_provider(&self) -> Provider {
         self.provider
     }
 }
 
 /// 流式响应取消句柄
-/// 
-/// Streaming response cancel handle
 pub struct CancelHandle {
     sender: Option<oneshot::Sender<()>>,
 }
 
 impl CancelHandle {
-    /// Cancel streaming response
+    /// 取消流式响应
     pub fn cancel(mut self) {
         if let Some(sender) = self.sender.take() {
             let _ = sender.send(());
@@ -208,8 +209,6 @@ impl CancelHandle {
 }
 
 /// 可控制的流式响应
-/// 
-/// Controllable streaming response
 struct ControlledStream {
     inner: Box<dyn Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin>,
     cancel_rx: Option<oneshot::Receiver<()>>,
@@ -229,26 +228,28 @@ impl ControlledStream {
 
 impl Stream for ControlledStream {
     type Item = Result<ChatCompletionChunk, AiLibError>;
-    
+
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
         use futures::stream::StreamExt;
         use std::task::Poll;
-        
-        // Check if cancelled
+
+        // 检查是否被取消
         if let Some(ref mut cancel_rx) = self.cancel_rx {
             match Future::poll(std::pin::Pin::new(cancel_rx), cx) {
                 Poll::Ready(_) => {
                     self.cancel_rx = None;
-                    return Poll::Ready(Some(Err(AiLibError::ProviderError("Stream cancelled".to_string()))));
+                    return Poll::Ready(Some(Err(AiLibError::ProviderError(
+                        "Stream cancelled".to_string(),
+                    ))));
                 }
                 Poll::Pending => {}
             }
         }
-        
-        // Poll inner stream
+
+        // 轮询内部流
         self.inner.poll_next_unpin(cx)
     }
 }

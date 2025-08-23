@@ -1,5 +1,3 @@
-//! AI-lib: Rust统一AI SDK库，提供多个AI提供商的统一接口
-//! 
 //! AI-lib: A Unified AI SDK for Rust
 //! 
 //! This library provides a single, consistent interface for interacting with multiple AI model providers.
@@ -11,7 +9,7 @@
 //! 
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     // Switch model providers by just changing the Provider value
+//!     // 切换模型提供商，只需更改 Provider 的值
 //!     let client = AiClient::new(Provider::Groq)?;
 //!     
 //!     let request = ChatCompletionRequest::new(
@@ -22,7 +20,7 @@
 //!         }],
 //!     );
 //!     
-//!     // Note: GROQ_API_KEY environment variable must be set to actually call the API
+//!     // 注意：这里需要设置GROQ_API_KEY环境变量才能实际调用API
 //!     // let response = client.chat_completion(request).await?;
 //!     // println!("Response: {}", response.choices[0].message.content);
 //!     
@@ -33,22 +31,22 @@
 //! }
 //! ```
 //! 
-//! # Proxy Server Support
+//! # 代理服务器支持
 //! 
-//! AI-lib supports proxy server configuration via environment variables:
+//! AI-lib 支持通过环境变量配置代理服务器：
 //! 
 //! ```bash
-//! # Set proxy server
+//! # 设置代理服务器
 //! export AI_PROXY_URL=http://proxy.example.com:8080
 //! 
-//! # Proxy with authentication
+//! # 带认证的代理
 //! export AI_PROXY_URL=http://username:password@proxy.example.com:8080
 //! 
-//! # HTTPS proxy
+//! # HTTPS代理
 //! export AI_PROXY_URL=https://proxy.example.com:8080
 //! ```
 //! 
-//! Once set, all AI provider requests will automatically go through the specified proxy server.
+//! 设置后，所有AI提供商的请求都会自动通过指定的代理服务器。
 
 pub mod api;
 pub mod types;
@@ -60,4 +58,3 @@ pub mod transport;
 pub use api::ChatApi;
 pub use types::{ChatCompletionRequest, ChatCompletionResponse, Message, Role, Choice, Usage, AiLibError};
 pub use client::{AiClient, Provider};
-
