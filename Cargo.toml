@@ -1,11 +1,37 @@
 [package]
 name = "ai-lib"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
-description = "A unified AI SDK for Rust, providing a single interface for multiple large language models."
+authors = ["AI-lib Contributors"]
+description = "A unified AI SDK for Rust providing a single interface for multiple AI providers with hybrid architecture"
 license = "MIT"
+readme = "README.md"
 repository = "https://github.com/hiddenpath/ai-lib"
+homepage = "https://github.com/hiddenpath/ai-lib"
+documentation = "https://docs.rs/ai-lib"
+keywords = ["ai", "llm", "openai", "groq", "gemini", "SDK"]
+categories = ["api-bindings", "web-programming::http-client"]
+include = [
+    "src/**/*",
+    "Cargo.toml",
+    "README.md",
+    "README_CN.md",
+    "LICENSE",
+    "CHANGELOG.md"
+]
+rust-version = "1.70"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+thiserror = "2.0.16"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+futures = "0.3"
+reqwest-eventsource = "0.6"
+tokio-stream = "0.1"
+chrono = "0.4"
+backoff = { version = "0.4", features = ["tokio"] }
