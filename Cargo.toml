@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2021"
 description = "A unified AI SDK for Rust, providing a single interface for multiple large language models."
 license = "MIT"
-repository = "https://github.com/your-username/ai-lib"
+repository = "https://github.com/hiddenpath/ai-lib"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
