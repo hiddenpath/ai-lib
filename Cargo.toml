@@ -1,10 +1,10 @@
 [package]
 name = "ai-lib"
-version = "0.0.4"
+version = "0.0.5"
 edition = "2021"
 authors = ["AI-lib Contributors"]
 description = "A unified AI SDK for Rust providing a single interface for multiple AI providers with hybrid architecture"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/hiddenpath/ai-lib"
 homepage = "https://github.com/hiddenpath/ai-lib"

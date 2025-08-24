@@ -58,7 +58,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ai-lib = "0.0.4"
+ai-lib = "0.0.5"
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
 ```
@@ -369,7 +369,10 @@ This library is the successor to [groqai](https://github.com/your-username/groqa
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+Licensed under either of:
+- MIT License ([LICENSE-MIT](LICENSE-MIT))
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+at your option.
 
 ## Citation
 

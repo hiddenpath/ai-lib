@@ -58,7 +58,7 @@ while let Some(chunk) = stream.next().await {
 
 ```toml
 [dependencies]
-ai-lib = "0.0.4"
+ai-lib = "0.0.5"
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
 ```
@@ -369,7 +369,12 @@ cargo run --example test_hybrid_architecture
 
 ## 许可证
 
-MIT许可证 - 详见 [LICENSE](LICENSE)。
+根据以下任一许可协议授权：
+
+- MIT 许可证 (LICENSE-MIT)
+- Apache 许可证，第 2.0 版 (LICENSE-APACHE)
+
+您可以选择其中之一。
 
 ## 引用
 
