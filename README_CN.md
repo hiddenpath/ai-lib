@@ -66,7 +66,7 @@ futures = "0.3"
 ### 基础用法
 
 ```rust
-use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
+use ai-lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
 use futures::StreamExt;
 
 #[tokio::main]
@@ -363,6 +363,10 @@ cargo run --example test_hybrid_architecture
 - 受到Rust社区对安全性和性能承诺的启发
 - 为需要可靠AI集成的开发者而用心构建
 
+## 历史与相关项目
+
+本库的前身为 [groqai](https://github.com/你的用户名/groqai)，专注于 Groq 单一大模型 API 接口。ai-lib 则进一步扩展为多模型、多厂商统一接口，适合更广泛的 AI 应用场景。
+
 ## 许可证
 
 MIT许可证 - 详见 [LICENSE](LICENSE)。
@@ -372,7 +376,7 @@ MIT许可证 - 详见 [LICENSE](LICENSE)。
 如果您在研究或项目中使用ai-lib，请考虑引用：
 
 ```bibtex
-@software{ai_lib,
+@software{ai-lib,
   title = {ai-lib: A Unified AI SDK for Rust},
   author = {AI-lib Contributors},
   url = {https://github.com/hiddenpath/ai-lib},
