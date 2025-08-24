@@ -58,7 +58,7 @@ while let Some(chunk) = stream.next().await {
 
 ```toml
 [dependencies]
-ai-lib = "0.0.3"
+ai-lib = "0.0.4"
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
 ```

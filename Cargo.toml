@@ -1,6 +1,6 @@
 [package]
 name = "ai-lib"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2021"
 authors = ["AI-lib Contributors"]
 description = "A unified AI SDK for Rust providing a single interface for multiple AI providers with hybrid architecture"
@@ -13,6 +13,7 @@ keywords = ["ai", "llm", "openai", "groq", "gemini"]
 categories = ["api-bindings", "web-programming::http-client"]
 include = [
     "src/**/*",
+    "examples/*",
     "Cargo.toml",
     "README.md",
     "README_CN.md",

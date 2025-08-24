@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // 测试Groq (工作正常)
     println!("\n🟢 Groq (工作正常):");
-    if let Ok(groq_client) = AiClient::new(Provider::Groq) {
+    if let Ok(_groq_client) = AiClient::new(Provider::Groq) {
         // Groq使用独立适配器，我们知道它工作正常
         println!("   ✅ 使用独立适配器 (GroqAdapter)");
         println!("   ✅ 请求格式正确");

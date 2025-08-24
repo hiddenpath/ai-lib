@@ -1,6 +1,5 @@
 use reqwest;
 use serde_json::json;
-use std::collections::HashMap;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

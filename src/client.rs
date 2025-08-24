@@ -1,5 +1,5 @@
 use crate::api::{ChatApi, ChatCompletionChunk};
-use crate::provider::{OpenAiAdapter, GenericAdapter, ProviderConfigs};
+use crate::provider::{GeminiAdapter, GenericAdapter, OpenAiAdapter, ProviderConfigs};
 use crate::types::{AiLibError, ChatCompletionRequest, ChatCompletionResponse};
 use futures::stream::Stream;
 use futures::Future;
@@ -11,6 +11,8 @@ pub enum Provider {
     Groq,
     OpenAI,
     DeepSeek,
+    Gemini,
+    Anthropic,
     // 特殊适配器
     // Gemini,  // 需要独立适配器
 }
@@ -83,9 +85,10 @@ impl AiClient {
             // 使用配置驱动的通用适配器
             Provider::Groq => Box::new(GenericAdapter::new(ProviderConfigs::groq())?),
             Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
-            
+            Provider::Anthropic => Box::new(GenericAdapter::new(ProviderConfigs::anthropic())?),
             // 使用独立适配器
             Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
+            Provider::Gemini => Box::new(GeminiAdapter::new()?),
         };
 
         Ok(Self { provider, adapter })
@@ -181,6 +184,8 @@ impl AiClient {
             Provider::Groq => Box::new(GenericAdapter::new(ProviderConfigs::groq())?),
             Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
             Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
+            Provider::Anthropic => Box::new(GenericAdapter::new(ProviderConfigs::anthropic())?),
+            Provider::Gemini => Box::new(GeminiAdapter::new()?),
         };
 
         self.provider = provider;
