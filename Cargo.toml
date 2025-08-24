@@ -9,7 +9,7 @@ readme = "README.md"
 repository = "https://github.com/hiddenpath/ai-lib"
 homepage = "https://github.com/hiddenpath/ai-lib"
 documentation = "https://docs.rs/ai-lib"
-keywords = ["ai", "llm", "openai", "groq", "gemini", "SDK"]
+keywords = ["ai", "llm", "openai", "groq", "gemini"]
 categories = ["api-bindings", "web-programming::http-client"]
 include = [
     "src/**/*",
