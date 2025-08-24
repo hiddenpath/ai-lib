@@ -1,7 +1,7 @@
 use crate::api::{ChatApi, ChatCompletionChunk};
-use crate::provider::{GenericAdapter, GroqAdapter, OpenAiAdapter, ProviderConfigs};
+use crate::provider::{OpenAiAdapter, GenericAdapter, ProviderConfigs};
 use crate::types::{AiLibError, ChatCompletionRequest, ChatCompletionResponse};
-use futures::stream::{Stream, StreamExt};
+use futures::stream::Stream;
 use futures::Future;
 use tokio::sync::oneshot;
 
@@ -80,12 +80,12 @@ impl AiClient {
     /// ```
     pub fn new(provider: Provider) -> Result<Self, AiLibError> {
         let adapter: Box<dyn ChatApi> = match provider {
-            // 使用独立适配器
-            Provider::Groq => Box::new(GroqAdapter::new()?),
-            Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
-
             // 使用配置驱动的通用适配器
+            Provider::Groq => Box::new(GenericAdapter::new(ProviderConfigs::groq())?),
             Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
+            
+            // 使用独立适配器
+            Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
         };
 
         Ok(Self { provider, adapter })
@@ -178,9 +178,9 @@ impl AiClient {
     /// ```
     pub fn switch_provider(&mut self, provider: Provider) -> Result<(), AiLibError> {
         let new_adapter: Box<dyn ChatApi> = match provider {
-            Provider::Groq => Box::new(GroqAdapter::new()?),
-            Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
+            Provider::Groq => Box::new(GenericAdapter::new(ProviderConfigs::groq())?),
             Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
+            Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
         };
 
         self.provider = provider;
