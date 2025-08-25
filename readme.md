@@ -30,9 +30,14 @@ let claude_client = AiClient::new(Provider::Anthropic)?;
 Real-time streaming responses for all providers:
 
 ```rust
+use futures::StreamExt;
+
 let mut stream = client.chat_completion_stream(request).await?;
-while let Some(chunk) = stream.next().await {
-    if let Some(content) = chunk?.choices[0].delta.content {
+print!("Streaming: ");
+while let Some(item) = stream.next().await {
+    // `item` is `Result<ChatCompletionChunk, AiLibError>`
+    let chunk = item?;
+    if let Some(content) = chunk.choices.get(0).and_then(|c| c.delta.content.clone()) {
         print!("{}", content); // Real-time output
     }
 }
@@ -52,13 +57,21 @@ while let Some(chunk) = stream.next().await {
 
 ## Quick Start
 
+### What's new in v0.1.0 (2025-08-26)
+
+- Object-safe transport abstraction: `DynHttpTransport` and a boxed shim for the default `HttpTransport` to allow runtime injection and easier testing.
+- Cohere adapter with SSE streaming + fallback simulation.
+- Mistral HTTP adapter (conservative implementation) with streaming support.
+- `GenericAdapter` improvements: optional API key support and additional provider configs (Ollama base URL override, HuggingFace endpoint, Azure OpenAI config).
+- Examples and release checklist improvements (see `RELEASE_0.1.0_DRAFT.md`).
+
 ### Installation
 
 Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ai-lib = "0.0.5"
+ai-lib = "0.1.0"
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
 ```
@@ -66,7 +79,7 @@ futures = "0.3"
 ### Basic Usage
 
 ```rust
-use ai-lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
+use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
 use futures::StreamExt;
 
 #[tokio::main]
@@ -90,8 +103,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Streaming response for real-time output
     let mut stream = client.chat_completion_stream(request).await?;
     print!("Streaming: ");
-    while let Some(chunk) = stream.next().await {
-        if let Some(content) = chunk?.choices[0].delta.content {
+    while let Some(item) = stream.next().await {
+        let chunk = item?;
+        if let Some(content) = chunk.choices.get(0).and_then(|c| c.delta.content.clone()) {
             print!("{}", content);
         }
     }
@@ -127,6 +141,29 @@ let provider = match std::env::var("AI_PROVIDER")?.as_str() {
 };
 let client = AiClient::new(provider)?;
 ```
+
+### Dependency injection & testing (DynHttpTransport)
+
+v0.1.0 introduces an object-safe transport trait `DynHttpTransport` and a boxed shim around the default `HttpTransport`. This allows you to inject custom transports (for testing, network simulation, or SDK integrations) without changing adapter APIs.
+
+Examples:
+
+```rust
+use ai_lib::provider::GenericAdapter;
+use ai_lib::transport::DynHttpTransportRef;
+
+// Assume you implemented `MyTestTransport` that converts into `DynHttpTransportRef`
+let transport: DynHttpTransportRef = my_test_transport.into();
+let config = ai_lib::provider::ProviderConfigs::groq();
+let adapter = GenericAdapter::with_transport_ref(config, transport)?;
+```
+
+Most adapters also provide `with_transport_ref(...)` or `with_transport(...)` constructors for test injection.
+
+### Note about Bedrock
+
+AWS Bedrock integration requires SigV4 signing or AWS SDK wiring. For scope and stability of v0.1.0, Bedrock has been deferred and removed from the public exports. Re-introduce it when you implement signing or SDK integration.
+
 
 ## Environment Variables
 
