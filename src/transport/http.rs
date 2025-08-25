@@ -274,4 +274,77 @@ impl Default for HttpTransport {
     }
 }
 
+// Object-safe wrapper implementation to allow dynamic dispatch for transports
+pub struct HttpTransportBoxed {
+    inner: HttpTransport,
+}
+
+impl HttpTransportBoxed {
+    pub fn new(inner: HttpTransport) -> Self { Self { inner } }
+}
+
+use crate::transport::dyn_transport::{DynHttpTransport, DynHttpTransportRef};
+use bytes::Bytes;
+use futures::{Stream, StreamExt};
+use std::pin::Pin;
+use std::sync::Arc;
+
+impl DynHttpTransport for HttpTransportBoxed {
+    fn get_json<'a>(&'a self, url: &'a str, headers: Option<HashMap<String, String>>) -> Pin<Box<dyn futures::Future<Output = Result<serde_json::Value, crate::types::AiLibError>> + Send + 'a>> {
+        Box::pin(async move {
+            let res: Result<serde_json::Value, TransportError> = self.inner.get(url, headers).await;
+            match res {
+                Ok(v) => Ok(v),
+                Err(e) => Err(crate::types::AiLibError::ProviderError(format!("Transport error: {}", e)))
+            }
+        })
+    }
+
+    fn post_json<'a>(&'a self, url: &'a str, _headers: Option<HashMap<String, String>>, body: serde_json::Value) -> Pin<Box<dyn futures::Future<Output = Result<serde_json::Value, crate::types::AiLibError>> + Send + 'a>> {
+        Box::pin(async move {
+            let res: Result<serde_json::Value, TransportError> = self.inner.post(url, None, &body).await;
+            match res {
+                Ok(v) => Ok(v),
+                Err(e) => Err(crate::types::AiLibError::ProviderError(format!("Transport error: {}", e)))
+            }
+        })
+    }
+
+    fn post_stream<'a>(&'a self, _url: &'a str, _headers: Option<HashMap<String, String>>, _body: serde_json::Value) -> Pin<Box<dyn futures::Future<Output = Result<Pin<Box<dyn Stream<Item = Result<Bytes, crate::types::AiLibError>> + Send>>, crate::types::AiLibError>> + Send + 'a>> {
+        Box::pin(async move {
+            // Build request
+            let mut req = self.inner.client.post(_url).json(&_body);
+            // Apply headers
+            if let Some(h) = _headers {
+                for (k, v) in h.into_iter() {
+                    req = req.header(k, v);
+                }
+            }
+            // Ensure Accept header for event-streams
+            req = req.header("Accept", "text/event-stream");
+
+            let resp = req.send().await.map_err(|e| crate::types::AiLibError::ProviderError(format!("Stream request failed: {}", e)))?;
+            if !resp.status().is_success() {
+                let text = resp.text().await.unwrap_or_default();
+                return Err(crate::types::AiLibError::ProviderError(format!("Stream error: {}", text)));
+            }
+
+            let byte_stream = resp.bytes_stream().map(|res| match res {
+                Ok(b) => Ok(Bytes::from(b)),
+                Err(e) => Err(crate::types::AiLibError::ProviderError(format!("Stream chunk error: {}", e))),
+            });
+
+            let boxed_stream: Pin<Box<dyn Stream<Item = Result<Bytes, crate::types::AiLibError>> + Send>> = Box::pin(byte_stream);
+            Ok(boxed_stream)
+        })
+    }
+}
+
+impl HttpTransport {
+    /// Produce an Arc-wrapped object-safe transport reference
+    pub fn boxed(self) -> DynHttpTransportRef {
+        Arc::new(HttpTransportBoxed::new(self))
+    }
+}
+
 

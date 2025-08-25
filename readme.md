@@ -9,10 +9,18 @@
 ### Supported Providers
 
 - ✅ **Groq** (Configuration-driven) - llama3, mixtral models
+- ✅ **xAI Grok** (Configuration-driven) - grok models
 - ✅ **DeepSeek** (Configuration-driven) - deepseek-chat, deepseek-reasoner
 - ✅ **Anthropic Claude** (Configuration-driven) - claude-3.5-sonnet
 - ✅ **Google Gemini** (Independent adapter) - gemini-1.5-pro, gemini-1.5-flash
 - ✅ **OpenAI** (Independent adapter) - gpt-3.5-turbo, gpt-4 (proxy required)
+- ✅ **Qwen / 通义千问 (Alibaba Cloud)** (Config-driven) - Qwen family (OpenAI-compatible)
+- ✅ **Cohere** (Independent adapter) - command/generate models (SSE streaming + fallback)
+- ✅ **Mistral** (Independent adapter) - mistral series
+- ✅ **Hugging Face Inference** (Configuration-driven) - hub-hosted models
+- ✅ **TogetherAI** (Configuration-driven) - together.ai hosted models
+- ✅ **Azure OpenAI** (Configuration-driven) - Azure-hosted OpenAI endpoints
+- ✅ **Ollama** (Configuration-driven / local) - local Ollama instances
 
 ## Key Features
 
@@ -30,9 +38,14 @@ let claude_client = AiClient::new(Provider::Anthropic)?;
 Real-time streaming responses for all providers:
 
 ```rust
+use futures::StreamExt;
+
 let mut stream = client.chat_completion_stream(request).await?;
-while let Some(chunk) = stream.next().await {
-    if let Some(content) = chunk?.choices[0].delta.content {
+print!("Streaming: ");
+while let Some(item) = stream.next().await {
+    // `item` is `Result<ChatCompletionChunk, AiLibError>`
+    let chunk = item?;
+    if let Some(content) = chunk.choices.get(0).and_then(|c| c.delta.content.clone()) {
         print!("{}", content); // Real-time output
     }
 }
@@ -52,13 +65,21 @@ while let Some(chunk) = stream.next().await {
 
 ## Quick Start
 
+### What's new in v0.1.0 (2025-08-26)
+
+- Object-safe transport abstraction: `DynHttpTransport` and a boxed shim for the default `HttpTransport` to allow runtime injection and easier testing.
+- Cohere adapter with SSE streaming + fallback simulation.
+- Mistral HTTP adapter (conservative implementation) with streaming support.
+- `GenericAdapter` improvements: optional API key support and additional provider configs (Ollama base URL override, HuggingFace endpoint, Azure OpenAI config).
+- Examples and release checklist improvements (see `RELEASE_0.1.0_DRAFT.md`).
+
 ### Installation
 
 Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ai-lib = "0.0.5"
+ai-lib = "0.1.0"
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
 ```
@@ -66,7 +87,7 @@ futures = "0.3"
 ### Basic Usage
 
 ```rust
-use ai-lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
+use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
 use futures::StreamExt;
 
 #[tokio::main]
@@ -90,8 +111,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Streaming response for real-time output
     let mut stream = client.chat_completion_stream(request).await?;
     print!("Streaming: ");
-    while let Some(chunk) = stream.next().await {
-        if let Some(content) = chunk?.choices[0].delta.content {
+    while let Some(item) = stream.next().await {
+        let chunk = item?;
+        if let Some(content) = chunk.choices.get(0).and_then(|c| c.delta.content.clone()) {
             print!("{}", content);
         }
     }
@@ -127,6 +149,24 @@ let provider = match std::env::var("AI_PROVIDER")?.as_str() {
 };
 let client = AiClient::new(provider)?;
 ```
+
+### Dependency injection & testing (DynHttpTransport)
+
+v0.1.0 introduces an object-safe transport trait `DynHttpTransport` and a boxed shim around the default `HttpTransport`. This allows you to inject custom transports (for testing, network simulation, or SDK integrations) without changing adapter APIs.
+
+Examples:
+
+```rust
+use ai_lib::provider::GenericAdapter;
+use ai_lib::transport::DynHttpTransportRef;
+
+// Assume you implemented `MyTestTransport` that converts into `DynHttpTransportRef`
+let transport: DynHttpTransportRef = my_test_transport.into();
+let config = ai_lib::provider::ProviderConfigs::groq();
+let adapter = GenericAdapter::with_transport_ref(config, transport)?;
+```
+
+Most adapters also provide `with_transport_ref(...)` or `with_transport(...)` constructors for test injection.
 
 ## Environment Variables
 
@@ -232,6 +272,7 @@ cargo run --example test_https_proxy
 | **Anthropic** | ✅ Production | Config-driven | ✅ | claude-3.5-sonnet | Custom auth (x-api-key) |
 | **Google Gemini** | ✅ Production | Independent | 🔄 | gemini-1.5-pro/flash | URL param auth, unique format |
 | **OpenAI** | ✅ Production | Independent | ✅ | gpt-3.5-turbo, gpt-4 | Requires HTTPS proxy in some regions |
+| **Qwen / 通义千问 (Alibaba Cloud)** | ✅ Production | Config-driven | ✅ | Qwen family (OpenAI-compatible) | Uses DASHSCOPE_API_KEY; override base URL with DASHSCOPE_BASE_URL |
 
 ### Architecture Types
 

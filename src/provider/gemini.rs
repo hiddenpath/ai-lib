@@ -1,6 +1,6 @@
 use crate::api::{ChatApi, ChatCompletionChunk, ModelInfo, ModelPermission};
 use crate::types::{ChatCompletionRequest, ChatCompletionResponse, AiLibError, Message, Role, Choice, Usage};
-use crate::transport::{HttpClient, HttpTransport};
+use crate::transport::{HttpTransport, DynHttpTransportRef};
 use std::env;
 use std::collections::HashMap;
 use futures::stream::{self, Stream};
@@ -15,7 +15,7 @@ use futures::stream::{self, Stream};
 /// - Response: candidates[0].content.parts[0].text
 /// - Authentication: URL parameter ?key=<API_KEY>
 pub struct GeminiAdapter {
-    transport: HttpTransport,
+    transport: DynHttpTransportRef,
     api_key: String,
     base_url: String,
 }
@@ -28,10 +28,15 @@ impl GeminiAdapter {
             ))?;
         
         Ok(Self {
-            transport: HttpTransport::new(),
+            transport: HttpTransport::new().boxed(),
             api_key,
             base_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
         })
+    }
+
+    /// Construct using object-safe transport reference
+    pub fn with_transport_ref(transport: DynHttpTransportRef, api_key: String, base_url: String) -> Result<Self, AiLibError> {
+        Ok(Self { transport, api_key, base_url })
     }
 
     /// Convert generic request to Gemini format
@@ -137,7 +142,7 @@ impl ChatApi for GeminiAdapter {
         ]);
 
         let response: serde_json::Value = self.transport
-            .post(&url, Some(headers), &gemini_request)
+            .post_json(&url, Some(headers), gemini_request)
             .await?;
 
         self.parse_gemini_response(response, &request.model)
