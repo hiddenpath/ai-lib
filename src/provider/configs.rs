@@ -109,6 +109,17 @@ impl ProviderConfigs {
             "GROQ_API_KEY"
         )
     }
+
+    /// Qwen / 通义千问 (Alibaba Cloud) - OpenAI-compatible mode
+    /// Uses DASHSCOPE_API_KEY and optional DASHSCOPE_BASE_URL to override the base URL.
+    pub fn qwen() -> ProviderConfig {
+        // Default to the OpenAI-compatible base URL for international region.
+        let base_url = std::env::var("DASHSCOPE_BASE_URL").unwrap_or_else(|_| {
+            "https://dashscope-intl.aliyuncs.com/compatible-mode/v1".to_string()
+        });
+
+    ProviderConfig::openai_compatible(&base_url, "DASHSCOPE_API_KEY")
+    }
     
     /// Anthropic Claude configuration - requires special handling
     pub fn anthropic() -> ProviderConfig {

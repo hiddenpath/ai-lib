@@ -9,10 +9,18 @@
 ### 支持的提供商
 
 - ✅ **Groq** (配置驱动) - llama3, mixtral模型
+- ✅ **xAI Grok** (配置驱动) - grok 系列模型
 - ✅ **DeepSeek** (配置驱动) - deepseek-chat, deepseek-reasoner
 - ✅ **Anthropic Claude** (配置驱动) - claude-3.5-sonnet
 - ✅ **Google Gemini** (独立适配器) - gemini-1.5-pro, gemini-1.5-flash
 - ✅ **OpenAI** (独立适配器) - gpt-3.5-turbo, gpt-4 (需要代理)
+- ✅ **Qwen / 通义千问 (阿里云)** (配置驱动) - 通义千问系列（OpenAI 兼容）
+- ✅ **Cohere** (独立适配器) - Cohere 模型（支持 SSE 流式与回退）
+- ✅ **Mistral** (独立适配器) - mistral 系列
+- ✅ **Hugging Face Inference** (配置驱动) - hub 托管模型
+- ✅ **TogetherAI** (配置驱动) - together.ai 托管模型
+- ✅ **Azure OpenAI** (配置驱动) - Azure 托管的 OpenAI 端点
+- ✅ **Ollama** (配置驱动 / 本地) - 本地 Ollama 实例
 
 ## 核心特性
 
@@ -159,11 +167,6 @@ let adapter = GenericAdapter::with_transport_ref(config, transport)?;
 
 大多数适配器都提供 `with_transport_ref(...)` 或 `with_transport(...)` 构造函数用于测试注入。
 
-### 关于 Bedrock
-
-由于需要 SigV4 签名或 AWS SDK 集成，Bedrock 已被延后并从公共导出移除。若需重新引入，请实现签名或集成 AWS SDK。
-
-
 ## 环境变量
 
 ### 必需的API密钥
@@ -268,6 +271,7 @@ cargo run --example test_https_proxy
 | **Anthropic** | ✅ 生产 | 配置驱动 | ✅ | claude-3.5-sonnet | 自定义认证 (x-api-key) |
 | **Google Gemini** | ✅ 生产 | 独立 | 🔄 | gemini-1.5-pro/flash | URL参数认证，独特格式 |
 | **OpenAI** | ✅ 生产 | 独立 | ✅ | gpt-3.5-turbo, gpt-4 | 某些地区需要HTTPS代理 |
+| **通义千问 / Qwen** | ✅ 生产 | 配置驱动 | ✅ | 通义千问系列（OpenAI 兼容） | 使用 DASHSCOPE_API_KEY；可通过 DASHSCOPE_BASE_URL 覆盖基础 URL |
 
 ### 架构类型
 
