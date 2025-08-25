@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [Unreleased] / [0.0.6] - 2025-08-26
+
+### Added
+- Object-safe transport abstraction (`DynHttpTransport`) and boxed shim for `HttpTransport` to enable runtime injection and testing.
+- Cohere adapter with SSE streaming and fallback support.
+- Mistral HTTP adapter (conservative implementation) with streaming support.
+- `GenericAdapter` improvements: optional API key support, more provider configs (Ollama override, HuggingFace models endpoint, Azure OpenAI config).
+- Example: `examples/list_models_smoke.rs` to quickly validate model listing across providers.
+
+### Changed
+- Migrated multiple adapters (OpenAI, Gemini, Generic, Cohere, Mistral) to use the object-safe transport reference for easier DI and testing.
+- Deferred AWS Bedrock: removed from public exports and adapter skeleton retained in the repo (implementation postponed).
+
+### Fixed
+- Resolved multiple compile-time issues discovered during migration (trait object-safety, missing imports, dependency on `bytes`).
+- Fixed non-exhaustive match in `AiClient::switch_provider` by adding `AzureOpenAI` mapping.
+
+### Notes / Migration
+- If you inject a custom transport for testing, use the adapter `with_transport_ref(...)` constructors which accept `DynHttpTransportRef`.
+- Bedrock is intentionally deferred due to SigV4/AWS SDK integration complexity. Re-introduce when ready by adding a public export and implementing signing or SDK wiring.
+
 ## [0.0.2] - 2025-08-24
 
 ### Added

@@ -1,6 +1,6 @@
 [package]
 name = "ai-lib"
-version = "0.0.5"
+version = "0.1.0"
 edition = "2021"
 authors = ["AI-lib Contributors"]
 description = "A unified AI SDK for Rust providing a single interface for multiple AI providers with hybrid architecture"
@@ -36,3 +36,4 @@ reqwest-eventsource = "0.6"
 tokio-stream = "0.1"
 chrono = "0.4"
 backoff = { version = "0.4", features = ["tokio"] }
+bytes = "1.4"

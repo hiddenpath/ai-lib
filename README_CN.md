@@ -30,9 +30,14 @@ let claude_client = AiClient::new(Provider::Anthropic)?;
 所有提供商的实时流式响应：
 
 ```rust
+use futures::StreamExt;
+
 let mut stream = client.chat_completion_stream(request).await?;
-while let Some(chunk) = stream.next().await {
-    if let Some(content) = chunk?.choices[0].delta.content {
+print!("流式输出: ");
+while let Some(item) = stream.next().await {
+    // `item` 是 `Result<ChatCompletionChunk, AiLibError>`
+    let chunk = item?;
+    if let Some(content) = chunk.choices.get(0).and_then(|c| c.delta.content.clone()) {
         print!("{}", content); // 实时输出
     }
 }
@@ -58,7 +63,7 @@ while let Some(chunk) = stream.next().await {
 
 ```toml
 [dependencies]
-ai-lib = "0.0.5"
+ai-lib = "0.1.0"
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
 ```
@@ -66,7 +71,7 @@ futures = "0.3"
 ### 基础用法
 
 ```rust
-use ai-lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
+use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
 use futures::StreamExt;
 
 #[tokio::main]
@@ -90,8 +95,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 实时输出的流式响应
     let mut stream = client.chat_completion_stream(request).await?;
     print!("流式输出: ");
-    while let Some(chunk) = stream.next().await {
-        if let Some(content) = chunk?.choices[0].delta.content {
+    while let Some(item) = stream.next().await {
+        let chunk = item?;
+        if let Some(content) = chunk.choices.get(0).and_then(|c| c.delta.content.clone()) {
             print!("{}", content);
         }
     }
@@ -127,6 +133,36 @@ let provider = match std::env::var("AI_PROVIDER")?.as_str() {
 };
 let client = AiClient::new(provider)?;
 ```
+
+### v0.1.0 更新要点（2025-08-26）
+
+- 引入对象安全传输抽象：`DynHttpTransport` 与默认 `HttpTransport` 的 boxed shim，便于运行时注入和测试。
+- 新增 Cohere 适配器，支持 SSE 流式与非流式回退模拟。
+- 新增 Mistral HTTP 适配器（保守实现）并支持流式。
+- `GenericAdapter` 改进：可选 API Key 支持与额外提供商配置（OLLAMA 基础 URL 覆盖、HuggingFace 模型端点、Azure OpenAI 配置）。
+
+### 依赖注入与测试（DynHttpTransport）
+
+v0.1.0 引入对象安全传输接口 `DynHttpTransport`，并提供默认 `HttpTransport` 的 boxed shim，允许在测试或模拟时注入自定义传输实现。
+
+示例：
+
+```rust
+use ai_lib::provider::GenericAdapter;
+use ai_lib::transport::DynHttpTransportRef;
+
+// 假设实现了 MyTestTransport 并可以转换为 DynHttpTransportRef
+let transport: DynHttpTransportRef = my_test_transport.into();
+let config = ai_lib::provider::ProviderConfigs::groq();
+let adapter = GenericAdapter::with_transport_ref(config, transport)?;
+```
+
+大多数适配器都提供 `with_transport_ref(...)` 或 `with_transport(...)` 构造函数用于测试注入。
+
+### 关于 Bedrock
+
+由于需要 SigV4 签名或 AWS SDK 集成，Bedrock 已被延后并从公共导出移除。若需重新引入，请实现签名或集成 AWS SDK。
+
 
 ## 环境变量
 

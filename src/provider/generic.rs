@@ -1,6 +1,6 @@
 use crate::api::{ChatApi, ChatCompletionChunk, ChoiceDelta, MessageDelta, ModelInfo, ModelPermission};
 use crate::types::{ChatCompletionRequest, ChatCompletionResponse, AiLibError, Message, Role, Choice, Usage};
-use crate::transport::{HttpClient, HttpTransport};
+use crate::transport::{HttpTransport, DynHttpTransportRef};
 use super::config::ProviderConfig;
 use std::env;
 use futures::stream::{Stream, StreamExt};
@@ -9,20 +9,20 @@ use futures::stream::{Stream, StreamExt};
 /// 
 /// Configuration-driven generic adapter for OpenAI-compatible APIs
 pub struct GenericAdapter {
-    transport: HttpTransport,
+    transport: DynHttpTransportRef,
     config: ProviderConfig,
-    api_key: String,
+    api_key: Option<String>,
 }
 
 impl GenericAdapter {
     pub fn new(config: ProviderConfig) -> Result<Self, AiLibError> {
-        let api_key = env::var(&config.api_key_env)
-            .map_err(|_| AiLibError::AuthenticationError(
-                format!("{} environment variable not set", config.api_key_env)
-            ))?;
-        
+        // For generic/config-driven providers we treat the API key as optional.
+        // Some deployments (e.g. local Ollama) don't require a key. If the env var
+        // is missing we continue with None and callers will simply omit auth headers.
+        let api_key = env::var(&config.api_key_env).ok();
+
         Ok(Self {
-            transport: HttpTransport::new(),
+            transport: HttpTransport::new().boxed(),
             config,
             api_key,
         })
@@ -30,16 +30,19 @@ impl GenericAdapter {
     
     /// Create adapter with custom transport layer (for testing)
     pub fn with_transport(config: ProviderConfig, transport: HttpTransport) -> Result<Self, AiLibError> {
-        let api_key = env::var(&config.api_key_env)
-            .map_err(|_| AiLibError::AuthenticationError(
-                format!("{} environment variable not set", config.api_key_env)
-            ))?;
-        
+        let api_key = env::var(&config.api_key_env).ok();
+
         Ok(Self {
-            transport,
+            transport: transport.boxed(),
             config,
             api_key,
         })
+    }
+
+    /// Accept an object-safe transport reference directly
+    pub fn with_transport_ref(config: ProviderConfig, transport: DynHttpTransportRef) -> Result<Self, AiLibError> {
+        let api_key = env::var(&config.api_key_env).ok();
+        Ok(Self { transport, config, api_key })
     }
 
     /// Convert generic request to provider-specific format
@@ -213,15 +216,17 @@ impl ChatApi for GenericAdapter {
         
         let mut headers = self.config.headers.clone();
         
-        // Set different authentication methods based on provider
-        if self.config.base_url.contains("anthropic.com") {
-            headers.insert("x-api-key".to_string(), self.api_key.clone());
-        } else {
-            headers.insert("Authorization".to_string(), format!("Bearer {}", self.api_key));
+        // Set different authentication methods based on provider when an API key is present
+        if let Some(key) = &self.api_key {
+            if self.config.base_url.contains("anthropic.com") {
+                headers.insert("x-api-key".to_string(), key.clone());
+            } else {
+                headers.insert("Authorization".to_string(), format!("Bearer {}", key));
+            }
         }
         
         let response: serde_json::Value = self.transport
-            .post(&url, Some(headers), &provider_request)
+            .post_json(&url, Some(headers), provider_request)
             .await?;
         
         self.parse_response(response)
@@ -246,11 +251,13 @@ impl ChatApi for GenericAdapter {
         let mut headers = self.config.headers.clone();
         headers.insert("Accept".to_string(), "text/event-stream".to_string());
         
-        // Set different authentication methods based on provider
-        if self.config.base_url.contains("anthropic.com") {
-            headers.insert("x-api-key".to_string(), self.api_key.clone());
-        } else {
-            headers.insert("Authorization".to_string(), format!("Bearer {}", self.api_key));
+        // Set different authentication methods based on provider when an API key is present
+        if let Some(key) = &self.api_key {
+            if self.config.base_url.contains("anthropic.com") {
+                headers.insert("x-api-key".to_string(), key.clone());
+            } else {
+                headers.insert("Authorization".to_string(), format!("Bearer {}", key));
+            }
         }
         
         let response = client
@@ -321,15 +328,17 @@ impl ChatApi for GenericAdapter {
             let url = format!("{}{}", self.config.base_url, models_endpoint);
             let mut headers = self.config.headers.clone();
             
-            // Set different authentication methods based on provider
-            if self.config.base_url.contains("anthropic.com") {
-                headers.insert("x-api-key".to_string(), self.api_key.clone());
-            } else {
-                headers.insert("Authorization".to_string(), format!("Bearer {}", self.api_key));
+            // Set different authentication methods based on provider when an API key is present
+            if let Some(key) = &self.api_key {
+                if self.config.base_url.contains("anthropic.com") {
+                    headers.insert("x-api-key".to_string(), key.clone());
+                } else {
+                    headers.insert("Authorization".to_string(), format!("Bearer {}", key));
+                }
             }
             
             let response: serde_json::Value = self.transport
-                .get(&url, Some(headers))
+                .get_json(&url, Some(headers))
                 .await?;
             
             Ok(response["data"].as_array()

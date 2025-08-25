@@ -1,6 +1,6 @@
 use crate::api::{ChatApi, ChatCompletionChunk, ModelInfo, ModelPermission};
 use crate::types::{ChatCompletionRequest, ChatCompletionResponse, AiLibError, Message, Role, Choice, Usage};
-use crate::transport::{HttpClient, HttpTransport};
+use crate::transport::{HttpTransport, DynHttpTransportRef};
 use std::env;
 use std::collections::HashMap;
 use futures::stream::{self, Stream};
@@ -9,7 +9,7 @@ use futures::stream::{self, Stream};
 /// 
 /// OpenAI adapter supporting GPT series models
 pub struct OpenAiAdapter {
-    transport: HttpTransport,
+    transport: DynHttpTransportRef,
     api_key: String,
     base_url: String,
 }
@@ -22,10 +22,15 @@ impl OpenAiAdapter {
             ))?;
         
         Ok(Self {
-            transport: HttpTransport::new(),
+            transport: HttpTransport::new().boxed(),
             api_key,
             base_url: "https://api.openai.com/v1".to_string(),
         })
+    }
+
+    /// Construct with an injected object-safe transport reference
+    pub fn with_transport_ref(transport: DynHttpTransportRef, api_key: String, base_url: String) -> Result<Self, AiLibError> {
+        Ok(Self { transport, api_key, base_url })
     }
 
     fn convert_request(&self, request: &ChatCompletionRequest) -> serde_json::Value {
@@ -123,7 +128,7 @@ impl ChatApi for OpenAiAdapter {
         headers.insert("Content-Type".to_string(), "application/json".to_string());
         
         let response: serde_json::Value = self.transport
-            .post(&url, Some(headers), &openai_request)
+            .post_json(&url, Some(headers), openai_request)
             .await?;
         
         self.parse_response(response)
@@ -140,7 +145,7 @@ impl ChatApi for OpenAiAdapter {
         headers.insert("Authorization".to_string(), format!("Bearer {}", self.api_key));
         
         let response: serde_json::Value = self.transport
-            .get(&url, Some(headers))
+            .get_json(&url, Some(headers))
             .await?;
         
         Ok(response["data"].as_array()

@@ -1,5 +1,5 @@
 use crate::api::{ChatApi, ChatCompletionChunk};
-use crate::provider::{GeminiAdapter, GenericAdapter, OpenAiAdapter, ProviderConfigs};
+use crate::provider::{GeminiAdapter, GenericAdapter, OpenAiAdapter, ProviderConfigs, MistralAdapter, CohereAdapter};
 use crate::types::{AiLibError, ChatCompletionRequest, ChatCompletionResponse};
 use futures::stream::Stream;
 use futures::Future;
@@ -8,13 +8,21 @@ use tokio::sync::oneshot;
 /// AI模型提供商枚举
 #[derive(Debug, Clone, Copy)]
 pub enum Provider {
+    // 驱动配置
     Groq,
-    OpenAI,
+    XaiGrok,
+    Ollama,
     DeepSeek,
-    Gemini,
     Anthropic,
+    AzureOpenAI,
+    HuggingFace,
+    TogetherAI,
     // 特殊适配器
-    // Gemini,  // 需要独立适配器
+    OpenAI,
+    Gemini,
+    Mistral,
+    Cohere,
+    // Bedrock removed (deferred)
 }
 
 /// 统一AI客户端
@@ -84,11 +92,19 @@ impl AiClient {
         let adapter: Box<dyn ChatApi> = match provider {
             // 使用配置驱动的通用适配器
             Provider::Groq => Box::new(GenericAdapter::new(ProviderConfigs::groq())?),
+            Provider::XaiGrok => Box::new(GenericAdapter::new(ProviderConfigs::xai_grok())?),
+            Provider::Ollama => Box::new(GenericAdapter::new(ProviderConfigs::ollama())?),
             Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
             Provider::Anthropic => Box::new(GenericAdapter::new(ProviderConfigs::anthropic())?),
+            Provider::AzureOpenAI => Box::new(GenericAdapter::new(ProviderConfigs::azure_openai())?),
+            Provider::HuggingFace => Box::new(GenericAdapter::new(ProviderConfigs::huggingface())?),
+            Provider::TogetherAI => Box::new(GenericAdapter::new(ProviderConfigs::together_ai())?),
             // 使用独立适配器
             Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
             Provider::Gemini => Box::new(GeminiAdapter::new()?),
+            Provider::Mistral => Box::new(MistralAdapter::new()?),
+            Provider::Cohere => Box::new(CohereAdapter::new()?),
+            // Bedrock deferred; not available
         };
 
         Ok(Self { provider, adapter })
@@ -182,10 +198,18 @@ impl AiClient {
     pub fn switch_provider(&mut self, provider: Provider) -> Result<(), AiLibError> {
         let new_adapter: Box<dyn ChatApi> = match provider {
             Provider::Groq => Box::new(GenericAdapter::new(ProviderConfigs::groq())?),
+            Provider::XaiGrok => Box::new(GenericAdapter::new(ProviderConfigs::xai_grok())?),
+            Provider::Ollama => Box::new(GenericAdapter::new(ProviderConfigs::ollama())?),
             Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
             Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
             Provider::Anthropic => Box::new(GenericAdapter::new(ProviderConfigs::anthropic())?),
             Provider::Gemini => Box::new(GeminiAdapter::new()?),
+            Provider::AzureOpenAI => Box::new(GenericAdapter::new(ProviderConfigs::azure_openai())?),
+            Provider::HuggingFace => Box::new(GenericAdapter::new(ProviderConfigs::huggingface())?),
+            Provider::TogetherAI => Box::new(GenericAdapter::new(ProviderConfigs::together_ai())?),
+            Provider::Mistral => Box::new(MistralAdapter::new()?),
+            Provider::Cohere => Box::new(CohereAdapter::new()?),
+            // Provider::Bedrock => Box::new(BedrockAdapter::new()?),
         };
 
         self.provider = provider;
