@@ -19,6 +19,7 @@ pub enum Provider {
     TogetherAI,
     // 特殊适配器
     OpenAI,
+    Qwen,
     Gemini,
     Mistral,
     Cohere,
@@ -95,6 +96,7 @@ impl AiClient {
             Provider::XaiGrok => Box::new(GenericAdapter::new(ProviderConfigs::xai_grok())?),
             Provider::Ollama => Box::new(GenericAdapter::new(ProviderConfigs::ollama())?),
             Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
+            Provider::Qwen => Box::new(GenericAdapter::new(ProviderConfigs::qwen())?),
             Provider::Anthropic => Box::new(GenericAdapter::new(ProviderConfigs::anthropic())?),
             Provider::AzureOpenAI => Box::new(GenericAdapter::new(ProviderConfigs::azure_openai())?),
             Provider::HuggingFace => Box::new(GenericAdapter::new(ProviderConfigs::huggingface())?),
@@ -201,6 +203,7 @@ impl AiClient {
             Provider::XaiGrok => Box::new(GenericAdapter::new(ProviderConfigs::xai_grok())?),
             Provider::Ollama => Box::new(GenericAdapter::new(ProviderConfigs::ollama())?),
             Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
+            Provider::Qwen => Box::new(GenericAdapter::new(ProviderConfigs::qwen())?),
             Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
             Provider::Anthropic => Box::new(GenericAdapter::new(ProviderConfigs::anthropic())?),
             Provider::Gemini => Box::new(GeminiAdapter::new()?),

@@ -11,6 +11,7 @@ async fn main() {
         Provider::AzureOpenAI,
         Provider::HuggingFace,
         Provider::TogetherAI,
+        Provider::Qwen,
         Provider::OpenAI,
         Provider::Gemini,
         Provider::Mistral,

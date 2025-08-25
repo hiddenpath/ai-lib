@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["AI-lib Contributors"]
 description = "A unified AI SDK for Rust providing a single interface for multiple AI providers with hybrid architecture"
 license = "MIT OR Apache-2.0"
-readme = "README.md"
+readme = "readme.md"
 repository = "https://github.com/hiddenpath/ai-lib"
 homepage = "https://github.com/hiddenpath/ai-lib"
 documentation = "https://docs.rs/ai-lib"
@@ -15,9 +15,10 @@ include = [
     "src/**/*",
     "examples/*",
     "Cargo.toml",
-    "README.md",
+    "readme.md",
     "README_CN.md",
-    "LICENSE",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
     "CHANGELOG.md"
 ]
 rust-version = "1.70"
