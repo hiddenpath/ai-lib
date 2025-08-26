@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [Unreleased] / [0.0.6] - 2025-08-26
+## [0.1.0] - 2025-08-26
+
+### Added
+- Unified AI SDK for Rust with hybrid architecture (config-driven + independent adapters)
+- Object-safe transport abstraction (`DynHttpTransport`) and boxed shim for runtime injection/testing
+- GenericAdapter improvements: config-driven, optional API key, flexible endpoint overrides
+- Added and documented the following providers:
+	- Groq (config-driven)
+	- xAI Grok (config-driven)
+	- DeepSeek (config-driven)
+	- Anthropic Claude (config-driven)
+	- Google Gemini (independent adapter)
+	- OpenAI (independent adapter)
+	- Qwen / 通义千问 (Alibaba Cloud, config-driven, OpenAI-compatible)
+	- Cohere (independent adapter, SSE streaming + fallback)
+	- Mistral (independent adapter)
+	- Hugging Face Inference (config-driven)
+	- TogetherAI (config-driven)
+	- Azure OpenAI (config-driven)
+	- Ollama (config-driven, local)
+- Universal streaming support for all providers (SSE parsing, fallback simulation)
+- Example and smoke test for model listing (`examples/list_models_smoke.rs`)
+- README/README_CN fully synchronized, provider matrix and usage examples updated
+- Proxy support via `AI_PROXY_URL` (HTTP/HTTPS, with/without auth)
+- Error handling: unified error types, retry/backoff logic
+- Release workflow: release branch, annotated tag, changelog, and draft release notes
 
 ### Added
 - Object-safe transport abstraction (`DynHttpTransport`) and boxed shim for `HttpTransport` to enable runtime injection and testing.
