@@ -1,6 +1,6 @@
 # AI-lib: A Unified AI SDK for Rust
 
-> **Production-ready unified interface for multiple AI providers with hybrid architecture**
+> **An unified interface for multiple AI providers with hybrid architecture**
 
 ## Overview
 
