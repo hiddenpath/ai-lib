@@ -336,7 +336,7 @@ match client.chat_completion(request).await {
 - [x] 带SSE解析的通用流式支持
 - [x] 企业级错误处理和重试逻辑
 - [x] 全面的代理支持（HTTP/HTTPS）
-- [x] 5个主要AI提供商的生产就绪适配器
+- [x] 13个主要AI提供商的适配器
 - [x] 类型安全的请求/响应处理
 - [x] 广泛的测试覆盖和示例
 

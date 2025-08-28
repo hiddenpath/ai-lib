@@ -337,7 +337,7 @@ match client.chat_completion(request).await {
 - [x] Universal streaming support with SSE parsing
 - [x] Enterprise-grade error handling and retry logic
 - [x] Comprehensive proxy support (HTTP/HTTPS)
-- [x] 5 major AI providers with production-ready adapters
+- [x] 13 major AI providers with adapters
 - [x] Type-safe request/response handling
 - [x] Extensive test coverage and examples
 
