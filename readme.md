@@ -2,7 +2,7 @@
 
 > **A unified Rust SDK that provides a single interface to multiple AI providers using a hybrid architecture**
 
-## 概览
+## Overview
 
 **ai-lib** is a unified AI SDK for Rust that offers a single, consistent interface for interacting with multiple large language model providers. It uses a hybrid architecture that balances developer ergonomics with provider-specific features.
 
@@ -28,7 +28,7 @@
 - ✅ **Azure OpenAI** (config-driven) — supports Azure-hosted OpenAI endpoints
 - ✅ **Ollama** (config-driven / local) — supports local Ollama instances
 
-## 核心特性
+## Core features
 
 ### 🚀 Zero-cost provider switching
 Switch between AI providers with a single line of code — the unified API ensures a seamless experience:
@@ -240,5 +240,5 @@ Citation:
 ---
 
 <div align="center">
-**ai-lib**: the most comprehensive unified AI SDK in the Rust ecosystem. 🦀✨
+  ai-lib: the most comprehensive unified AI SDK in the Rust ecosystem. 🦀✨
 </div>
