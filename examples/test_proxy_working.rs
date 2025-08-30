@@ -1,10 +1,11 @@
-use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
+use ai_lib::types::common::Content;
+use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔧 代理功能测试");
     println!("================");
-    
+
     // 检查代理设置
     let proxy_url = match std::env::var("AI_PROXY_URL") {
         Ok(url) => {
@@ -16,16 +17,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
     };
-    
+
     // 测试代理是否能正常工作
     println!("\n📡 测试代理连接...");
-    
+
     // 使用reqwest测试代理
     let proxy = reqwest::Proxy::all(&proxy_url)?;
-    let client = reqwest::Client::builder()
-        .proxy(proxy)
-        .build()?;
-    
+    let client = reqwest::Client::builder().proxy(proxy).build()?;
+
     // 测试一个简单的HTTP请求
     match client.get("https://httpbin.org/ip").send().await {
         Ok(response) => {
@@ -40,10 +39,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
     }
-    
+
     // 测试AI服务
     println!("\n🤖 测试AI服务连接...");
-    
+
     // 测试Groq (通过代理)
     if std::env::var("GROQ_API_KEY").is_ok() {
         println!("   测试Groq...");
@@ -52,20 +51,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match client.list_models().await {
                     Ok(models) => {
                         println!("      ✅ Groq模型列表获取成功 ({} 个模型)", models.len());
-                        
+
                         // 尝试简单的聊天
                         let request = ChatCompletionRequest::new(
                             "llama3-8b-8192".to_string(),
                             vec![Message {
                                 role: Role::User,
-                                content: "Say 'Hello' in one word.".to_string(),
+                                content: Content::Text("Say 'Hello' in one word.".to_string()),
+                                function_call: None,
                             }],
-                        ).with_max_tokens(5);
-                        
+                        )
+                        .with_max_tokens(5);
+
                         match client.chat_completion(request).await {
                             Ok(response) => {
                                 println!("      ✅ Groq聊天测试成功!");
-                                println!("         响应: {}", response.choices[0].message.content);
+                                println!(
+                                    "         响应: {}",
+                                    response.choices[0].message.content.as_text()
+                                );
                             }
                             Err(e) => {
                                 println!("      ❌ Groq聊天测试失败: {}", e);
@@ -82,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    
+
     println!("\n💡 测试结果分析:");
     println!("   • 如果代理连接成功但AI服务失败，可能是:");
     println!("     - 代理服务器不支持HTTPS");
@@ -92,6 +96,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("     - 代理服务器地址和端口");
     println!("     - 代理服务器是否需要认证");
     println!("     - 网络防火墙设置");
-    
+
     Ok(())
 }

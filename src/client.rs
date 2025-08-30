@@ -1,8 +1,12 @@
 use crate::api::{ChatApi, ChatCompletionChunk};
-use crate::provider::{GeminiAdapter, GenericAdapter, OpenAiAdapter, ProviderConfigs, MistralAdapter, CohereAdapter};
+use crate::metrics::{Metrics, NoopMetrics};
+use crate::provider::{
+    CohereAdapter, GeminiAdapter, GenericAdapter, MistralAdapter, OpenAiAdapter, ProviderConfigs,
+};
 use crate::types::{AiLibError, ChatCompletionRequest, ChatCompletionResponse};
 use futures::stream::Stream;
 use futures::Future;
+use std::sync::Arc;
 use tokio::sync::oneshot;
 
 /// AI模型提供商枚举
@@ -17,6 +21,11 @@ pub enum Provider {
     AzureOpenAI,
     HuggingFace,
     TogetherAI,
+    // 中国区域提供商（OpenAI 兼容或配置驱动）
+    BaiduWenxin,
+    TencentHunyuan,
+    IflytekSpark,
+    Moonshot,
     // 特殊适配器
     OpenAI,
     Qwen,
@@ -41,7 +50,8 @@ pub enum Provider {
 ///         "test-model".to_string(),
 ///         vec![Message {
 ///             role: Role::User,
-///             content: "Hello".to_string(),
+///             content: ai_lib::types::common::Content::Text("Hello".to_string()),
+///             function_call: None,
 ///         }],
 ///     );
 ///     
@@ -71,6 +81,7 @@ pub enum Provider {
 pub struct AiClient {
     provider: Provider,
     adapter: Box<dyn ChatApi>,
+    metrics: Arc<dyn Metrics>,
 }
 
 impl AiClient {
@@ -97,8 +108,14 @@ impl AiClient {
             Provider::Ollama => Box::new(GenericAdapter::new(ProviderConfigs::ollama())?),
             Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
             Provider::Qwen => Box::new(GenericAdapter::new(ProviderConfigs::qwen())?),
+            Provider::BaiduWenxin => Box::new(GenericAdapter::new(ProviderConfigs::baidu_wenxin())?),
+            Provider::TencentHunyuan => Box::new(GenericAdapter::new(ProviderConfigs::tencent_hunyuan())?),
+            Provider::IflytekSpark => Box::new(GenericAdapter::new(ProviderConfigs::iflytek_spark())?),
+            Provider::Moonshot => Box::new(GenericAdapter::new(ProviderConfigs::moonshot())?),
             Provider::Anthropic => Box::new(GenericAdapter::new(ProviderConfigs::anthropic())?),
-            Provider::AzureOpenAI => Box::new(GenericAdapter::new(ProviderConfigs::azure_openai())?),
+            Provider::AzureOpenAI => {
+                Box::new(GenericAdapter::new(ProviderConfigs::azure_openai())?)
+            }
             Provider::HuggingFace => Box::new(GenericAdapter::new(ProviderConfigs::huggingface())?),
             Provider::TogetherAI => Box::new(GenericAdapter::new(ProviderConfigs::together_ai())?),
             // 使用独立适配器
@@ -109,7 +126,51 @@ impl AiClient {
             // Bedrock deferred; not available
         };
 
-        Ok(Self { provider, adapter })
+        Ok(Self {
+            provider,
+            adapter,
+            metrics: Arc::new(NoopMetrics::new()),
+        })
+    }
+
+    /// Create AiClient with injected metrics implementation
+    pub fn new_with_metrics(
+        provider: Provider,
+        metrics: Arc<dyn Metrics>,
+    ) -> Result<Self, AiLibError> {
+        let adapter: Box<dyn ChatApi> = match provider {
+            Provider::Groq => Box::new(GenericAdapter::new(ProviderConfigs::groq())?),
+            Provider::XaiGrok => Box::new(GenericAdapter::new(ProviderConfigs::xai_grok())?),
+            Provider::Ollama => Box::new(GenericAdapter::new(ProviderConfigs::ollama())?),
+            Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
+            Provider::Qwen => Box::new(GenericAdapter::new(ProviderConfigs::qwen())?),
+            Provider::Anthropic => Box::new(GenericAdapter::new(ProviderConfigs::anthropic())?),
+            Provider::BaiduWenxin => Box::new(GenericAdapter::new(ProviderConfigs::baidu_wenxin())?),
+            Provider::TencentHunyuan => Box::new(GenericAdapter::new(ProviderConfigs::tencent_hunyuan())?),
+            Provider::IflytekSpark => Box::new(GenericAdapter::new(ProviderConfigs::iflytek_spark())?),
+            Provider::Moonshot => Box::new(GenericAdapter::new(ProviderConfigs::moonshot())?),
+            Provider::AzureOpenAI => {
+                Box::new(GenericAdapter::new(ProviderConfigs::azure_openai())?)
+            }
+            Provider::HuggingFace => Box::new(GenericAdapter::new(ProviderConfigs::huggingface())?),
+            Provider::TogetherAI => Box::new(GenericAdapter::new(ProviderConfigs::together_ai())?),
+            Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
+            Provider::Gemini => Box::new(GeminiAdapter::new()?),
+            Provider::Mistral => Box::new(MistralAdapter::new()?),
+            Provider::Cohere => Box::new(CohereAdapter::new()?),
+        };
+
+        Ok(Self {
+            provider,
+            adapter,
+            metrics,
+        })
+    }
+
+    /// Set metrics implementation on client
+    pub fn with_metrics(mut self, metrics: Arc<dyn Metrics>) -> Self {
+        self.metrics = metrics;
+        self
     }
 
     /// 发送聊天完成请求
@@ -150,10 +211,10 @@ impl AiClient {
     /// * `request` - 聊天完成请求
     ///
     /// # Returns
-    /// * `(Stream, CancelHandle)` - 流式响应和取消句柄
+    /// * `Result<(impl Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin, CancelHandle), AiLibError>` - 成功时返回流式响应和取消句柄
     pub async fn chat_completion_stream_with_cancel(
         &self,
-        request: ChatCompletionRequest,
+        mut request: ChatCompletionRequest,
     ) -> Result<
         (
             Box<dyn Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin>,
@@ -161,17 +222,140 @@ impl AiClient {
         ),
         AiLibError,
     > {
+        request.stream = Some(true);
+        let stream = self.adapter.chat_completion_stream(request).await?;
         let (cancel_tx, cancel_rx) = oneshot::channel();
-        let stream = self.chat_completion_stream(request).await?;
-
         let cancel_handle = CancelHandle {
             sender: Some(cancel_tx),
         };
+        
         let controlled_stream = ControlledStream::new(stream, cancel_rx);
-
-        Ok((Box::new(Box::pin(controlled_stream)), cancel_handle))
+        Ok((Box::new(controlled_stream), cancel_handle))
     }
 
+    /// 批量聊天完成请求
+    ///
+    /// # Arguments
+    /// * `requests` - 聊天完成请求列表
+    /// * `concurrency_limit` - 最大并发请求数（None表示无限制）
+    ///
+    /// # Returns
+    /// * `Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError>` - 返回所有请求的响应结果
+    ///
+    /// # Example
+    /// ```rust
+    /// use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
+    /// use ai_lib::types::common::Content;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let client = AiClient::new(Provider::Groq)?;
+    ///     
+    ///     let requests = vec![
+    ///         ChatCompletionRequest::new(
+    ///             "llama3-8b-8192".to_string(),
+    ///             vec![Message {
+    ///                 role: Role::User,
+    ///                 content: Content::Text("Hello".to_string()),
+    ///                 function_call: None,
+    ///             }],
+    ///         ),
+    ///         ChatCompletionRequest::new(
+    ///             "llama3-8b-8192".to_string(),
+    ///             vec![Message {
+    ///                 role: Role::User,
+    ///                 content: Content::Text("How are you?".to_string()),
+    ///                 function_call: None,
+    ///             }],
+    ///         ),
+    ///     ];
+    ///     
+    ///     // 限制并发数为5
+    ///     let responses = client.chat_completion_batch(requests, Some(5)).await?;
+    ///     
+    ///     for (i, response) in responses.iter().enumerate() {
+    ///         match response {
+    ///             Ok(resp) => println!("Request {}: {}", i, resp.choices[0].message.content.as_text()),
+    ///             Err(e) => println!("Request {} failed: {}", i, e),
+    ///         }
+    ///     }
+    ///     
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn chat_completion_batch(
+        &self,
+        requests: Vec<ChatCompletionRequest>,
+        concurrency_limit: Option<usize>,
+    ) -> Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError> {
+        self.adapter.chat_completion_batch(requests, concurrency_limit).await
+    }
+
+    /// 智能批量处理：根据请求数量自动选择处理策略
+    ///
+    /// # Arguments
+    /// * `requests` - 聊天完成请求列表
+    ///
+    /// # Returns
+    /// * `Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError>` - 返回所有请求的响应结果
+    pub async fn chat_completion_batch_smart(
+        &self,
+        requests: Vec<ChatCompletionRequest>,
+    ) -> Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError> {
+        // 小批量使用顺序处理，大批量使用并发处理
+        let concurrency_limit = if requests.len() <= 3 { None } else { Some(10) };
+        self.chat_completion_batch(requests, concurrency_limit).await
+    }
+
+    /// 批量聊天完成请求
+    ///
+    /// # Arguments
+    /// * `requests` - 聊天完成请求列表
+    /// * `concurrency_limit` - 最大并发请求数（None表示无限制）
+    ///
+    /// # Returns
+    /// * `Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError>` - 返回所有请求的响应结果
+    ///
+    /// # Example
+    /// ```rust
+    /// use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
+    /// use ai_lib::types::common::Content;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let client = AiClient::new(Provider::Groq)?;
+    ///     
+    ///     let requests = vec![
+    ///         ChatCompletionRequest::new(
+    ///             "llama3-8b-8192".to_string(),
+    ///             vec![Message {
+    ///                 role: Role::User,
+    ///                 content: Content::Text("Hello".to_string()),
+    ///                 function_call: None,
+    ///             }],
+    ///         ),
+    ///         ChatCompletionRequest::new(
+    ///             "llama3-8b-8192".to_string(),
+    ///             vec![Message {
+    ///                 role: Role::User,
+    ///                 content: Content::Text("How are you?".to_string()),
+    ///                 function_call: None,
+    ///             }],
+    ///         ),
+    ///     ];
+    ///     
+    ///     // 限制并发数为5
+    ///     let responses = client.chat_completion_batch(requests, Some(5)).await?;
+    ///     
+    ///     for (i, response) in responses.iter().enumerate() {
+    ///         match response {
+    ///             Ok(resp) => println!("Request {}: {}", i, resp.choices[0].message.content.as_text()),
+    ///             Err(e) => println!("Request {} failed: {}", i, e),
+    ///         }
+    ///     }
+    ///     
+    ///     Ok(())
+    /// }
     /// 获取支持的模型列表
     ///
     /// # Returns
@@ -206,8 +390,14 @@ impl AiClient {
             Provider::Qwen => Box::new(GenericAdapter::new(ProviderConfigs::qwen())?),
             Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
             Provider::Anthropic => Box::new(GenericAdapter::new(ProviderConfigs::anthropic())?),
+            Provider::BaiduWenxin => Box::new(GenericAdapter::new(ProviderConfigs::baidu_wenxin())?),
+            Provider::TencentHunyuan => Box::new(GenericAdapter::new(ProviderConfigs::tencent_hunyuan())?),
+            Provider::IflytekSpark => Box::new(GenericAdapter::new(ProviderConfigs::iflytek_spark())?),
+            Provider::Moonshot => Box::new(GenericAdapter::new(ProviderConfigs::moonshot())?),
             Provider::Gemini => Box::new(GeminiAdapter::new()?),
-            Provider::AzureOpenAI => Box::new(GenericAdapter::new(ProviderConfigs::azure_openai())?),
+            Provider::AzureOpenAI => {
+                Box::new(GenericAdapter::new(ProviderConfigs::azure_openai())?)
+            }
             Provider::HuggingFace => Box::new(GenericAdapter::new(ProviderConfigs::huggingface())?),
             Provider::TogetherAI => Box::new(GenericAdapter::new(ProviderConfigs::together_ai())?),
             Provider::Mistral => Box::new(MistralAdapter::new()?),

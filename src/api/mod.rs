@@ -1,3 +1,5 @@
 pub mod chat;
 
-pub use chat::{ChatApi, ChatCompletionChunk, ChoiceDelta, MessageDelta, ModelInfo, ModelPermission};
+pub use chat::{
+    ChatApi, ChatCompletionChunk, ChoiceDelta, MessageDelta, ModelInfo, ModelPermission,
+};

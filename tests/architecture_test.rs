@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
+    use ai_lib::types::common::Content;
+    use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 
     #[test]
     fn test_provider_enum() {
@@ -14,7 +15,7 @@ mod tests {
         // 测试客户端创建（不实际调用API）
         let client_result = AiClient::new(Provider::Groq);
         assert!(client_result.is_ok());
-        
+
         let client = client_result.unwrap();
         assert!(matches!(client.current_provider(), Provider::Groq));
     }
@@ -26,11 +27,13 @@ mod tests {
             "test-model".to_string(),
             vec![Message {
                 role: Role::User,
-                content: "Hello".to_string(),
+                content: Content::Text("Hello".to_string()),
+                function_call: None,
             }],
-        ).with_temperature(0.7)
-         .with_max_tokens(100);
-        
+        )
+        .with_temperature(0.7)
+        .with_max_tokens(100);
+
         assert_eq!(request.model, "test-model");
         assert_eq!(request.messages.len(), 1);
         assert_eq!(request.temperature, Some(0.7));
@@ -43,7 +46,7 @@ mod tests {
         let user_role = Role::User;
         let system_role = Role::System;
         let assistant_role = Role::Assistant;
-        
+
         assert!(matches!(user_role, Role::User));
         assert!(matches!(system_role, Role::System));
         assert!(matches!(assistant_role, Role::Assistant));

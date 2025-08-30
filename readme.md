@@ -1,443 +1,244 @@
-# AI-lib: A Unified AI SDK for Rust
+# AI-lib: Unified AI SDK for Rust
 
-> **An unified interface for multiple AI providers with hybrid architecture**
+> **A unified Rust SDK that provides a single interface to multiple AI providers using a hybrid architecture**
 
-## Overview
+## 概览
 
-**ai-lib** is a unified AI SDK for Rust that provides a single, consistent interface for interacting with multiple large language model providers. Built with a sophisticated hybrid architecture that balances development efficiency with functionality.
+**ai-lib** is a unified AI SDK for Rust that offers a single, consistent interface for interacting with multiple large language model providers. It uses a hybrid architecture that balances developer ergonomics with provider-specific features.
 
-### Supported Providers
+**Note**: upgrade guides and PR notes have been moved to the `docs/` directory to keep the repository root clean. See `docs/UPGRADE_0.2.0.md` and `docs/PR_0.2.0.md` for migration and PR details.
 
-- ✅ **Groq** (Configuration-driven) - llama3, mixtral models
-- ✅ **xAI Grok** (Configuration-driven) - grok models
-- ✅ **DeepSeek** (Configuration-driven) - deepseek-chat, deepseek-reasoner
-- ✅ **Anthropic Claude** (Configuration-driven) - claude-3.5-sonnet
-- ✅ **Google Gemini** (Independent adapter) - gemini-1.5-pro, gemini-1.5-flash
-- ✅ **OpenAI** (Independent adapter) - gpt-3.5-turbo, gpt-4 (proxy required)
-- ✅ **Qwen / 通义千问 (Alibaba Cloud)** (Config-driven) - Qwen family (OpenAI-compatible)
-- ✅ **Cohere** (Independent adapter) - command/generate models (SSE streaming + fallback)
-- ✅ **Mistral** (Independent adapter) - mistral series
-- ✅ **Hugging Face Inference** (Configuration-driven) - hub-hosted models
-- ✅ **TogetherAI** (Configuration-driven) - together.ai hosted models
-- ✅ **Azure OpenAI** (Configuration-driven) - Azure-hosted OpenAI endpoints
-- ✅ **Ollama** (Configuration-driven / local) - local Ollama instances
+## Supported AI Providers
 
-## Key Features
+- ✅ **Groq** (config-driven) — supports llama3, mixtral models
+- ✅ **xAI Grok** (config-driven) — supports grok models
+- ✅ **DeepSeek** (config-driven) — supports deepseek-chat, deepseek-reasoner
+- ✅ **Anthropic Claude** (config-driven) — supports claude-3.5-sonnet
+- ✅ **Google Gemini** (independent adapter) — supports gemini-1.5-pro, gemini-1.5-flash
+- ✅ **OpenAI** (independent adapter) — supports gpt-3.5-turbo, gpt-4 (may require a proxy in some regions)
+- ✅ **Qwen / Tongyi Qianwen (Alibaba Cloud)** (config-driven) — supports Qwen family (OpenAI-compatible)
+- ✅ **Cohere** (independent adapter) — supports command/generate models (SSE streaming + fallback)
+- ✅ **Baidu Wenxin (Baidu ERNIE)** (config-driven) — supports ernie-3.5, ernie-4.0 (OpenAI-compatible endpoints via the Qianfan platform; may require AK/SK and OAuth)
+- ✅ **Tencent Hunyuan** (config-driven) — supports the hunyuan family (OpenAI-compatible endpoints; cloud account and keys required)
+- ✅ **iFlytek Spark** (config-driven) — supports spark models (OpenAI-compatible, good for mixed voice+text scenarios)
+- ✅ **Moonshot / Kimi** (config-driven) — supports kimi series (OpenAI-compatible, suitable for long-text scenarios)
+- ✅ **Mistral** (independent adapter) — supports mistral models
+- ✅ **Hugging Face Inference** (config-driven) — supports hub-hosted models
+- ✅ **TogetherAI** (config-driven) — supports together.ai hosted models
+- ✅ **Azure OpenAI** (config-driven) — supports Azure-hosted OpenAI endpoints
+- ✅ **Ollama** (config-driven / local) — supports local Ollama instances
 
-### 🚀 **Zero-Cost Provider Switching**
-Switch between AI providers with just one line of code change:
+## 核心特性
+
+### 🚀 Zero-cost provider switching
+Switch between AI providers with a single line of code — the unified API ensures a seamless experience:
 
 ```rust
-// Switch providers instantly - same interface, different backend
+// Instant provider switching — same API, different backends
 let groq_client = AiClient::new(Provider::Groq)?;
 let gemini_client = AiClient::new(Provider::Gemini)?;
 let claude_client = AiClient::new(Provider::Anthropic)?;
 ```
 
-### 🌊 **Universal Streaming Support**
-Real-time streaming responses for all providers:
+Runtime selection is supported (for example via environment variables or other logic).
+
+### 🌊 Universal streaming support
+Provides realtime streaming responses for all providers; SSE parsing and fallback emulation ensure consistent behavior:
 
 ```rust
 use futures::StreamExt;
 
 let mut stream = client.chat_completion_stream(request).await?;
-print!("Streaming: ");
+print!("streamed output: ");
 while let Some(item) = stream.next().await {
-    // `item` is `Result<ChatCompletionChunk, AiLibError>`
     let chunk = item?;
     if let Some(content) = chunk.choices.get(0).and_then(|c| c.delta.content.clone()) {
-        print!("{}", content); // Real-time output
+        print!("{}", content); // realtime output
     }
 }
 ```
 
-### 🔄 **Enterprise-Grade Reliability**
-- **Automatic Retry**: Exponential backoff for transient failures
-- **Smart Error Handling**: Detailed error classification and recovery suggestions
-- **Proxy Support**: HTTP/HTTPS proxy with authentication
-- **Timeout Management**: Configurable timeouts with graceful degradation
+Includes a cancel handle (`CancelHandle`) and a planned backpressure API, suitable for low-latency UI applications.
 
-### ⚡ **Hybrid Architecture**
-- **95% Code Reduction**: Configuration-driven adapters require ~15 lines vs ~250 lines
-- **Flexible Extension**: Choose optimal implementation approach per provider
-- **Type Safety**: Full Rust type system integration
-- **Zero Dependencies**: Minimal, carefully selected dependencies
+### 🔄 Enterprise-grade reliability and error handling
+- **Automatic retries with exponential backoff**: intelligently retry transient failures (e.g., timeouts, rate limits).
+- **Smart error classification**: distinguish retryable errors (network issues) from permanent errors (authentication failures) and provide recovery guidance.
+- **Proxy support**: HTTP/HTTPS proxies with auth for enterprise environments.
+- **Timeout management**: configurable timeouts and graceful degradation to ensure production stability.
 
-## Quick Start
+Example error handling:
 
-### What's new in v0.1.0 (2025-08-26)
+```rust
+match client.chat_completion(request).await {
+    Ok(response) => println!("success: {}", response.choices[0].message.content.as_text()),
+    Err(e) => {
+        if e.is_retryable() {
+            println!("retryable error, sleeping {}ms", e.retry_delay_ms());
+            tokio::time::sleep(Duration::from_millis(e.retry_delay_ms())).await;
+            // implement retry logic
+        } else {
+            println!("permanent error: {}", e);
+        }
+    }
+}
+```
 
-- Object-safe transport abstraction: `DynHttpTransport` and a boxed shim for the default `HttpTransport` to allow runtime injection and easier testing.
-- Cohere adapter with SSE streaming + fallback simulation.
-- Mistral HTTP adapter (conservative implementation) with streaming support.
-- `GenericAdapter` improvements: optional API key support and additional provider configs (Ollama base URL override, HuggingFace endpoint, Azure OpenAI config).
-- Examples and release checklist improvements (see `RELEASE_0.1.0_DRAFT.md`).
+### ⚡ Hybrid architecture
+- **Config-driven adapters**: for OpenAI-compatible APIs; require minimal wiring (≈15 lines) and inherit SSE streaming, proxy, and upload behaviors.
+- **Independent adapters**: full control for providers with unique APIs, including custom auth and response parsing.
+- **Four-layer design**: unified client layer, adapter layer, transport layer (HttpTransport with proxy and retry), and common types — ensuring type safety with no extra runtime dependencies.
+- **Benefits**: major code reuse, flexible extensibility, and automatic feature inheritance.
+
+### 📊 Metrics & observability
+A minimal metrics surface (the `Metrics` and `Timer` traits) with a default `NoopMetrics` implementation. Adapters include request counters and duration timers and accept injected metrics implementations for testing or production monitoring.
+
+### 📁 Multimodal & file support
+- Supports text, JSON, image, and audio content types.
+- File upload / inline helpers with size checks and upload fallbacks.
+- Function-calling / tool support: unified `Tool` and `FunctionCall` types with cross-provider parsing and execution.
+
+Minimal tool-calling example:
+
+```rust
+let mut req = ChatCompletionRequest::new("gpt-4".to_string(), vec![]);
+req.functions = Some(vec![Tool { /* ... */ }]);
+req.function_call = Some(FunctionCallPolicy::Auto("auto".to_string()));
+```
+
+### 🔧 Dependency injection & testability
+- An object-safe transport abstraction (`DynHttpTransportRef`) allows injecting mock transports for unit tests.
+- Adapter constructors support custom transport injection.
+
+Example:
+
+```rust
+let transport: DynHttpTransportRef = my_test_transport.into();
+let adapter = GenericAdapter::with_transport_ref(config, transport)?;
+```
+
+### 🚀 Performance & scalability
+- **Benchmarks**: memory <2MB, client overhead <1ms, streaming chunk latency <10ms.
+- **Connection pooling**: automatic reuse with tunable `reqwest::Client` options (max idle connections, idle timeout).
+- **Custom configuration**: timeouts, proxy, and pool parameters via `HttpTransportConfig`.
+
+Custom pool example:
+
+```rust
+let reqwest_client = Client::builder()
+    .pool_max_idle_per_host(32)
+    .build()?;
+let transport = HttpTransport::with_client(reqwest_client, Duration::from_secs(30));
+```
+
+## Quickstart
 
 ### Installation
-
 Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ai-lib = "0.1.0"
+ai-lib = "0.2.0"
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
 ```
 
-### Basic Usage
+### One-minute tryout (no API key required)
+Construct a client and request without making network calls:
 
 ```rust
-use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
-use futures::StreamExt;
+use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role, Content};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create client - switch providers by changing this enum
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = AiClient::new(Provider::Groq)?;
-    
-    // Standard chat completion
-    let request = ChatCompletionRequest::new(
-        "llama3-8b-8192".to_string(),
-        vec![Message {
-            role: Role::User,
-            content: "Explain quantum computing in simple terms".to_string(),
-        }],
-    ).with_temperature(0.7)
-     .with_max_tokens(200);
-    
-    let response = client.chat_completion(request.clone()).await?;
-    println!("Response: {}", response.choices[0].message.content);
-    
-    // Streaming response for real-time output
-    let mut stream = client.chat_completion_stream(request).await?;
-    print!("Streaming: ");
-    while let Some(item) = stream.next().await {
-        let chunk = item?;
-        if let Some(content) = chunk.choices.get(0).and_then(|c| c.delta.content.clone()) {
-            print!("{}", content);
-        }
-    }
-    
+    let req = ChatCompletionRequest::new(
+        "test-model".to_string(),
+        vec![Message { role: Role::User, content: Content::new_text("Hello from ai-lib"), function_call: None }]
+    );
     Ok(())
 }
 ```
 
-### Advanced Usage
-
-```rust
-// Error handling with retry logic
-match client.chat_completion(request).await {
-    Ok(response) => println!("Success: {}", response.choices[0].message.content),
-    Err(e) => {
-        if e.is_retryable() {
-            println!("Retryable error, waiting {}ms", e.retry_delay_ms());
-            tokio::time::sleep(Duration::from_millis(e.retry_delay_ms())).await;
-            // Implement retry logic
-        } else {
-            println!("Permanent error: {}", e);
-        }
-    }
-}
-
-// Provider switching at runtime
-let provider = match std::env::var("AI_PROVIDER")?.as_str() {
-    "groq" => Provider::Groq,
-    "openai" => Provider::OpenAI,
-    "gemini" => Provider::Gemini,
-    "claude" => Provider::Anthropic,
-    _ => Provider::Groq,
-};
-let client = AiClient::new(provider)?;
-```
-
-### Dependency injection & testing (DynHttpTransport)
-
-v0.1.0 introduces an object-safe transport trait `DynHttpTransport` and a boxed shim around the default `HttpTransport`. This allows you to inject custom transports (for testing, network simulation, or SDK integrations) without changing adapter APIs.
-
-Examples:
-
-```rust
-use ai_lib::provider::GenericAdapter;
-use ai_lib::transport::DynHttpTransportRef;
-
-// Assume you implemented `MyTestTransport` that converts into `DynHttpTransportRef`
-let transport: DynHttpTransportRef = my_test_transport.into();
-let config = ai_lib::provider::ProviderConfigs::groq();
-let adapter = GenericAdapter::with_transport_ref(config, transport)?;
-```
-
-Most adapters also provide `with_transport_ref(...)` or `with_transport(...)` constructors for test injection.
-
-## Environment Variables
-
-### Required API Keys
-
-Set the appropriate API key for your chosen provider:
+### Real requests
+Set API keys and proxy:
 
 ```bash
-# For Groq
 export GROQ_API_KEY=your_groq_api_key
-
-# For OpenAI  
-export OPENAI_API_KEY=your_openai_api_key
-
-# For DeepSeek
-export DEEPSEEK_API_KEY=your_deepseek_api_key
-
-# For Anthropic Claude
-export ANTHROPIC_API_KEY=your_anthropic_api_key
-
-# For Google Gemini
-export GEMINI_API_KEY=your_gemini_api_key
-```
-
-### Optional Proxy Configuration
-
-Configure proxy server for all requests:
-
-```bash
-# HTTP proxy
-export AI_PROXY_URL=http://proxy.example.com:8080
-
-# HTTPS proxy (recommended for security)
 export AI_PROXY_URL=https://proxy.example.com:8080
-
-# Proxy with authentication
-export AI_PROXY_URL=http://username:password@proxy.example.com:8080
+cargo run --example basic_usage
 ```
 
-**Note**: For accessing international AI services from certain regions, an HTTPS proxy may be required. The library automatically detects and uses the `AI_PROXY_URL` environment variable for all HTTP requests.
+## Environment variables
 
-## Architecture
+- **API keys**: e.g. `GROQ_API_KEY`, `OPENAI_API_KEY`, etc.
+- **Proxy**: `AI_PROXY_URL` supports HTTP/HTTPS and auth.
 
-### Hybrid Adapter Design
+## Examples & tests
 
-**ai-lib** uses a sophisticated hybrid architecture that optimally balances development efficiency with functionality:
+- Hybrid architecture: `cargo run --example test_hybrid_architecture`
+- Streaming: `cargo run --example test_streaming_improved`
+- Retry behavior: `cargo run --example test_retry_mechanism`
+- Provider tests: `cargo run --example test_groq_generic`, etc.
 
-#### Configuration-Driven Adapters (GenericAdapter)
-- **Providers**: Groq, DeepSeek, Anthropic
-- **Benefits**: ~15 lines of configuration vs ~250 lines of code per provider
-- **Use Case**: OpenAI-compatible APIs with minor variations
-- **Features**: Automatic SSE streaming, custom authentication, flexible field mapping
-
-#### Independent Adapters
-- **Providers**: OpenAI, Google Gemini
-- **Benefits**: Full control over API format, authentication, and response parsing
-- **Use Case**: APIs with fundamentally different designs
-- **Features**: Custom request/response transformation, specialized error handling
-
-### Four-Layer Design
-
-1. **Unified Client Layer** (`AiClient`) - Single interface for all providers
-2. **Adapter Layer** - Hybrid approach (configuration-driven + independent)
-3. **Transport Layer** (`HttpTransport`) - HTTP communication with proxy support and retry logic
-4. **Common Types Layer** - Unified request/response structures
-
-### Key Advantages
-
-- **95% Code Reduction**: Configuration-driven providers require minimal code
-- **Unified Interface**: Same API regardless of underlying provider implementation
-- **Automatic Features**: Proxy support, retry logic, and streaming for all providers
-- **Flexible Extension**: Choose optimal implementation approach per provider
-
-## Examples
-
-Run the included examples to explore different features:
-
-```bash
-# Test all providers with hybrid architecture
-cargo run --example test_hybrid_architecture
-
-# Streaming responses demonstration
-cargo run --example test_streaming_improved
-
-# Error handling and retry mechanisms
-cargo run --example test_retry_mechanism
-
-# Individual provider tests
-cargo run --example test_groq_generic
-cargo run --example test_gemini
-cargo run --example test_anthropic
-
-# Network and proxy configuration
-cargo run --example test_https_proxy
-```
-
-## Provider Support
+## Provider details
 
 | Provider | Status | Architecture | Streaming | Models | Notes |
-|----------|--------|--------------|-----------|--------|---------|
-| **Groq** | ✅ Production | Config-driven | ✅ | llama3-8b/70b, mixtral-8x7b | Fast inference, proxy supported |
-| **DeepSeek** | ✅ Production | Config-driven | ✅ | deepseek-chat, deepseek-reasoner | Chinese AI, direct connection |
-| **Anthropic** | ✅ Production | Config-driven | ✅ | claude-3.5-sonnet | Custom auth (x-api-key) |
-| **Google Gemini** | ✅ Production | Independent | 🔄 | gemini-1.5-pro/flash | URL param auth, unique format |
-| **OpenAI** | ✅ Production | Independent | ✅ | gpt-3.5-turbo, gpt-4 | Requires HTTPS proxy in some regions |
-| **Qwen / 通义千问 (Alibaba Cloud)** | ✅ Production | Config-driven | ✅ | Qwen family (OpenAI-compatible) | Uses DASHSCOPE_API_KEY; override base URL with DASHSCOPE_BASE_URL |
-
-### Architecture Types
-
-- **Configuration-driven**: ~15 lines of config, shared SSE parsing, automatic features
-- **Independent**: Full control, custom format handling, specialized optimizations
-
-## Error Handling & Reliability
-
-### Smart Error Classification
-
-```rust
-match client.chat_completion(request).await {
-    Err(e) => {
-        match e {
-            AiLibError::RateLimitExceeded(_) => {
-                // Wait 60 seconds, then retry
-                tokio::time::sleep(Duration::from_secs(60)).await;
-            },
-            AiLibError::NetworkError(_) => {
-                // Retry with exponential backoff
-                if e.is_retryable() {
-                    // Implement retry logic
-                }
-            },
-            AiLibError::AuthenticationError(_) => {
-                // Check API keys, don't retry
-                eprintln!("Check your API key configuration");
-            },
-            _ => {}
-        }
-    }
-}
-```
-
-### Automatic Retry Logic
-
-- **Exponential Backoff**: Smart retry delays based on error type
-- **Transient Errors**: Network timeouts, rate limits, server errors
-- **Permanent Errors**: Authentication failures, invalid requests
-- **Configurable**: Custom retry policies and timeouts
-
-## Performance & Scalability
-
-### Benchmarks
-
-- **Memory Usage**: < 2MB baseline, minimal per-request overhead
-- **Latency**: < 1ms client-side processing overhead
-- **Throughput**: Supports concurrent requests with connection pooling
-- **Streaming**: Real-time SSE processing with < 10ms chunk latency
-
-### Production Features
-
-- **Connection Pooling**: Automatic HTTP connection reuse
-- **Timeout Management**: Configurable request and connection timeouts
-- **Proxy Support**: Enterprise proxy with authentication
-- **Error Recovery**: Graceful degradation and circuit breaker patterns
+|--------|------|------|----------|------|------|
+| **Groq** | ✅ production-ready | config-driven | ✅ | llama3-8b/70b, mixtral-8x7b | fast inference, proxy support |
+| **DeepSeek** | ✅ production-ready | config-driven | ✅ | deepseek-chat, deepseek-reasoner | China-focused, direct access |
+| **Anthropic** | ✅ production-ready | config-driven | ✅ | claude-3.5-sonnet | custom auth required |
+| **Google Gemini** | ✅ production-ready | independent adapter | 🔄 | gemini-1.5-pro/flash | URL parameter auth |
+| **OpenAI** | ✅ production-ready | independent adapter | ✅ | gpt-3.5-turbo, gpt-4 | may require proxy in some regions |
+| **Qwen** | ✅ production-ready | config-driven | ✅ | Qwen family | uses DASHSCOPE_API_KEY |
+| **Baidu Wenxin (ERNIE)** | ✅ production-ready | config-driven | ✅ | ernie-3.5, ernie-4.0 | OpenAI-compatible via Qianfan; may require AK/SK and OAuth — see Baidu Cloud console |
+| **Tencent Hunyuan** | ✅ production-ready | config-driven | ✅ | hunyuan family | Tencent Cloud offers OpenAI-compatible endpoints (cloud account & keys required) — see Tencent docs |
+| **iFlytek Spark** | ✅ production-ready | config-driven | ✅ | spark family | voice+text friendly, OpenAI-compatible endpoints — see iFlytek docs |
+| **Moonshot Kimi** | ✅ production-ready | config-driven | ✅ | kimi family | OpenAI-compatible endpoints; suitable for long-text scenarios — see Moonshot platform |
 
 ## Roadmap
 
-### Completed ✅
-- [x] Hybrid architecture (config-driven + independent adapters)
-- [x] Universal streaming support with SSE parsing
-- [x] Enterprise-grade error handling and retry logic
-- [x] Comprehensive proxy support (HTTP/HTTPS)
-- [x] 13 major AI providers with adapters
-- [x] Type-safe request/response handling
-- [x] Extensive test coverage and examples
+### Implemented
+- Hybrid architecture and universal streaming support.
+- Enterprise-grade error handling, retry, and proxy support.
+- Multimodal primitives, function-calling, and metrics scaffold.
+- Transport injection and upload tests.
 
-### Planned 🔄
-- [ ] Connection pooling and advanced performance optimizations
-- [ ] Metrics and observability integration
-- [ ] Additional providers (Cohere, Together AI, etc.)
-- [ ] Multi-modal support (images, audio) for compatible providers
-- [ ] Advanced streaming features (cancellation, backpressure)
+### Planned
+- Advanced backpressure API and benchmark CI.
+- Connection pool tuning and plugin system.
+- Built-in caching and load balancing.
 
 ## Contributing
 
-We welcome contributions! Areas of focus:
+Contributions are welcome (new providers, performance work, docs).
 
-- **New Providers**: Add configuration for OpenAI-compatible APIs
-- **Performance**: Optimize hot paths and memory usage
-- **Testing**: Expand test coverage and add benchmarks
-- **Documentation**: Improve examples and API documentation
+1. Clone: `git clone https://github.com/hiddenpath/ai-lib.git`
+2. Create a branch: `git checkout -b feature/new-feature`
+3. Test: `cargo test`
+4. Open a PR.
 
-### Getting Started
+## Community & support
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes and add tests
-4. Run tests: `cargo test`
-5. Run examples: `cargo run --example test_hybrid_architecture`
-6. Submit a pull request
+- 📖 Docs: [docs.rs/ai-lib](https://docs.rs/ai-lib)
+- 🐛 Issues: [GitHub Issues](https://github.com/hiddenpath/ai-lib/issues)
+- 💬 Discussions: [GitHub Discussions](https://github.com/hiddenpath/ai-lib/discussions)
 
-### Development Setup
+## Acknowledgements & license
 
-```bash
-# Clone the repository
-git clone https://github.com/your-username/ai-lib.git
-cd ai-lib
+Thanks to the AI providers and the Rust community. Dual licensed: MIT or Apache 2.0.
 
-# Install dependencies
-cargo build
-
-# Run tests
-cargo test
-
-# Run all examples
-cargo run --example test_hybrid_architecture
-```
-
-## Community & Support
-
-- 📖 **Documentation**: [docs.rs/ai-lib](https://docs.rs/ai-lib)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/your-username/ai-lib/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/your-username/ai-lib/discussions)
-- 📦 **Crate**: [crates.io/crates/ai-lib](https://crates.io/crates/ai-lib)
-- 🔄 **Changelog**: [CHANGELOG.md](CHANGELOG.md)
-
-### Getting Help
-
-- Check the [examples](examples/) directory for usage patterns
-- Browse [GitHub Discussions](https://github.com/your-username/ai-lib/discussions) for Q&A
-- Open an [issue](https://github.com/your-username/ai-lib/issues) for bugs or feature requests
-- Read the [API documentation](https://docs.rs/ai-lib) for detailed reference
-
-## Acknowledgments
-
-- Thanks to all AI providers for their excellent APIs
-- Inspired by the Rust community's commitment to safety and performance
-- Built with love for developers who need reliable AI integration
-
-## History & Related Projects
-
-This library is the successor to [groqai](https://github.com/your-username/groqai), which focused on a single Groq model API. ai-lib extends the concept to a unified multi-provider interface for broader AI scenarios.
-
-## License
-
-Licensed under either of:
-- MIT License ([LICENSE-MIT](LICENSE-MIT))
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-at your option.
-
-## Citation
-
-If you use ai-lib in your research or project, please consider citing:
+Citation:
 
 ```bibtex
 @software{ai-lib,
-  title = {ai-lib: A Unified AI SDK for Rust},
-  author = {AI-lib Contributors},
-  url = {https://github.com/your-username/ai-lib},
-  year = {2024}
+    title = {ai-lib: A Unified AI SDK for Rust},
+    author = {AI-lib Contributors},
+    url = {https://github.com/hiddenpath/ai-lib},
+    year = {2024}
 }
 ```
 
 ---
 
 <div align="center">
-
-**ai-lib** is the most comprehensive, efficient, and reliable unified AI SDK in the Rust ecosystem.
-
-Built for production use with enterprise-grade reliability and developer-friendly APIs.
-
-[📖 Documentation](https://docs.rs/ai-lib) • [🚀 Getting Started](#quick-start) • [💬 Community](https://github.com/hiddenpath/ai-lib/discussions) • [🐛 Issues](https://github.com/hiddenpath/ai-lib/issues)
-
-**Made with ❤️ by the Rust community** 🦀✨
-
+**ai-lib**: the most comprehensive unified AI SDK in the Rust ecosystem. 🦀✨
 </div>

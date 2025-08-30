@@ -1,14 +1,18 @@
 use crate::api::{ChatApi, ChatCompletionChunk, ModelInfo, ModelPermission};
-use crate::types::{ChatCompletionRequest, ChatCompletionResponse, AiLibError, Message, Role, Choice, Usage};
-use crate::transport::{HttpTransport, DynHttpTransportRef};
-use std::env;
-use std::collections::HashMap;
+use crate::metrics::{Metrics, NoopMetrics};
+use crate::transport::{DynHttpTransportRef, HttpTransport};
+use crate::types::{
+    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
+};
 use futures::stream::{self, Stream};
+use std::collections::HashMap;
+use std::env;
+use std::sync::Arc;
 
 /// Google Gemini独立适配器，支持多模态AI服务
-/// 
+///
 /// Google Gemini independent adapter for multimodal AI service
-/// 
+///
 /// Gemini API is completely different from OpenAI format, requires independent adapter:
 /// - Endpoint: /v1beta/models/{model}:generateContent
 /// - Request body: contents array instead of messages
@@ -18,41 +22,72 @@ pub struct GeminiAdapter {
     transport: DynHttpTransportRef,
     api_key: String,
     base_url: String,
+    metrics: Arc<dyn Metrics>,
 }
 
 impl GeminiAdapter {
     pub fn new() -> Result<Self, AiLibError> {
-        let api_key = env::var("GEMINI_API_KEY")
-            .map_err(|_| AiLibError::AuthenticationError(
-                "GEMINI_API_KEY environment variable not set".to_string()
-            ))?;
-        
+        let api_key = env::var("GEMINI_API_KEY").map_err(|_| {
+            AiLibError::AuthenticationError(
+                "GEMINI_API_KEY environment variable not set".to_string(),
+            )
+        })?;
+
         Ok(Self {
             transport: HttpTransport::new().boxed(),
             api_key,
             base_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
+            metrics: Arc::new(NoopMetrics::new()),
         })
     }
 
     /// Construct using object-safe transport reference
-    pub fn with_transport_ref(transport: DynHttpTransportRef, api_key: String, base_url: String) -> Result<Self, AiLibError> {
-        Ok(Self { transport, api_key, base_url })
+    pub fn with_transport_ref(
+        transport: DynHttpTransportRef,
+        api_key: String,
+        base_url: String,
+    ) -> Result<Self, AiLibError> {
+        Ok(Self {
+            transport,
+            api_key,
+            base_url,
+            metrics: Arc::new(NoopMetrics::new()),
+        })
+    }
+
+    /// Construct with an injected transport and metrics implementation
+    pub fn with_transport_ref_and_metrics(
+        transport: DynHttpTransportRef,
+        api_key: String,
+        base_url: String,
+        metrics: Arc<dyn Metrics>,
+    ) -> Result<Self, AiLibError> {
+        Ok(Self {
+            transport,
+            api_key,
+            base_url,
+            metrics,
+        })
     }
 
     /// Convert generic request to Gemini format
     fn convert_to_gemini_request(&self, request: &ChatCompletionRequest) -> serde_json::Value {
-        let contents: Vec<serde_json::Value> = request.messages.iter().map(|msg| {
-            let role = match msg.role {
-                Role::User => "user",
-                Role::Assistant => "model", // Gemini uses "model" instead of "assistant"
-                Role::System => "user", // Gemini has no system role, convert to user
-            };
-            
-            serde_json::json!({
-                "role": role,
-                "parts": [{"text": msg.content}]
+        let contents: Vec<serde_json::Value> = request
+            .messages
+            .iter()
+            .map(|msg| {
+                let role = match msg.role {
+                    Role::User => "user",
+                    Role::Assistant => "model", // Gemini uses "model" instead of "assistant"
+                    Role::System => "user",     // Gemini has no system role, convert to user
+                };
+
+                serde_json::json!({
+                    "role": role,
+                    "parts": [{"text": msg.content.as_text()}]
+                })
             })
-        }).collect();
+            .collect();
 
         let mut gemini_request = serde_json::json!({
             "contents": contents
@@ -60,21 +95,18 @@ impl GeminiAdapter {
 
         // Gemini generation configuration
         let mut generation_config = serde_json::json!({});
-        
+
         if let Some(temp) = request.temperature {
-            generation_config["temperature"] = serde_json::Value::Number(
-                serde_json::Number::from_f64(temp.into()).unwrap()
-            );
+            generation_config["temperature"] =
+                serde_json::Value::Number(serde_json::Number::from_f64(temp.into()).unwrap());
         }
         if let Some(max_tokens) = request.max_tokens {
-            generation_config["maxOutputTokens"] = serde_json::Value::Number(
-                serde_json::Number::from(max_tokens)
-            );
+            generation_config["maxOutputTokens"] =
+                serde_json::Value::Number(serde_json::Number::from(max_tokens));
         }
         if let Some(top_p) = request.top_p {
-            generation_config["topP"] = serde_json::Value::Number(
-                serde_json::Number::from_f64(top_p.into()).unwrap()
-            );
+            generation_config["topP"] =
+                serde_json::Value::Number(serde_json::Number::from_f64(top_p.into()).unwrap());
         }
 
         if !generation_config.as_object().unwrap().is_empty() {
@@ -85,34 +117,91 @@ impl GeminiAdapter {
     }
 
     /// Parse Gemini response to generic format
-    fn parse_gemini_response(&self, response: serde_json::Value, model: &str) -> Result<ChatCompletionResponse, AiLibError> {
-        let candidates = response["candidates"].as_array()
-            .ok_or_else(|| AiLibError::ProviderError("No candidates in Gemini response".to_string()))?;
+    fn parse_gemini_response(
+        &self,
+        response: serde_json::Value,
+        model: &str,
+    ) -> Result<ChatCompletionResponse, AiLibError> {
+        let candidates = response["candidates"].as_array().ok_or_else(|| {
+            AiLibError::ProviderError("No candidates in Gemini response".to_string())
+        })?;
 
-        let choices: Result<Vec<Choice>, AiLibError> = candidates.iter().enumerate().map(|(index, candidate)| {
-            let content = candidate["content"]["parts"][0]["text"].as_str()
-                .ok_or_else(|| AiLibError::ProviderError("No text in Gemini candidate".to_string()))?;
-            
-            let finish_reason = candidate["finishReason"].as_str().map(|r| match r {
-                "STOP" => "stop".to_string(),
-                "MAX_TOKENS" => "length".to_string(),
-                _ => r.to_string(),
-            });
+        let choices: Result<Vec<Choice>, AiLibError> = candidates
+            .iter()
+            .enumerate()
+            .map(|(index, candidate)| {
+                let content = candidate["content"]["parts"][0]["text"]
+                    .as_str()
+                    .ok_or_else(|| {
+                        AiLibError::ProviderError("No text in Gemini candidate".to_string())
+                    })?;
 
-            Ok(Choice {
-                index: index as u32,
-                message: Message {
-                    role: Role::Assistant,
-                    content: content.to_string(),
-                },
-                finish_reason,
+                // Try to parse a function_call if the provider returned one. Gemini's
+                // response shape may place structured data under candidate["function_call"]
+                // or nested inside candidate["content"]["function_call"]. We try both.
+                let mut function_call: Option<crate::types::function_call::FunctionCall> = None;
+                if let Some(fc_val) = candidate.get("function_call").cloned().or_else(|| {
+                    candidate
+                        .get("content")
+                        .and_then(|c| c.get("function_call"))
+                        .cloned()
+                }) {
+                    if let Ok(fc) = serde_json::from_value::<
+                        crate::types::function_call::FunctionCall,
+                    >(fc_val.clone())
+                    {
+                        function_call = Some(fc);
+                    } else {
+                        // Fallback: extract name + arguments (arguments may be a JSON string)
+                        if let Some(name) = fc_val
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                        {
+                            let args = fc_val.get("arguments").and_then(|a| {
+                                if a.is_string() {
+                                    serde_json::from_str::<serde_json::Value>(a.as_str().unwrap())
+                                        .ok()
+                                } else {
+                                    Some(a.clone())
+                                }
+                            });
+                            function_call = Some(crate::types::function_call::FunctionCall {
+                                name,
+                                arguments: args,
+                            });
+                        }
+                    }
+                }
+
+                let finish_reason = candidate["finishReason"].as_str().map(|r| match r {
+                    "STOP" => "stop".to_string(),
+                    "MAX_TOKENS" => "length".to_string(),
+                    _ => r.to_string(),
+                });
+
+                Ok(Choice {
+                    index: index as u32,
+                    message: Message {
+                        role: Role::Assistant,
+                        content: crate::types::common::Content::Text(content.to_string()),
+                        function_call,
+                    },
+                    finish_reason,
+                })
             })
-        }).collect();
+            .collect();
 
         let usage = Usage {
-            prompt_tokens: response["usageMetadata"]["promptTokenCount"].as_u64().unwrap_or(0) as u32,
-            completion_tokens: response["usageMetadata"]["candidatesTokenCount"].as_u64().unwrap_or(0) as u32,
-            total_tokens: response["usageMetadata"]["totalTokenCount"].as_u64().unwrap_or(0) as u32,
+            prompt_tokens: response["usageMetadata"]["promptTokenCount"]
+                .as_u64()
+                .unwrap_or(0) as u32,
+            completion_tokens: response["usageMetadata"]["candidatesTokenCount"]
+                .as_u64()
+                .unwrap_or(0) as u32,
+            total_tokens: response["usageMetadata"]["totalTokenCount"]
+                .as_u64()
+                .unwrap_or(0) as u32,
         };
 
         Ok(ChatCompletionResponse {
@@ -128,27 +217,52 @@ impl GeminiAdapter {
 
 #[async_trait::async_trait]
 impl ChatApi for GeminiAdapter {
-    async fn chat_completion(&self, request: ChatCompletionRequest) -> Result<ChatCompletionResponse, AiLibError> {
+    async fn chat_completion(
+        &self,
+        request: ChatCompletionRequest,
+    ) -> Result<ChatCompletionResponse, AiLibError> {
+    self.metrics.incr_counter("gemini.requests", 1).await;
+    let timer = self.metrics.start_timer("gemini.request_duration_ms").await;
+
         let gemini_request = self.convert_to_gemini_request(&request);
-        
+
         // Gemini uses URL parameter authentication, not headers
         let url = format!(
             "{}/models/{}:generateContent?key={}",
             self.base_url, request.model, self.api_key
         );
 
-        let headers = HashMap::from([
-            ("Content-Type".to_string(), "application/json".to_string()),
-        ]);
+        let headers = HashMap::from([("Content-Type".to_string(), "application/json".to_string())]);
 
-        let response: serde_json::Value = self.transport
+        let response = match self
+            .transport
             .post_json(&url, Some(headers), gemini_request)
-            .await?;
+            .await
+        {
+            Ok(v) => {
+                if let Some(t) = timer {
+                    t.stop();
+                }
+                v
+            }
+            Err(e) => {
+                if let Some(t) = timer {
+                    t.stop();
+                }
+                return Err(e);
+            }
+        };
 
         self.parse_gemini_response(response, &request.model)
     }
 
-    async fn chat_completion_stream(&self, _request: ChatCompletionRequest) -> Result<Box<dyn Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin>, AiLibError> {
+    async fn chat_completion_stream(
+        &self,
+        _request: ChatCompletionRequest,
+    ) -> Result<
+        Box<dyn Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin>,
+        AiLibError,
+    > {
         // Gemini streaming response requires special handling, return empty stream for now
         let stream = stream::empty();
         Ok(Box::new(Box::pin(stream)))

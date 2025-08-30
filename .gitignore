@@ -1,1 +1,14 @@
 /target
+
+# Local logs and temporary files
+*.log
+build_log.txt
+test_log.txt
+git_branch.txt
+git_diff.txt
+git_status.txt
+
+# Editor/IDE
+.vscode/
+.idea/
+

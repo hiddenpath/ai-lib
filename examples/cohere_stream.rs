@@ -1,4 +1,5 @@
-use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
+use ai_lib::types::common::Content;
+use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 use futures::StreamExt;
 
 #[tokio::main]
@@ -8,8 +9,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let request = ChatCompletionRequest::new(
         "command-xlarge-nightly".to_string(),
-        vec![Message { role: Role::User, content: "Write a haiku about rust programming".to_string() }]
-    ).with_temperature(0.7).with_max_tokens(60);
+        vec![Message {
+            role: Role::User,
+            content: Content::Text("Write a haiku about rust programming".to_string()),
+            function_call: None,
+        }],
+    )
+    .with_temperature(0.7)
+    .with_max_tokens(60);
 
     // List models
     match client.list_models().await {

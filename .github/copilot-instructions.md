@@ -33,7 +33,7 @@
 ## Example Usage
 ```rust
 let client = AiClient::new(Provider::Groq)?;
-let request = ChatCompletionRequest::new("llama3-8b-8192".to_string(), vec![Message { role: Role::User, content: "Hello".to_string() }]);
+let request = ChatCompletionRequest::new("llama3-8b-8192".to_string(), vec![Message { role: Role::User, content: crate::types::common::Content::Text("Hello".to_string()), function_call: None }]);
 let response = client.chat_completion(request).await?;
 ```
 

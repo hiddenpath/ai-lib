@@ -1,15 +1,16 @@
 // This is the start of the mod.rs file
 // It includes various modules for the AI library
 
-pub mod request;
-pub mod response;
 pub mod common;
 pub mod error;
+pub mod request;
+pub mod response;
 
 pub use request::ChatCompletionRequest;
 pub use response::ChatCompletionResponse;
-pub use common::{Message, Role, Choice, Usage};
+pub mod function_call;
+pub use common::{Choice, Message, Role, Usage};
 pub use error::AiLibError;
+pub use function_call::{FunctionCall, FunctionCallPolicy, Tool};
 
 // Additional code may follow
-// ...existing code...

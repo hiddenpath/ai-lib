@@ -1,41 +1,49 @@
 # AI-lib: Rust统一AI SDK
 
-> **多AI提供商统一接口，采用混合架构设计**
+> **为多个AI提供商提供统一接口的Rust SDK，采用混合架构设计**
 
-## 概述
+## 概览
 
-**ai-lib** 是一个为Rust设计的统一AI SDK，为多个大语言模型提供商提供单一、一致的接口。采用精密的混合架构，在开发效率和功能性之间取得最佳平衡。
+**ai-lib** 是一个为Rust设计的统一AI SDK，提供与多个大型语言模型提供商交互的单一、一致性接口。采用先进的混合架构，兼顾开发效率与功能性。
 
-### 支持的提供商
+**注意**：辅助升级和PR说明已移至 `docs/` 目录，以保持仓库根目录的简洁。有关迁移和PR详情，请参阅 `docs/UPGRADE_0.2.0.md` 和 `docs/PR_0.2.0.md`。
 
-- ✅ **Groq** (配置驱动) - llama3, mixtral模型
-- ✅ **xAI Grok** (配置驱动) - grok 系列模型
-- ✅ **DeepSeek** (配置驱动) - deepseek-chat, deepseek-reasoner
-- ✅ **Anthropic Claude** (配置驱动) - claude-3.5-sonnet
-- ✅ **Google Gemini** (独立适配器) - gemini-1.5-pro, gemini-1.5-flash
-- ✅ **OpenAI** (独立适配器) - gpt-3.5-turbo, gpt-4 (需要代理)
-- ✅ **Qwen / 通义千问 (阿里云)** (配置驱动) - 通义千问系列（OpenAI 兼容）
-- ✅ **Cohere** (独立适配器) - Cohere 模型（支持 SSE 流式与回退）
-- ✅ **Mistral** (独立适配器) - mistral 系列
-- ✅ **Hugging Face Inference** (配置驱动) - hub 托管模型
-- ✅ **TogetherAI** (配置驱动) - together.ai 托管模型
-- ✅ **Azure OpenAI** (配置驱动) - Azure 托管的 OpenAI 端点
-- ✅ **Ollama** (配置驱动 / 本地) - 本地 Ollama 实例
+## 支持的AI提供商
+
+- ✅ **Groq**（配置驱动） - 支持 llama3、mixtral 模型
+- ✅ **xAI Grok**（配置驱动） - 支持 grok 模型
+- ✅ **DeepSeek**（配置驱动） - 支持 deepseek-chat、deepseek-reasoner
+- ✅ **Anthropic Claude**（配置驱动） - 支持 claude-3.5-sonnet
+- ✅ **Google Gemini**（独立适配器） - 支持 gemini-1.5-pro、gemini-1.5-flash
+- ✅ **OpenAI**（独立适配器） - 支持 gpt-3.5-turbo、gpt-4（部分地区需代理）
+- ✅ **Qwen / 通义千问（阿里云）**（配置驱动） - 支持 Qwen 系列（兼容 OpenAI）
+- ✅ **Cohere**（独立适配器） - 支持 command/generate 模型（SSE流式传输 + 回退）
+- ✅ **百度文心一言（Baidu ERNIE）**（配置驱动） - 支持 ernie-3.5、ernie-4.0（通过千帆平台的 OpenAI 兼容接口，需 AK/SK 与 OAuth）
+- ✅ **腾讯混元（Hunyuan）**（配置驱动） - 支持 hunyuan 系列（OpenAI 兼容接口，需腾讯云账号与密钥）
+- ✅ **讯飞星火（iFlytek Spark）**（配置驱动） - 支持 spark 系列（OpenAI 兼容接口，语音+文本场景友好）
+- ✅ **月之暗面 Kimi（Moonshot AI）**（配置驱动） - 支持 kimi 系列（OpenAI 兼容接口，适合长文本场景）
+- ✅ **Mistral**（独立适配器） - 支持 mistral 系列
+- ✅ **Hugging Face Inference**（配置驱动） - 支持 hub 托管模型
+- ✅ **TogetherAI**（配置驱动） - 支持 together.ai 托管模型
+- ✅ **Azure OpenAI**（配置驱动） - 支持 Azure 托管的 OpenAI 端点
+- ✅ **Ollama**（配置驱动/本地） - 支持本地 Ollama 实例
 
 ## 核心特性
 
-### 🚀 **零成本提供商切换**
-只需一行代码即可切换AI提供商：
+### 🚀 零成本提供商切换
+只需一行代码即可在不同AI提供商之间切换，统一接口确保无缝体验：
 
 ```rust
-// 即时切换提供商 - 相同接口，不同后端
+// 即时切换提供商 - 统一接口，不同后端
 let groq_client = AiClient::new(Provider::Groq)?;
 let gemini_client = AiClient::new(Provider::Gemini)?;
 let claude_client = AiClient::new(Provider::Anthropic)?;
 ```
 
-### 🌊 **通用流式支持**
-所有提供商的实时流式响应：
+运行时动态切换支持基于环境变量或其他逻辑选择提供商。
+
+### 🌊 通用流式响应支持
+为所有提供商提供实时流式响应，SSE解析和模拟回退确保一致性：
 
 ```rust
 use futures::StreamExt;
@@ -43,7 +51,6 @@ use futures::StreamExt;
 let mut stream = client.chat_completion_stream(request).await?;
 print!("流式输出: ");
 while let Some(item) = stream.next().await {
-    // `item` 是 `Result<ChatCompletionChunk, AiLibError>`
     let chunk = item?;
     if let Some(content) = chunk.choices.get(0).and_then(|c| c.delta.content.clone()) {
         print!("{}", content); // 实时输出
@@ -51,374 +58,175 @@ while let Some(item) = stream.next().await {
 }
 ```
 
-### 🔄 **企业级可靠性**
-- **自动重试**: 针对临时故障的指数退避
-- **智能错误处理**: 详细的错误分类和恢复建议
-- **代理支持**: 支持认证的HTTP/HTTPS代理
-- **超时管理**: 可配置的超时和优雅降级
+包括取消句柄（CancelHandle）和背压机制（计划中），适用于低延迟UI应用。
 
-### ⚡ **混合架构**
-- **95%代码减少**: 配置驱动适配器只需~15行配置 vs ~250行代码
-- **灵活扩展**: 为每个提供商选择最优实现方式
-- **类型安全**: 完整的Rust类型系统集成
-- **零依赖**: 精心选择的最小依赖
+### 🔄 企业级可靠性和错误处理
+- **自动重试与指数退避**：针对瞬时失败（如网络超时、速率限制）智能重试。
+- **智能错误分类**：区分可重试错误（如网络问题）和永久错误（如认证失败），提供恢复建议。
+- **代理支持**：HTTP/HTTPS代理及认证，适用于企业环境。
+- **超时管理**：可配置超时和优雅降级，确保生产稳定性。
 
-## 快速开始
-
-### 安装
-
-添加到你的 `Cargo.toml`:
-
-```toml
-[dependencies]
-ai-lib = "0.1.0"
-tokio = { version = "1.0", features = ["full"] }
-futures = "0.3"
-```
-
-### 基础用法
+示例错误处理：
 
 ```rust
-use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
-use futures::StreamExt;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 创建客户端 - 通过更改枚举切换提供商
-    let client = AiClient::new(Provider::Groq)?;
-    
-    // 标准聊天完成
-    let request = ChatCompletionRequest::new(
-        "llama3-8b-8192".to_string(),
-        vec![Message {
-            role: Role::User,
-            content: "用简单的话解释量子计算".to_string(),
-        }],
-    ).with_temperature(0.7)
-     .with_max_tokens(200);
-    
-    let response = client.chat_completion(request.clone()).await?;
-    println!("响应: {}", response.choices[0].message.content);
-    
-    // 实时输出的流式响应
-    let mut stream = client.chat_completion_stream(request).await?;
-    print!("流式输出: ");
-    while let Some(item) = stream.next().await {
-        let chunk = item?;
-        if let Some(content) = chunk.choices.get(0).and_then(|c| c.delta.content.clone()) {
-            print!("{}", content);
-        }
-    }
-    
-    Ok(())
-}
-```
-
-### 高级用法
-
-```rust
-// 带重试逻辑的错误处理
 match client.chat_completion(request).await {
-    Ok(response) => println!("成功: {}", response.choices[0].message.content),
+    Ok(response) => println!("成功: {}", response.choices[0].message.content.as_text()),
     Err(e) => {
         if e.is_retryable() {
-            println!("可重试错误，等待{}毫秒", e.retry_delay_ms());
+            println!("可重试错误，等待 {}ms", e.retry_delay_ms());
             tokio::time::sleep(Duration::from_millis(e.retry_delay_ms())).await;
             // 实现重试逻辑
         } else {
-            println!("永久错误: {}", e);
+            println!("永久性错误: {}", e);
         }
     }
 }
-
-// 运行时提供商切换
-let provider = match std::env::var("AI_PROVIDER")?.as_str() {
-    "groq" => Provider::Groq,
-    "openai" => Provider::OpenAI,
-    "gemini" => Provider::Gemini,
-    "claude" => Provider::Anthropic,
-    _ => Provider::Groq,
-};
-let client = AiClient::new(provider)?;
 ```
 
-### v0.1.0 更新要点（2025-08-26）
+### ⚡ 混合架构设计
+- **配置驱动适配器**：适用于兼容OpenAI的API，仅需少量配置代码（约15行），自动继承SSE流式、代理等功能。
+- **独立适配器**：为独特API提供完全控制，包括自定义认证和响应解析。
+- **四层结构**：统一客户端层、适配器层、传输层（HttpTransport，支持代理和重试）、公共类型层，确保类型安全和零额外依赖。
+- **优势**：95%代码减少、灵活扩展、自动功能继承。
 
-- 引入对象安全传输抽象：`DynHttpTransport` 与默认 `HttpTransport` 的 boxed shim，便于运行时注入和测试。
-- 新增 Cohere 适配器，支持 SSE 流式与非流式回退模拟。
-- 新增 Mistral HTTP 适配器（保守实现）并支持流式。
-- `GenericAdapter` 改进：可选 API Key 支持与额外提供商配置（OLLAMA 基础 URL 覆盖、HuggingFace 模型端点、Azure OpenAI 配置）。
+### 📊 指标与可观测性
+最小化指标框架，包括`Metrics`和`Timer` trait，默认`NoopMetrics`实现。适配器内置请求计数器和时长计时器，支持注入自定义指标用于测试或生产监控。
 
-### 依赖注入与测试（DynHttpTransport）
+### 📁 多模态与文件支持
+- 支持文本、JSON、图像、音频内容类型。
+- 文件上传/内联辅助函数，边界检查和失败回退。
+- 函数调用/工具支持：统一`Tool`和`FunctionCall`类型，跨提供商解析和执行。
 
-v0.1.0 引入对象安全传输接口 `DynHttpTransport`，并提供默认 `HttpTransport` 的 boxed shim，允许在测试或模拟时注入自定义传输实现。
+最小工具调用示例：
+
+```rust
+let mut req = ChatCompletionRequest::new("gpt-4".to_string(), vec![]);
+req.functions = Some(vec![Tool { /* ... */ }]);
+req.function_call = Some(FunctionCallPolicy::Auto("auto".to_string()));
+```
+
+### 🔧 依赖注入与测试友好
+- 对象安全传输层（`DynHttpTransportRef`），便于注入模拟传输进行单元测试。
+- 适配器构造函数支持自定义传输注入。
 
 示例：
 
 ```rust
-use ai_lib::provider::GenericAdapter;
-use ai_lib::transport::DynHttpTransportRef;
-
-// 假设实现了 MyTestTransport 并可以转换为 DynHttpTransportRef
 let transport: DynHttpTransportRef = my_test_transport.into();
-let config = ai_lib::provider::ProviderConfigs::groq();
 let adapter = GenericAdapter::with_transport_ref(config, transport)?;
 ```
 
-大多数适配器都提供 `with_transport_ref(...)` 或 `with_transport(...)` 构造函数用于测试注入。
+### 🚀 性能与可扩展性
+- **基准**：内存 <2MB，客户端开销 <1ms，流式块延迟 <10ms。
+- **连接池**：自动重用，支持自定义`reqwest::Client`调优（最大空闲连接、空闲超时）。
+- **自定义配置**：通过`HttpTransportConfig`设置超时、代理和池参数。
 
-## 环境变量
-
-### 必需的API密钥
-
-为你选择的提供商设置相应的API密钥：
-
-```bash
-# Groq
-export GROQ_API_KEY=your_groq_api_key
-
-# OpenAI  
-export OPENAI_API_KEY=your_openai_api_key
-
-# DeepSeek
-export DEEPSEEK_API_KEY=your_deepseek_api_key
-
-# Anthropic Claude
-export ANTHROPIC_API_KEY=your_anthropic_api_key
-
-# Google Gemini
-export GEMINI_API_KEY=your_gemini_api_key
-```
-
-### 可选的代理配置
-
-为所有请求配置代理服务器：
-
-```bash
-# HTTP代理
-export AI_PROXY_URL=http://proxy.example.com:8080
-
-# HTTPS代理（推荐用于安全性）
-export AI_PROXY_URL=https://proxy.example.com:8080
-
-# 带认证的代理
-export AI_PROXY_URL=http://username:password@proxy.example.com:8080
-```
-
-**注意**: 在某些地区访问国际AI服务可能需要HTTPS代理。库会自动检测并使用 `AI_PROXY_URL` 环境变量进行所有HTTP请求。
-
-## 架构
-
-### 混合适配器设计
-
-**ai-lib** 使用精密的混合架构，在开发效率和功能性之间取得最佳平衡：
-
-#### 配置驱动适配器 (GenericAdapter)
-- **提供商**: Groq, DeepSeek, Anthropic
-- **优势**: ~15行配置 vs 每个提供商~250行代码
-- **适用场景**: 有细微差异的OpenAI兼容API
-- **特性**: 自动SSE流式传输、自定义认证、灵活字段映射
-
-#### 独立适配器
-- **提供商**: OpenAI, Google Gemini
-- **优势**: 完全控制API格式、认证和响应解析
-- **适用场景**: 根本不同设计的API
-- **特性**: 自定义请求/响应转换、专门的错误处理
-
-### 四层设计
-
-1. **统一客户端层** (`AiClient`) - 所有提供商的单一接口
-2. **适配器层** - 混合方法（配置驱动 + 独立）
-3. **传输层** (`HttpTransport`) - 带代理支持和重试逻辑的HTTP通信
-4. **通用类型层** - 统一的请求/响应结构
-
-### 关键优势
-
-- **95%代码减少**: 配置驱动提供商需要最少的代码
-- **统一接口**: 无论底层提供商实现如何，都使用相同API
-- **自动特性**: 所有提供商的代理支持、重试逻辑和流式传输
-- **灵活扩展**: 为每个提供商选择最优实现方法
-
-## 示例
-
-运行包含的示例来探索不同功能：
-
-```bash
-# 测试混合架构的所有提供商
-cargo run --example test_hybrid_architecture
-
-# 流式响应演示
-cargo run --example test_streaming_improved
-
-# 错误处理和重试机制
-cargo run --example test_retry_mechanism
-
-# 单个提供商测试
-cargo run --example test_groq_generic
-cargo run --example test_gemini
-cargo run --example test_anthropic
-
-# 网络和代理配置
-cargo run --example test_https_proxy
-```
-
-## 提供商支持
-
-| 提供商 | 状态 | 架构 | 流式 | 模型 | 备注 |
-|--------|------|------|------|------|------|
-| **Groq** | ✅ 生产 | 配置驱动 | ✅ | llama3-8b/70b, mixtral-8x7b | 快速推理，支持代理 |
-| **DeepSeek** | ✅ 生产 | 配置驱动 | ✅ | deepseek-chat, deepseek-reasoner | 中国AI，直连 |
-| **Anthropic** | ✅ 生产 | 配置驱动 | ✅ | claude-3.5-sonnet | 自定义认证 (x-api-key) |
-| **Google Gemini** | ✅ 生产 | 独立 | 🔄 | gemini-1.5-pro/flash | URL参数认证，独特格式 |
-| **OpenAI** | ✅ 生产 | 独立 | ✅ | gpt-3.5-turbo, gpt-4 | 某些地区需要HTTPS代理 |
-| **通义千问 / Qwen** | ✅ 生产 | 配置驱动 | ✅ | 通义千问系列（OpenAI 兼容） | 使用 DASHSCOPE_API_KEY；可通过 DASHSCOPE_BASE_URL 覆盖基础 URL |
-
-### 架构类型
-
-- **配置驱动**: ~15行配置，共享SSE解析，自动特性
-- **独立**: 完全控制，自定义格式处理，专门优化
-
-## 错误处理和可靠性
-
-### 智能错误分类
+自定义池示例：
 
 ```rust
-match client.chat_completion(request).await {
-    Err(e) => {
-        match e {
-            AiLibError::RateLimitExceeded(_) => {
-                // 等待60秒，然后重试
-                tokio::time::sleep(Duration::from_secs(60)).await;
-            },
-            AiLibError::NetworkError(_) => {
-                // 使用指数退避重试
-                if e.is_retryable() {
-                    // 实现重试逻辑
-                }
-            },
-            AiLibError::AuthenticationError(_) => {
-                // 检查API密钥，不要重试
-                eprintln!("检查你的API密钥配置");
-            },
-            _ => {}
-        }
-    }
+let reqwest_client = Client::builder()
+    .pool_max_idle_per_host(32)
+    .build()?;
+let transport = HttpTransport::with_client(reqwest_client, Duration::from_secs(30));
+```
+
+## 快速入门
+
+### 安装
+在 `Cargo.toml` 中添加：
+
+```toml
+[dependencies]
+ai-lib = "0.2.0"
+tokio = { version = "1.0", features = ["full"] }
+futures = "0.3"
+```
+
+### 一分钟体验（无需API密钥）
+构造客户端和请求，无网络调用：
+
+```rust
+use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role, Content};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = AiClient::new(Provider::Groq)?;
+    let req = ChatCompletionRequest::new(
+        "test-model".to_string(),
+        vec![Message { role: Role::User, content: Content::new_text("来自 ai-lib 的问候"), function_call: None }]
+    );
+    Ok(())
 }
 ```
 
-### 自动重试逻辑
+### 真实请求设置
+设置API密钥和代理：
 
-- **指数退避**: 基于错误类型的智能重试延迟
-- **临时错误**: 网络超时、速率限制、服务器错误
-- **永久错误**: 认证失败、无效请求
-- **可配置**: 自定义重试策略和超时
+```bash
+export GROQ_API_KEY=your_groq_api_key
+export AI_PROXY_URL=https://proxy.example.com:8080
+cargo run --example basic_usage
+```
 
-## 性能和可扩展性
+## 环境变量
 
-### 基准测试
+- **API密钥**：如`GROQ_API_KEY`、`OPENAI_API_KEY`等。
+- **代理**：`AI_PROXY_URL`支持HTTP/HTTPS和认证。
 
-- **内存使用**: < 2MB基线，每请求最小开销
-- **延迟**: < 1ms客户端处理开销
-- **吞吐量**: 支持连接池的并发请求
-- **流式**: 实时SSE处理，< 10ms块延迟
+## 示例与测试
 
-### 生产特性
+- 混合架构：`cargo run --example test_hybrid_architecture`
+- 流式响应：`cargo run --example test_streaming_improved`
+- 重试机制：`cargo run --example test_retry_mechanism`
+- 提供商测试：`cargo run --example test_groq_generic` 等。
 
-- **连接池**: 自动HTTP连接重用
-- **超时管理**: 可配置的请求和连接超时
-- **代理支持**: 带认证的企业代理
-- **错误恢复**: 优雅降级和断路器模式
+## 提供商详情
+
+| 提供商 | 状态 | 架构 | 流式支持 | 模型 | 备注 |
+|--------|------|------|----------|------|------|
+| **Groq** | ✅ 生产就绪 | 配置驱动 | ✅ | llama3-8b/70b, mixtral-8x7b | 快速推理，支持代理 |
+| **DeepSeek** | ✅ 生产就绪 | 配置驱动 | ✅ | deepseek-chat, deepseek-reasoner | 中国AI，直接连接 |
+| **Anthropic** | ✅ 生产就绪 | 配置驱动 | ✅ | claude-3.5-sonnet | 自定义认证 |
+| **Google Gemini** | ✅ 生产就绪 | 独立适配器 | 🔄 | gemini-1.5-pro/flash | URL参数认证 |
+| **OpenAI** | ✅ 生产就绪 | 独立适配器 | ✅ | gpt-3.5-turbo, gpt-4 | 需代理（部分地区） |
+| **Qwen** | ✅ 生产就绪 | 配置驱动 | ✅ | Qwen系列 | 使用DASHSCOPE_API_KEY |
+| **Baidu 文心一言 (ERNIE)** | ✅ 生产就绪 | 配置驱动 | ✅ | ernie-3.5, ernie-4.0 | 通过百度千帆平台的 OpenAI 兼容接口（需 AK/SK 与 OAuth），请参考百度智能云控制台 |
+| **Tencent 混元 (Hunyuan)** | ✅ 生产就绪 | 配置驱动 | ✅ | hunyuan 系列 | 腾讯云提供 OpenAI 兼容端点（需云账号与密钥），详见腾讯云文档 |
+| **讯飞 星火 (iFlytek Spark)** | ✅ 生产就绪 | 配置驱动 | ✅ | spark 系列 | 支持语音+文本混合场景，提供 OpenAI 兼容接口，详见讯飞开放平台 |
+| **月之暗面 Kimi (Moonshot AI)** | ✅ 生产就绪 | 配置驱动 | ✅ | kimi 系列 | OpenAI 兼容接口，适合长文本处理，详见 Moonshot 平台 |
 
 ## 路线图
 
-### 已完成 ✅
-- [x] 混合架构（配置驱动 + 独立适配器）
-- [x] 带SSE解析的通用流式支持
-- [x] 企业级错误处理和重试逻辑
-- [x] 全面的代理支持（HTTP/HTTPS）
-- [x] 13个主要AI提供商的适配器
-- [x] 类型安全的请求/响应处理
-- [x] 广泛的测试覆盖和示例
+### 已实现特性
+- 混合架构与通用流式支持。
+- 企业级错误处理、重试和代理。
+- 多模态基础、函数调用和指标框架。
+- 传输注入与上传测试。
 
-### 计划中 🔄
-- [ ] 连接池和高级性能优化
-- [ ] 指标和可观测性集成
-- [ ] 额外提供商（Cohere, Together AI等）
-- [ ] 兼容提供商的多模态支持（图像、音频）
-- [ ] 高级流式特性（取消、背压）
+### 计划特性
+- 高级背压API和性能基准CI。
+- 连接池调优和插件系统。
+- 内置缓存与负载均衡。
 
-## 贡献
+## 贡献指南
 
-我们欢迎贡献！重点领域：
+欢迎贡献新提供商、性能优化和文档改进。
 
-- **新提供商**: 为OpenAI兼容API添加配置
-- **性能**: 优化热路径和内存使用
-- **测试**: 扩展测试覆盖和添加基准测试
-- **文档**: 改进示例和API文档
-
-### 开始贡献
-
-1. Fork 仓库
-2. 创建功能分支: `git checkout -b feature/amazing-feature`
-3. 进行更改并添加测试
-4. 运行测试: `cargo test`
-5. 运行示例: `cargo run --example test_hybrid_architecture`
-6. 提交拉取请求
-
-### 开发环境设置
-
-```bash
-# 克隆仓库
-git clone https://github.com/hiddenpath/ai-lib.git
-cd ai-lib
-
-# 安装依赖
-cargo build
-
-# 运行测试
-cargo test
-
-# 运行所有示例
-cargo run --example test_hybrid_architecture
-```
+1. 克隆仓库：`git clone https://github.com/hiddenpath/ai-lib.git`
+2. 创建分支：`git checkout -b feature/new-feature`
+3. 测试：`cargo test`
+4. 提交PR。
 
 ## 社区与支持
 
-- 📖 **文档**: [docs.rs/ai-lib](https://docs.rs/ai-lib)
-- 🐛 **问题**: [GitHub Issues](https://github.com/hiddenpath/ai-lib/issues)
-- 💬 **讨论**: [GitHub Discussions](https://github.com/hiddenpath/ai-lib/discussions)
-- 📦 **包**: [crates.io/crates/ai-lib](https://crates.io/crates/ai-lib)
-- 🔄 **更新日志**: [CHANGELOG.md](CHANGELOG.md)
+- 📖 文档：[docs.rs/ai-lib](https://docs.rs/ai-lib)
+- 🐛 问题：[GitHub Issues](https://github.com/hiddenpath/ai-lib/issues)
+- 💬 讨论：[GitHub Discussions](https://github.com/hiddenpath/ai-lib/discussions)
 
-### 获取帮助
+## 致谢与许可证
 
-- 查看 [examples](examples/) 目录了解使用模式
-- 浏览 [GitHub Discussions](https://github.com/hiddenpath/ai-lib/discussions) 进行问答
-- 为错误或功能请求开启 [issue](https://github.com/hiddenpath/ai-lib/issues)
-- 阅读 [API文档](https://docs.rs/ai-lib) 获取详细参考
+感谢AI提供商和Rust社区。双许可证：MIT 或 Apache 2.0。
 
-## 致谢
-
-- 感谢所有AI提供商提供的优秀API
-- 受到Rust社区对安全性和性能承诺的启发
-- 为需要可靠AI集成的开发者而用心构建
-
-## 历史与相关项目
-
-本库的前身为 [groqai](https://github.com/你的用户名/groqai)，专注于 Groq 单一大模型 API 接口。ai-lib 则进一步扩展为多模型、多厂商统一接口，适合更广泛的 AI 应用场景。
-
-## 许可证
-
-根据以下任一许可协议授权：
-
-- MIT 许可证 (LICENSE-MIT)
-- Apache 许可证，第 2.0 版 (LICENSE-APACHE)
-
-您可以选择其中之一。
-
-## 引用
-
-如果您在研究或项目中使用ai-lib，请考虑引用：
+引用：
 
 ```bibtex
 @software{ai-lib,
@@ -432,13 +240,5 @@ cargo run --example test_hybrid_architecture
 ---
 
 <div align="center">
-
-**ai-lib** 是Rust生态系统中最全面、高效、可靠的统一AI SDK。
-
-为生产使用而构建，具有企业级可靠性和开发者友好的API。
-
-[📖 文档](https://docs.rs/ai-lib) • [🚀 快速开始](#快速开始) • [💬 社区](https://github.com/hiddenpath/ai-lib/discussions) • [🐛 问题](https://github.com/hiddenpath/ai-lib/issues)
-
-**由Rust社区用❤️制作** 🦀✨
-
+**ai-lib**：Rust生态中最全面的统一AI SDK。🦀✨
 </div>
