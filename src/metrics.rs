@@ -76,6 +76,7 @@ impl Default for NoopMetrics {
 }
 
 /// Convenience methods for common metric patterns
+#[allow(async_fn_in_trait)]
 pub trait MetricsExt: Metrics {
     /// Record a request with timing and success/failure
     async fn record_request(&self, name: &str, timer: Option<Box<dyn Timer + Send>>, success: bool) {
