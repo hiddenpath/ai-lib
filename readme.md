@@ -162,7 +162,7 @@ array.add_endpoint(ModelEndpoint {
 ### Installation
 ```toml
 [dependencies]
-ai-lib = "0.2.1"
+ai-lib = "0.2.11"
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
 ```
