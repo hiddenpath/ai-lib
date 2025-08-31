@@ -290,8 +290,8 @@ impl ChatApi for CohereAdapter {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
-    self.metrics.incr_counter("cohere.requests", 1).await;
-    let timer = self.metrics.start_timer("cohere.request_duration_ms").await;
+        self.metrics.incr_counter("cohere.requests", 1).await;
+        let timer = self.metrics.start_timer("cohere.request_duration_ms").await;
 
         let body = self.convert_request(&request);
 
@@ -378,7 +378,7 @@ impl ChatApi for CohereAdapter {
             }
         };
 
-    self.parse_response(response_json)
+        self.parse_response(response_json)
     }
 
     async fn chat_completion_stream(

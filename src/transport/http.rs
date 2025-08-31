@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::env;
 use std::time::Duration;
 
-/// HTTP传输客户端抽象，定义通用HTTP操作接口
+/// HTTP transport client abstraction, defining common HTTP operation interface
 ///
 /// HTTP transport client abstraction defining generic HTTP operation interface
 ///
@@ -81,7 +81,7 @@ pub trait HttpClient: Send + Sync {
     }
 }
 
-/// 基于reqwest的HTTP传输实现，封装所有HTTP细节
+/// Reqwest-based HTTP transport implementation, encapsulating all HTTP details
 ///
 /// HTTP transport implementation based on reqwest, encapsulating all HTTP details
 ///
@@ -100,7 +100,6 @@ pub struct HttpTransportConfig {
     /// Idle timeout for pooled connections (maps to reqwest::ClientBuilder::pool_idle_timeout)
     pub pool_idle_timeout: Option<Duration>,
 }
-
 
 impl HttpTransport {
     /// Create new HTTP transport instance
@@ -166,9 +165,7 @@ impl HttpTransport {
             }
         }
 
-        let client = client_builder
-            .build()
-            .map_err(TransportError::HttpError)?;
+        let client = client_builder.build().map_err(TransportError::HttpError)?;
         Ok(Self {
             client,
             timeout: config.timeout,
@@ -185,9 +182,7 @@ impl HttpTransport {
             client_builder = client_builder.proxy(proxy);
         }
 
-        let client = client_builder
-            .build()
-            .map_err(TransportError::HttpError)?;
+        let client = client_builder.build().map_err(TransportError::HttpError)?;
 
         Ok(Self { client, timeout })
     }
@@ -393,7 +388,13 @@ impl DynHttpTransport for HttpTransportBoxed {
         _url: &'a str,
         _headers: Option<HashMap<String, String>>,
         _body: serde_json::Value,
-    ) -> futures::future::BoxFuture<'a, Result<Pin<Box<dyn Stream<Item = Result<Bytes, crate::types::AiLibError>> + Send>>, crate::types::AiLibError>> {
+    ) -> futures::future::BoxFuture<
+        'a,
+        Result<
+            Pin<Box<dyn Stream<Item = Result<Bytes, crate::types::AiLibError>> + Send>>,
+            crate::types::AiLibError,
+        >,
+    > {
         Box::pin(async move {
             // Build request
             let mut req = self.inner.client.post(_url).json(&_body);

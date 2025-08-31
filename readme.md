@@ -4,147 +4,147 @@
 
 ## Overview
 
-**ai-lib** is a unified AI SDK for Rust that offers a single, consistent interface for interacting with multiple large language model providers. It uses a hybrid architecture that balances developer ergonomics with provider-specific features.
+**ai-lib** is a unified AI SDK for Rust that offers a single, consistent interface for interacting with multiple large language model providers. It uses a hybrid architecture that balances developer ergonomics with provider-specific features, providing progressive configuration options from simple usage to advanced customization, along with powerful tools for building custom model managers and load-balanced arrays.
 
-**Note**: upgrade guides and PR notes have been moved to the `docs/` directory to keep the repository root clean. See `docs/UPGRADE_0.2.0.md` and `docs/PR_0.2.0.md` for migration and PR details.
+**Note**: Upgrade guides and PR notes have been moved to the `docs/` directory. See `docs/UPGRADE_0.2.0.md` and `docs/PR_0.2.0.md` for migration and PR details.
 
 ## Supported AI Providers
 
-- ✅ **Groq** (config-driven) — supports llama3, mixtral models
-- ✅ **xAI Grok** (config-driven) — supports grok models
-- ✅ **DeepSeek** (config-driven) — supports deepseek-chat, deepseek-reasoner
-- ✅ **Anthropic Claude** (config-driven) — supports claude-3.5-sonnet
-- ✅ **Google Gemini** (independent adapter) — supports gemini-1.5-pro, gemini-1.5-flash
-- ✅ **OpenAI** (independent adapter) — supports gpt-3.5-turbo, gpt-4 (may require a proxy in some regions)
-- ✅ **Qwen / Tongyi Qianwen (Alibaba Cloud)** (config-driven) — supports Qwen family (OpenAI-compatible)
-- ✅ **Cohere** (independent adapter) — supports command/generate models (SSE streaming + fallback)
-- ✅ **Baidu Wenxin (Baidu ERNIE)** (config-driven) — supports ernie-3.5, ernie-4.0 (OpenAI-compatible endpoints via the Qianfan platform; may require AK/SK and OAuth)
-- ✅ **Tencent Hunyuan** (config-driven) — supports the hunyuan family (OpenAI-compatible endpoints; cloud account and keys required)
-- ✅ **iFlytek Spark** (config-driven) — supports spark models (OpenAI-compatible, good for mixed voice+text scenarios)
-- ✅ **Moonshot / Kimi** (config-driven) — supports kimi series (OpenAI-compatible, suitable for long-text scenarios)
-- ✅ **Mistral** (independent adapter) — supports mistral models
-- ✅ **Hugging Face Inference** (config-driven) — supports hub-hosted models
-- ✅ **TogetherAI** (config-driven) — supports together.ai hosted models
-- ✅ **Azure OpenAI** (config-driven) — supports Azure-hosted OpenAI endpoints
-- ✅ **Ollama** (config-driven / local) — supports local Ollama instances
+- ✅ **Groq** (config-driven) — llama3, mixtral models
+- ✅ **xAI Grok** (config-driven) — grok models
+- ✅ **DeepSeek** (config-driven) — deepseek-chat, deepseek-reasoner
+- ✅ **Anthropic Claude** (config-driven) — claude-3.5-sonnet
+- ✅ **Google Gemini** (independent adapter) — gemini-1.5-pro, gemini-1.5-flash
+- ✅ **OpenAI** (independent adapter) — gpt-3.5-turbo, gpt-4
+- ✅ **Qwen / Tongyi Qianwen** (config-driven) — Qwen family (OpenAI-compatible)
+- ✅ **Cohere** (independent adapter) — command/generate models
+- ✅ **Baidu Wenxin (ERNIE)** (config-driven) — ernie-3.5, ernie-4.0
+- ✅ **Tencent Hunyuan** (config-driven) — hunyuan family
+- ✅ **iFlytek Spark** (config-driven) — spark models (voice+text friendly)
+- ✅ **Moonshot / Kimi** (config-driven) — kimi series (long-text scenarios)
+- ✅ **Mistral** (independent adapter) — mistral models
+- ✅ **Hugging Face Inference** (config-driven) — hub-hosted models
+- ✅ **TogetherAI** (config-driven) — together.ai hosted models
+- ✅ **Azure OpenAI** (config-driven) — Azure-hosted OpenAI endpoints
+- ✅ **Ollama** (config-driven/local) — local Ollama instances
 
-## Core features
+## Core Features
 
-### 🚀 Zero-cost provider switching
-Switch between AI providers with a single line of code — the unified API ensures a seamless experience:
+### 🚀 **Unified Interface & Provider Switching**
+Switch between AI providers with a single line of code:
 
 ```rust
-// Instant provider switching — same API, different backends
 let groq_client = AiClient::new(Provider::Groq)?;
 let gemini_client = AiClient::new(Provider::Gemini)?;
 let claude_client = AiClient::new(Provider::Anthropic)?;
 ```
 
-Runtime selection is supported (for example via environment variables or other logic).
+### 🎯 **Progressive Configuration**
+Build AI clients with progressive customization levels:
 
-### 🌊 Universal streaming support
-Provides realtime streaming responses for all providers; SSE parsing and fallback emulation ensure consistent behavior:
+```rust
+// Level 1: Simple usage with auto-detection
+let client = AiClient::new(Provider::Groq)?;
+
+// Level 2: Custom base URL
+let client = AiClientBuilder::new(Provider::Groq)
+    .with_base_url("https://custom.groq.com")
+    .build()?;
+
+// Level 3: Add proxy support
+let client = AiClientBuilder::new(Provider::Groq)
+    .with_base_url("https://custom.groq.com")
+    .with_proxy("http://proxy.example.com:8080")
+    .build()?;
+
+// Level 4: Advanced configuration
+let client = AiClientBuilder::new(Provider::Groq)
+    .with_base_url("https://custom.groq.com")
+    .with_proxy("http://proxy.example.com:8080")
+    .with_timeout(Duration::from_secs(60))
+    .with_pool_config(32, Duration::from_secs(90))
+    .build()?;
+```
+
+### 🌊 **Universal Streaming Support**
+Real-time streaming responses for all providers with SSE parsing and fallback emulation:
 
 ```rust
 use futures::StreamExt;
 
 let mut stream = client.chat_completion_stream(request).await?;
-print!("streamed output: ");
 while let Some(item) = stream.next().await {
     let chunk = item?;
     if let Some(content) = chunk.choices.get(0).and_then(|c| c.delta.content.clone()) {
-        print!("{}", content); // realtime output
+        print!("{}", content); // real-time output
     }
 }
 ```
 
-Includes a cancel handle (`CancelHandle`) and a planned backpressure API, suitable for low-latency UI applications.
-
-### 🔄 Enterprise-grade reliability and error handling
-- **Automatic retries with exponential backoff**: intelligently retry transient failures (e.g., timeouts, rate limits).
-- **Smart error classification**: distinguish retryable errors (network issues) from permanent errors (authentication failures) and provide recovery guidance.
-- **Proxy support**: HTTP/HTTPS proxies with auth for enterprise environments.
-- **Timeout management**: configurable timeouts and graceful degradation to ensure production stability.
-
-Example error handling:
+### 🔄 **Enterprise-Grade Reliability**
+- **Automatic retries** with exponential backoff
+- **Smart error classification** (retryable vs. permanent)
+- **Proxy support** with authentication
+- **Timeout management** and graceful degradation
 
 ```rust
 match client.chat_completion(request).await {
-    Ok(response) => println!("success: {}", response.choices[0].message.content.as_text()),
+    Ok(response) => println!("Success: {}", response.choices[0].message.content.as_text()),
     Err(e) => {
         if e.is_retryable() {
-            println!("retryable error, sleeping {}ms", e.retry_delay_ms());
-            tokio::time::sleep(Duration::from_millis(e.retry_delay_ms())).await;
+            println!("Retryable error, sleeping {}ms", e.retry_delay_ms());
             // implement retry logic
         } else {
-            println!("permanent error: {}", e);
+            println!("Permanent error: {}", e);
         }
     }
 }
 ```
 
-### ⚡ Hybrid architecture
-- **Config-driven adapters**: for OpenAI-compatible APIs; require minimal wiring (≈15 lines) and inherit SSE streaming, proxy, and upload behaviors.
-- **Independent adapters**: full control for providers with unique APIs, including custom auth and response parsing.
-- **Four-layer design**: unified client layer, adapter layer, transport layer (HttpTransport with proxy and retry), and common types — ensuring type safety with no extra runtime dependencies.
-- **Benefits**: major code reuse, flexible extensibility, and automatic feature inheritance.
+### ⚡ **Hybrid Architecture**
+- **Config-driven adapters**: Minimal wiring for OpenAI-compatible APIs
+- **Independent adapters**: Full control for unique APIs
+- **Four-layer design**: Client → Adapter → Transport → Common types
+- **Benefits**: Code reuse, extensibility, automatic feature inheritance
 
-### 📊 Metrics & observability
-A minimal metrics surface (the `Metrics` and `Timer` traits) with a default `NoopMetrics` implementation. Adapters include request counters and duration timers and accept injected metrics implementations for testing or production monitoring.
-
-### 📁 Multimodal & file support
-- Supports text, JSON, image, and audio content types.
-- File upload / inline helpers with size checks and upload fallbacks.
-- Function-calling / tool support: unified `Tool` and `FunctionCall` types with cross-provider parsing and execution.
-
-Minimal tool-calling example:
+### 🏗️ **Custom Model Management**
+Build sophisticated model management systems:
 
 ```rust
-let mut req = ChatCompletionRequest::new("gpt-4".to_string(), vec![]);
-req.functions = Some(vec![Tool { /* ... */ }]);
-req.function_call = Some(FunctionCallPolicy::Auto("auto".to_string()));
+// Performance-based model selection
+let mut manager = CustomModelManager::new("groq")
+    .with_strategy(ModelSelectionStrategy::PerformanceBased);
+
+// Load-balanced model arrays
+let mut array = ModelArray::new("production")
+    .with_strategy(LoadBalancingStrategy::RoundRobin);
+
+array.add_endpoint(ModelEndpoint {
+    name: "us-east-1".to_string(),
+    url: "https://api-east.groq.com".to_string(),
+    weight: 1.0,
+    healthy: true,
+});
 ```
 
-### 🔧 Dependency injection & testability
-- An object-safe transport abstraction (`DynHttpTransportRef`) allows injecting mock transports for unit tests.
-- Adapter constructors support custom transport injection.
-
-Example:
-
-```rust
-let transport: DynHttpTransportRef = my_test_transport.into();
-let adapter = GenericAdapter::with_transport_ref(config, transport)?;
-```
-
-### 🚀 Performance & scalability
-- **Benchmarks**: memory <2MB, client overhead <1ms, streaming chunk latency <10ms.
-- **Connection pooling**: automatic reuse with tunable `reqwest::Client` options (max idle connections, idle timeout).
-- **Custom configuration**: timeouts, proxy, and pool parameters via `HttpTransportConfig`.
-
-Custom pool example:
-
-```rust
-let reqwest_client = Client::builder()
-    .pool_max_idle_per_host(32)
-    .build()?;
-let transport = HttpTransport::with_client(reqwest_client, Duration::from_secs(30));
-```
+### 📊 **Advanced Capabilities**
+- **Multimodal support**: Text, JSON, image, and audio content
+- **Function calling**: Unified `Tool` and `FunctionCall` types
+- **Metrics & observability**: Request counters and duration timers
+- **Dependency injection**: Mock transports for testing
+- **Performance**: <2MB memory, <1ms overhead, <10ms streaming latency
 
 ## Quickstart
 
 ### Installation
-Add to your `Cargo.toml`:
-
 ```toml
 [dependencies]
-ai-lib = "0.2.0"
+ai-lib = "0.2.1"
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
 ```
 
-### One-minute tryout (no API key required)
-Construct a client and request without making network calls:
-
+### Basic Usage
 ```rust
 use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role, Content};
 
@@ -158,75 +158,125 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### Real requests
-Set API keys and proxy:
+### Production Best Practices
+```rust
+use ai_lib::{AiClientBuilder, Provider, CustomModelManager, ModelSelectionStrategy};
 
+// 1. Use environment variables for configuration
+let client = AiClientBuilder::new(Provider::Groq)
+    .with_timeout(Duration::from_secs(30))
+    .build()?;
+
+// 2. Implement model management
+let mut manager = CustomModelManager::new("groq")
+    .with_strategy(ModelSelectionStrategy::CostBased);
+
+// 3. Add health checks and monitoring
+let mut array = ModelArray::new("production")
+    .with_strategy(LoadBalancingStrategy::HealthBased);
+```
+
+### Environment Variables
 ```bash
 export GROQ_API_KEY=your_groq_api_key
 export AI_PROXY_URL=https://proxy.example.com:8080
-cargo run --example basic_usage
 ```
 
-## Environment variables
+## Examples
 
-- **API keys**: e.g. `GROQ_API_KEY`, `OPENAI_API_KEY`, etc.
-- **Proxy**: `AI_PROXY_URL` supports HTTP/HTTPS and auth.
+### Getting Started
+- **Quickstart**: `cargo run --example quickstart` - Simple usage guide
+- **Builder Pattern**: `cargo run --example builder_pattern` - Configuration examples
 
-## Examples & tests
+### Advanced Features
+- **Model Management**: `cargo run --example model_management` - Custom managers and load balancing
 
-- Hybrid architecture: `cargo run --example test_hybrid_architecture`
-- Streaming: `cargo run --example test_streaming_improved`
-- Retry behavior: `cargo run --example test_retry_mechanism`
-- Provider tests: `cargo run --example test_groq_generic`, etc.
+### Core Functionality
+- **Architecture**: `cargo run --example test_hybrid_architecture`
+- **Streaming**: `cargo run --example test_streaming_improved`
+- **Retry**: `cargo run --example test_retry_mechanism`
+- **Providers**: `cargo run --example test_groq_generic`
 
-## Provider details
+## Provider Details
 
-| Provider | Status | Architecture | Streaming | Models | Notes |
-|--------|------|------|----------|------|------|
-| **Groq** | ✅ production-ready | config-driven | ✅ | llama3-8b/70b, mixtral-8x7b | fast inference, proxy support |
-| **DeepSeek** | ✅ production-ready | config-driven | ✅ | deepseek-chat, deepseek-reasoner | China-focused, direct access |
-| **Anthropic** | ✅ production-ready | config-driven | ✅ | claude-3.5-sonnet | custom auth required |
-| **Google Gemini** | ✅ production-ready | independent adapter | 🔄 | gemini-1.5-pro/flash | URL parameter auth |
-| **OpenAI** | ✅ production-ready | independent adapter | ✅ | gpt-3.5-turbo, gpt-4 | may require proxy in some regions |
-| **Qwen** | ✅ production-ready | config-driven | ✅ | Qwen family | uses DASHSCOPE_API_KEY |
-| **Baidu Wenxin (ERNIE)** | ✅ production-ready | config-driven | ✅ | ernie-3.5, ernie-4.0 | OpenAI-compatible via Qianfan; may require AK/SK and OAuth — see Baidu Cloud console |
-| **Tencent Hunyuan** | ✅ production-ready | config-driven | ✅ | hunyuan family | Tencent Cloud offers OpenAI-compatible endpoints (cloud account & keys required) — see Tencent docs |
-| **iFlytek Spark** | ✅ production-ready | config-driven | ✅ | spark family | voice+text friendly, OpenAI-compatible endpoints — see iFlytek docs |
-| **Moonshot Kimi** | ✅ production-ready | config-driven | ✅ | kimi family | OpenAI-compatible endpoints; suitable for long-text scenarios — see Moonshot platform |
+| Provider | Architecture | Streaming | Models | Notes |
+|----------|--------------|-----------|--------|-------|
+| **Groq** | config-driven | ✅ | llama3-8b/70b, mixtral-8x7b | Fast inference |
+| **DeepSeek** | config-driven | ✅ | deepseek-chat, deepseek-reasoner | China-focused |
+| **Anthropic** | config-driven | ✅ | claude-3.5-sonnet | Custom auth |
+| **Google Gemini** | independent | 🔄 | gemini-1.5-pro/flash | URL auth |
+| **OpenAI** | independent | ✅ | gpt-3.5-turbo, gpt-4 | Proxy may be needed |
+| **Qwen** | config-driven | ✅ | Qwen family | OpenAI-compatible |
+| **Baidu Wenxin** | config-driven | ✅ | ernie-3.5, ernie-4.0 | Qianfan platform |
+| **Tencent Hunyuan** | config-driven | ✅ | hunyuan family | Cloud endpoints |
+| **iFlytek Spark** | config-driven | ✅ | spark family | Voice+text friendly |
+| **Moonshot Kimi** | config-driven | ✅ | kimi family | Long-text scenarios |
+
+## Model Management Tools
+
+### Key Features
+- **Selection strategies**: Round-robin, weighted, performance-based, cost-based
+- **Load balancing**: Health checks, connection tracking, multiple endpoints
+- **Cost analysis**: Calculate costs for different token counts
+- **Performance metrics**: Speed and quality tiers with response time tracking
+
+### Example Usage
+```rust
+use ai_lib::{CustomModelManager, ModelSelectionStrategy, ModelInfo, ModelCapabilities, PricingInfo, PerformanceMetrics};
+
+let mut manager = CustomModelManager::new("groq")
+    .with_strategy(ModelSelectionStrategy::PerformanceBased);
+
+let model = ModelInfo {
+    name: "llama3-8b-8192".to_string(),
+    display_name: "Llama 3 8B".to_string(),
+    capabilities: ModelCapabilities::new()
+        .with_chat()
+        .with_code_generation()
+        .with_context_window(8192),
+    pricing: PricingInfo::new(0.05, 0.10), // $0.05/1K input, $0.10/1K output
+    performance: PerformanceMetrics::new()
+        .with_speed(SpeedTier::Fast)
+        .with_quality(QualityTier::Good),
+};
+
+manager.add_model(model);
+```
 
 ## Roadmap
 
-### Implemented
-- Hybrid architecture and universal streaming support.
-- Enterprise-grade error handling, retry, and proxy support.
-- Multimodal primitives, function-calling, and metrics scaffold.
-- Transport injection and upload tests.
+### ✅ Implemented
+- Hybrid architecture with universal streaming
+- Enterprise-grade error handling and retry
+- Multimodal primitives and function calling
+- Progressive client configuration
+- Custom model management tools
+- Load balancing and health checks
 
-### Planned
-- Advanced backpressure API and benchmark CI.
-- Connection pool tuning and plugin system.
-- Built-in caching and load balancing.
+### 🚧 Planned
+- Advanced backpressure API
+- Connection pool tuning
+- Plugin system
+- Built-in caching
 
 ## Contributing
 
-Contributions are welcome (new providers, performance work, docs).
-
 1. Clone: `git clone https://github.com/hiddenpath/ai-lib.git`
-2. Create a branch: `git checkout -b feature/new-feature`
+2. Branch: `git checkout -b feature/new-feature`
 3. Test: `cargo test`
-4. Open a PR.
+4. PR: Open a pull request
 
-## Community & support
+## Community & Support
 
-- 📖 Docs: [docs.rs/ai-lib](https://docs.rs/ai-lib)
-- 🐛 Issues: [GitHub Issues](https://github.com/hiddenpath/ai-lib/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/hiddenpath/ai-lib/discussions)
+- 📖 **Documentation**: [docs.rs/ai-lib](https://docs.rs/ai-lib)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/hiddenpath/ai-lib/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/hiddenpath/ai-lib/discussions)
 
-## Acknowledgements & license
+## License
 
-Thanks to the AI providers and the Rust community. Dual licensed: MIT or Apache 2.0.
+Dual licensed: MIT or Apache 2.0
 
-Citation:
+## Citation
 
 ```bibtex
 @software{ai-lib,

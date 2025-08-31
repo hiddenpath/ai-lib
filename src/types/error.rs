@@ -120,10 +120,11 @@ impl AiLibError {
 
     /// Check if error is related to request validation
     pub fn is_request_error(&self) -> bool {
-        matches!(self, 
-            AiLibError::InvalidRequest(_) | 
-            AiLibError::ContextLengthExceeded(_) |
-            AiLibError::UnsupportedFeature(_)
+        matches!(
+            self,
+            AiLibError::InvalidRequest(_)
+                | AiLibError::ContextLengthExceeded(_)
+                | AiLibError::UnsupportedFeature(_)
         )
     }
 }

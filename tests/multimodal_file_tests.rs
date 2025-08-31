@@ -12,8 +12,8 @@ mod tests {
         let read = file_utils::read_file(&path).expect("read_file");
         assert_eq!(read.as_slice(), data);
 
-    let mime = file_utils::guess_mime_from_path(&path);
-    assert!(!mime.is_empty());
+        let mime = file_utils::guess_mime_from_path(&path);
+        assert!(!mime.is_empty());
 
         file_utils::remove_file(&path).expect("remove_file");
         assert!(!Path::new(&path).exists());

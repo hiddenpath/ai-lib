@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
+    use ai_lib::metrics::NoopMetrics;
     use ai_lib::provider::config::ProviderConfig;
     use ai_lib::provider::generic::GenericAdapter;
-    use ai_lib::types::{ChatCompletionRequest, Message, Role};
     use ai_lib::types::common::Content;
-    use ai_lib::metrics::NoopMetrics;
+    use ai_lib::types::{ChatCompletionRequest, Message, Role};
     use std::sync::Arc;
 
     // Include test utility mock transport
@@ -28,38 +28,45 @@ mod tests {
         });
 
         let transport = Arc::new(utils::MockTransport::new(post_resp));
-        let config = ProviderConfig::openai_compatible("http://example", "API_KEY");
+        let config =
+            ProviderConfig::openai_compatible("http://example", "API_KEY", "gpt-3.5-turbo", None);
         let metrics = Arc::new(NoopMetrics::new());
-        let adapter = GenericAdapter::with_transport_ref_and_metrics(config, transport, metrics).unwrap();
+        let adapter =
+            GenericAdapter::with_transport_ref_and_metrics(config, transport, metrics).unwrap();
 
         // Create multiple requests
         let requests = vec![
-            ChatCompletionRequest::new("test-model".to_string(), vec![
-                Message {
+            ChatCompletionRequest::new(
+                "test-model".to_string(),
+                vec![Message {
                     role: Role::User,
                     content: Content::Text("Request 1".to_string()),
                     function_call: None,
-                }
-            ]),
-            ChatCompletionRequest::new("test-model".to_string(), vec![
-                Message {
+                }],
+            ),
+            ChatCompletionRequest::new(
+                "test-model".to_string(),
+                vec![Message {
                     role: Role::User,
                     content: Content::Text("Request 2".to_string()),
                     function_call: None,
-                }
-            ]),
-            ChatCompletionRequest::new("test-model".to_string(), vec![
-                Message {
+                }],
+            ),
+            ChatCompletionRequest::new(
+                "test-model".to_string(),
+                vec![Message {
                     role: Role::User,
                     content: Content::Text("Request 3".to_string()),
                     function_call: None,
-                }
-            ]),
+                }],
+            ),
         ];
 
         // Test concurrent processing with limit
-        let results = process_batch_concurrent(&adapter, requests, Some(2)).await.unwrap();
-        
+        let results = process_batch_concurrent(&adapter, requests, Some(2))
+            .await
+            .unwrap();
+
         assert_eq!(results.len(), 3);
         assert!(results.iter().all(|r| r.is_ok()));
     }
@@ -80,31 +87,35 @@ mod tests {
         });
 
         let transport = Arc::new(utils::MockTransport::new(post_resp));
-        let config = ProviderConfig::openai_compatible("http://example", "API_KEY");
+        let config =
+            ProviderConfig::openai_compatible("http://example", "API_KEY", "gpt-3.5-turbo", None);
         let metrics = Arc::new(NoopMetrics::new());
-        let adapter = GenericAdapter::with_transport_ref_and_metrics(config, transport, metrics).unwrap();
+        let adapter =
+            GenericAdapter::with_transport_ref_and_metrics(config, transport, metrics).unwrap();
 
         // Create multiple requests
         let requests = vec![
-            ChatCompletionRequest::new("test-model".to_string(), vec![
-                Message {
+            ChatCompletionRequest::new(
+                "test-model".to_string(),
+                vec![Message {
                     role: Role::User,
                     content: Content::Text("Request 1".to_string()),
                     function_call: None,
-                }
-            ]),
-            ChatCompletionRequest::new("test-model".to_string(), vec![
-                Message {
+                }],
+            ),
+            ChatCompletionRequest::new(
+                "test-model".to_string(),
+                vec![Message {
                     role: Role::User,
                     content: Content::Text("Request 2".to_string()),
                     function_call: None,
-                }
-            ]),
+                }],
+            ),
         ];
 
         // Test sequential processing
         let results = process_batch_sequential(&adapter, requests).await.unwrap();
-        
+
         assert_eq!(results.len(), 2);
         assert!(results.iter().all(|r| r.is_ok()));
     }
@@ -125,69 +136,78 @@ mod tests {
         });
 
         let transport = Arc::new(utils::MockTransport::new(post_resp));
-        let config = ProviderConfig::openai_compatible("http://example", "API_KEY");
+        let config =
+            ProviderConfig::openai_compatible("http://example", "API_KEY", "gpt-3.5-turbo", None);
         let metrics = Arc::new(NoopMetrics::new());
-        let adapter = GenericAdapter::with_transport_ref_and_metrics(config, transport, metrics).unwrap();
+        let adapter =
+            GenericAdapter::with_transport_ref_and_metrics(config, transport, metrics).unwrap();
 
         // Test small batch (should use sequential)
-        let small_requests = vec![
-            ChatCompletionRequest::new("test-model".to_string(), vec![
-                Message {
-                    role: Role::User,
-                    content: Content::Text("Small request".to_string()),
-                    function_call: None,
-                }
-            ]),
-        ];
+        let small_requests = vec![ChatCompletionRequest::new(
+            "test-model".to_string(),
+            vec![Message {
+                role: Role::User,
+                content: Content::Text("Small request".to_string()),
+                function_call: None,
+            }],
+        )];
 
-        let results = process_batch_smart(&adapter, small_requests, Some(5)).await.unwrap();
+        let results = process_batch_smart(&adapter, small_requests, Some(5))
+            .await
+            .unwrap();
         assert_eq!(results.len(), 1);
         assert!(results.iter().all(|r| r.is_ok()));
 
         // Test large batch (should use concurrent)
         let large_requests = vec![
-            ChatCompletionRequest::new("test-model".to_string(), vec![
-                Message {
+            ChatCompletionRequest::new(
+                "test-model".to_string(),
+                vec![Message {
                     role: Role::User,
                     content: Content::Text("Large request 1".to_string()),
                     function_call: None,
-                }
-            ]),
-            ChatCompletionRequest::new("test-model".to_string(), vec![
-                Message {
+                }],
+            ),
+            ChatCompletionRequest::new(
+                "test-model".to_string(),
+                vec![Message {
                     role: Role::User,
                     content: Content::Text("Large request 2".to_string()),
                     function_call: None,
-                }
-            ]),
-            ChatCompletionRequest::new("test-model".to_string(), vec![
-                Message {
+                }],
+            ),
+            ChatCompletionRequest::new(
+                "test-model".to_string(),
+                vec![Message {
                     role: Role::User,
                     content: Content::Text("Large request 3".to_string()),
                     function_call: None,
-                }
-            ]),
-            ChatCompletionRequest::new("test-model".to_string(), vec![
-                Message {
+                }],
+            ),
+            ChatCompletionRequest::new(
+                "test-model".to_string(),
+                vec![Message {
                     role: Role::User,
                     content: Content::Text("Large request 4".to_string()),
                     function_call: None,
-                }
-            ]),
+                }],
+            ),
         ];
 
-        let results = process_batch_smart(&adapter, large_requests, Some(5)).await.unwrap();
+        let results = process_batch_smart(&adapter, large_requests, Some(5))
+            .await
+            .unwrap();
         assert_eq!(results.len(), 4);
         assert!(results.iter().all(|r| r.is_ok()));
     }
 
     #[tokio::test]
     async fn test_batch_result_operations() {
-        use ai_lib::BatchResult;
         use ai_lib::types::ChatCompletionResponse;
+        use ai_lib::BatchResult;
 
         let mut batch_result = BatchResult::new(5);
-        
+
         // Test initial state
         assert_eq!(batch_result.total_requests, 5);
         assert_eq!(batch_result.total_successful, 0);
@@ -213,8 +233,14 @@ mod tests {
         batch_result.add_success(mock_response);
 
         // Add failed responses
-        batch_result.add_failure(3, ai_lib::types::AiLibError::NetworkError("test error".to_string()));
-        batch_result.add_failure(4, ai_lib::types::AiLibError::TimeoutError("timeout".to_string()));
+        batch_result.add_failure(
+            3,
+            ai_lib::types::AiLibError::NetworkError("test error".to_string()),
+        );
+        batch_result.add_failure(
+            4,
+            ai_lib::types::AiLibError::TimeoutError("timeout".to_string()),
+        );
 
         // Test final state
         assert_eq!(batch_result.total_successful, 3);
@@ -241,20 +267,29 @@ mod tests {
         });
 
         let transport = Arc::new(utils::MockTransport::new(post_resp));
-        let config = ProviderConfig::openai_compatible("http://example", "API_KEY");
+        let config =
+            ProviderConfig::openai_compatible("http://example", "API_KEY", "gpt-3.5-turbo", None);
         let metrics = Arc::new(NoopMetrics::new());
-        let adapter = GenericAdapter::with_transport_ref_and_metrics(config, transport, metrics).unwrap();
+        let adapter =
+            GenericAdapter::with_transport_ref_and_metrics(config, transport, metrics).unwrap();
 
         let empty_requests: Vec<ChatCompletionRequest> = vec![];
 
         // Test all methods with empty batch
-        let concurrent_results = process_batch_concurrent(&adapter, empty_requests.clone(), Some(5)).await.unwrap();
+        let concurrent_results =
+            process_batch_concurrent(&adapter, empty_requests.clone(), Some(5))
+                .await
+                .unwrap();
         assert_eq!(concurrent_results.len(), 0);
 
-        let sequential_results = process_batch_sequential(&adapter, empty_requests.clone()).await.unwrap();
+        let sequential_results = process_batch_sequential(&adapter, empty_requests.clone())
+            .await
+            .unwrap();
         assert_eq!(sequential_results.len(), 0);
 
-        let smart_results = process_batch_smart(&adapter, empty_requests, Some(5)).await.unwrap();
+        let smart_results = process_batch_smart(&adapter, empty_requests, Some(5))
+            .await
+            .unwrap();
         assert_eq!(smart_results.len(), 0);
     }
 }

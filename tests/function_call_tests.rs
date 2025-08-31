@@ -112,7 +112,8 @@ async fn generic_adapter_parses_function_call_object_arguments() {
     });
 
     let transport = Arc::new(MockTransport::new(response));
-    let config = ProviderConfig::openai_compatible("http://example", "API_KEY");
+    let config =
+        ProviderConfig::openai_compatible("http://example", "API_KEY", "gpt-3.5-turbo", None);
     let adapter = GenericAdapter::with_transport_ref(config, transport).expect("create adapter");
 
     let msg = Message {
@@ -161,7 +162,8 @@ async fn generic_adapter_parses_function_call_stringified_arguments() {
     });
 
     let transport = Arc::new(MockTransport::new(response));
-    let config = ProviderConfig::openai_compatible("http://example", "API_KEY");
+    let config =
+        ProviderConfig::openai_compatible("http://example", "API_KEY", "gpt-3.5-turbo", None);
     let adapter = GenericAdapter::with_transport_ref(config, transport).expect("create adapter");
 
     let msg = Message {

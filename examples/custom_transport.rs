@@ -1,6 +1,6 @@
+use ai_lib::provider::GenericAdapter;
 use ai_lib::transport::HttpTransport;
 use ai_lib::ProviderConfigs;
-use ai_lib::provider::GenericAdapter;
 use reqwest::Client;
 use std::time::Duration;
 

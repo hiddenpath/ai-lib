@@ -29,22 +29,22 @@
 //! }
 //! ```
 //!
-//! # 代理服务器支持
+//! # Proxy Support
 //!
-//! AI-lib 支持通过环境变量配置代理服务器：
+//! AI-lib supports proxy configuration via environment variables:
 //!
 //! ```bash
-//! # 设置代理服务器
+//! # Set proxy server
 //! export AI_PROXY_URL=http://proxy.example.com:8080
 //!
-//! # 带认证的代理
+//! # Proxy with authentication
 //! export AI_PROXY_URL=http://username:password@proxy.example.com:8080
 //!
-//! # HTTPS代理
+//! # HTTPS proxy
 //! export AI_PROXY_URL=https://proxy.example.com:8080
 //! ```
 //!
-//! 设置后，所有AI提供商的请求都会自动通过指定的代理服务器。
+//! All AI provider requests will automatically use the specified proxy server.
 
 pub mod api;
 pub mod client;
@@ -54,31 +54,38 @@ pub mod transport;
 pub mod types;
 pub mod utils;
 
-// 重新导出主要类型，方便用户使用
+// Re-export main types for user convenience
 pub use api::ChatApi;
-pub use client::{AiClient, Provider};
+pub use client::{AiClient, AiClientBuilder, Provider};
 pub use types::{
     AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
 };
 // Convenience re-exports: make the most-used types available from the crate root so
 // users don't need deep imports for common flows.
 pub use api::ChatCompletionChunk;
-pub use types::common::Content;
 pub use client::CancelHandle;
-pub use transport::{DynHttpTransport, DynHttpTransportRef, HttpTransport, HttpClient, TransportError};
-pub use metrics::{Metrics, NoopMetrics, Timer, NoopTimer, MetricsExt};
+pub use metrics::{Metrics, MetricsExt, NoopMetrics, NoopTimer, Timer};
+pub use transport::{
+    DynHttpTransport, DynHttpTransportRef, HttpClient, HttpTransport, TransportError,
+};
+pub use types::common::Content;
 
-// 重新导出配置相关类型
-pub use provider::config::{ProviderConfig, FieldMapping};
+// Re-export configuration types
+pub use provider::config::{FieldMapping, ProviderConfig};
 pub use provider::configs::ProviderConfigs;
 
-    // 重新导出批处理功能
-    pub use api::chat::{BatchResult, batch_utils};
+// Re-export model management tools
+pub use provider::models::{
+    CustomModelManager, LoadBalancingStrategy, ModelArray, ModelCapabilities, ModelEndpoint,
+    ModelInfo, ModelSelectionStrategy, PerformanceMetrics, PricingInfo, QualityTier, SpeedTier,
+};
 
-// 重新导出增强的文件工具
+// Re-export batch processing functionality
+pub use api::chat::{batch_utils, BatchResult};
+
+// Re-export enhanced file utilities
 pub use utils::file::{
-    save_temp_file, read_file, remove_file, guess_mime_from_path,
-    validate_file, get_file_size, create_temp_dir,
-    is_image_file, is_audio_file, is_video_file, is_text_file,
-    get_file_extension, is_file_size_acceptable
+    create_temp_dir, get_file_extension, get_file_size, guess_mime_from_path, is_audio_file,
+    is_file_size_acceptable, is_image_file, is_text_file, is_video_file, read_file, remove_file,
+    save_temp_file, validate_file,
 };

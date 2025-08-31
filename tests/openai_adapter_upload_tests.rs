@@ -58,7 +58,10 @@ impl DynHttpTransport for CapturingTransport {
         _url: &'a str,
         _headers: Option<HashMap<String, String>>,
         _body: serde_json::Value,
-    ) -> futures::future::BoxFuture<'a, Result<Pin<Box<dyn Stream<Item = Result<Bytes, AiLibError>> + Send>>, AiLibError>> {
+    ) -> futures::future::BoxFuture<
+        'a,
+        Result<Pin<Box<dyn Stream<Item = Result<Bytes, AiLibError>> + Send>>, AiLibError>,
+    > {
         Box::pin(async move {
             Err(AiLibError::ProviderError(
                 "stream not supported".to_string(),
@@ -208,8 +211,7 @@ async fn openai_adapter_upload_failure_falls_back_to_inline_data() {
             &'a self,
             _url: &'a str,
             _headers: Option<HashMap<String, String>>,
-        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>>
-        {
+        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>> {
             let resp = self.post_resp.clone();
             Box::pin(async move { Ok(resp) })
         }
@@ -218,8 +220,7 @@ async fn openai_adapter_upload_failure_falls_back_to_inline_data() {
             _url: &'a str,
             _headers: Option<HashMap<String, String>>,
             _body: serde_json::Value,
-        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>>
-        {
+        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>> {
             let resp = self.post_resp.clone();
             Box::pin(async move { Ok(resp) })
         }
@@ -228,7 +229,10 @@ async fn openai_adapter_upload_failure_falls_back_to_inline_data() {
             _url: &'a str,
             _headers: Option<HashMap<String, String>>,
             _body: serde_json::Value,
-        ) -> futures::future::BoxFuture<'a, Result<Pin<Box<dyn Stream<Item = Result<Bytes, AiLibError>> + Send>>, AiLibError>> {
+        ) -> futures::future::BoxFuture<
+            'a,
+            Result<Pin<Box<dyn Stream<Item = Result<Bytes, AiLibError>> + Send>>, AiLibError>,
+        > {
             Box::pin(async move {
                 Err(AiLibError::ProviderError(
                     "stream not supported".to_string(),
@@ -242,8 +246,7 @@ async fn openai_adapter_upload_failure_falls_back_to_inline_data() {
             _field_name: &'a str,
             _file_name: &'a str,
             _bytes: Vec<u8>,
-        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>>
-        {
+        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>> {
             Box::pin(async move {
                 Err(AiLibError::ProviderError(
                     "simulated upload failure".to_string(),

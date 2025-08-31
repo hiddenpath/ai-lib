@@ -16,7 +16,7 @@ async fn main() {
         Provider::Gemini,
         Provider::Mistral,
         Provider::Cohere,
-        // Provider::Bedrock, // 已移除：Bedrock 暂缓实现/不在公开 API 中
+        // Provider::Bedrock, // Removed: Bedrock deferred implementation/not in public API
     ];
 
     for p in providers {

@@ -1,17 +1,18 @@
+/// AI-lib 配置检查工具 - AI-lib configuration check tool
 use ai_lib::{AiClient, Provider};
 
 fn main() {
-    println!("🔧 AI-lib 配置检查工具");
-    println!("======================");
+    println!("🔧 AI-lib Configuration Check Tool");
+    println!("==================================");
 
-    // 检查API密钥
+    // Check API keys
     let api_keys = vec![
         ("GROQ_API_KEY", "Groq"),
         ("OPENAI_API_KEY", "OpenAI"),
         ("DEEPSEEK_API_KEY", "DeepSeek"),
     ];
 
-    println!("\n🔑 API密钥检查:");
+    println!("\n🔑 API Key Check:");
     let mut configured_count = 0;
 
     for (env_var, provider) in &api_keys {
@@ -26,24 +27,24 @@ fn main() {
                 configured_count += 1;
             }
             Err(_) => {
-                println!("   ❌ {}: {} 未设置", provider, env_var);
+                println!("   ❌ {}: {} not set", provider, env_var);
             }
         }
     }
 
-    // 检查代理配置
-    println!("\n🌐 代理配置检查:");
+    // Check proxy configuration
+    println!("\n🌐 Proxy Configuration Check:");
     match std::env::var("AI_PROXY_URL") {
         Ok(proxy_url) => {
             println!("   ✅ AI_PROXY_URL: {}", proxy_url);
         }
         Err(_) => {
-            println!("   ℹ️  AI_PROXY_URL: 未设置 (可选)");
+            println!("   ℹ️  AI_PROXY_URL: not set (optional)");
         }
     }
 
-    // 测试客户端创建
-    println!("\n🚀 客户端创建测试:");
+    // Test client creation
+    println!("\n🚀 Client Creation Test:");
     let providers = vec![
         (Provider::Groq, "Groq"),
         (Provider::OpenAI, "OpenAI"),
@@ -52,35 +53,35 @@ fn main() {
 
     for (provider, name) in providers {
         match AiClient::new(provider) {
-            Ok(_) => println!("   ✅ {}: 客户端创建成功", name),
+            Ok(_) => println!("   ✅ {}: client created successfully", name),
             Err(e) => println!("   ❌ {}: {}", name, e),
         }
     }
 
-    // 配置建议
-    println!("\n💡 配置建议:");
+    // Configuration suggestions
+    println!("\n💡 Configuration Suggestions:");
     if configured_count == 0 {
-        println!("   • 至少设置一个API密钥来开始使用");
-        println!("   • 推荐先设置 GROQ_API_KEY (免费且快速)");
+        println!("   • Set at least one API key to get started");
+        println!("   • Recommended to set GROQ_API_KEY first (free and fast)");
     } else if configured_count < api_keys.len() {
         println!(
-            "   • 已配置 {}/{} 个提供商",
+            "   • Configured {}/{} providers",
             configured_count,
             api_keys.len()
         );
-        println!("   • 可以设置更多API密钥来测试不同提供商");
+        println!("   • Can set more API keys to test different providers");
     } else {
-        println!("   • 🎉 所有提供商都已配置!");
-        println!("   • 可以运行: cargo run --example test_all_providers");
+        println!("   • 🎉 All providers configured!");
+        println!("   • Can run: cargo run --example test_all_providers");
     }
 
-    println!("\n📝 设置示例 (Windows):");
+    println!("\n📝 Setup Examples (Windows):");
     println!("   set GROQ_API_KEY=your_groq_key");
     println!("   set OPENAI_API_KEY=your_openai_key");
     println!("   set DEEPSEEK_API_KEY=your_deepseek_key");
     println!("   set AI_PROXY_URL=http://proxy.example.com:8080");
 
-    println!("\n📝 设置示例 (Linux/Mac):");
+    println!("\n📝 Setup Examples (Linux/Mac):");
     println!("   export GROQ_API_KEY=your_groq_key");
     println!("   export OPENAI_API_KEY=your_openai_key");
     println!("   export DEEPSEEK_API_KEY=your_deepseek_key");

@@ -1,8 +1,8 @@
+use crate::types::AiLibError;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use crate::types::AiLibError;
 
 /// Minimal file management helpers for multimodal flows.
 /// - save_temp_file: write bytes to a temp file and return the path
@@ -72,17 +72,23 @@ pub fn guess_mime_from_path(path: &Path) -> &'static str {
 /// Validate that a file exists and is readable
 pub fn validate_file(path: &Path) -> Result<(), AiLibError> {
     if !path.exists() {
-        return Err(AiLibError::FileError(format!("File does not exist: {}", path.display())));
+        return Err(AiLibError::FileError(format!(
+            "File does not exist: {}",
+            path.display()
+        )));
     }
-    
+
     if !path.is_file() {
-        return Err(AiLibError::FileError(format!("Path is not a file: {}", path.display())));
+        return Err(AiLibError::FileError(format!(
+            "Path is not a file: {}",
+            path.display()
+        )));
     }
-    
+
     // Check if file is readable
     fs::metadata(path)
         .map_err(|e| AiLibError::FileError(format!("Cannot read file metadata: {}", e)))?;
-    
+
     Ok(())
 }
 
@@ -109,7 +115,8 @@ pub fn create_temp_dir(prefix: &str) -> io::Result<PathBuf> {
 /// Check if a file is an image based on its extension
 pub fn is_image_file(path: &Path) -> bool {
     if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-        matches!(ext.to_ascii_lowercase().as_str(), 
+        matches!(
+            ext.to_ascii_lowercase().as_str(),
             "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tiff" | "svg"
         )
     } else {
@@ -120,7 +127,8 @@ pub fn is_image_file(path: &Path) -> bool {
 /// Check if a file is an audio file based on its extension
 pub fn is_audio_file(path: &Path) -> bool {
     if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-        matches!(ext.to_ascii_lowercase().as_str(), 
+        matches!(
+            ext.to_ascii_lowercase().as_str(),
             "mp3" | "wav" | "ogg" | "flac" | "aac" | "m4a" | "wma"
         )
     } else {
@@ -131,7 +139,8 @@ pub fn is_audio_file(path: &Path) -> bool {
 /// Check if a file is a video file based on its extension
 pub fn is_video_file(path: &Path) -> bool {
     if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-        matches!(ext.to_ascii_lowercase().as_str(), 
+        matches!(
+            ext.to_ascii_lowercase().as_str(),
             "mp4" | "avi" | "mov" | "wmv" | "flv" | "mkv" | "webm" | "m4v"
         )
     } else {
@@ -142,8 +151,20 @@ pub fn is_video_file(path: &Path) -> bool {
 /// Check if a file is a text file based on its extension
 pub fn is_text_file(path: &Path) -> bool {
     if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-        matches!(ext.to_ascii_lowercase().as_str(), 
-            "txt" | "md" | "json" | "xml" | "html" | "css" | "js" | "rs" | "py" | "java" | "cpp" | "c"
+        matches!(
+            ext.to_ascii_lowercase().as_str(),
+            "txt"
+                | "md"
+                | "json"
+                | "xml"
+                | "html"
+                | "css"
+                | "js"
+                | "rs"
+                | "py"
+                | "java"
+                | "cpp"
+                | "c"
         )
     } else {
         false

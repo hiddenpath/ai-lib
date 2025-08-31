@@ -1,7 +1,7 @@
+use ai_lib::api::ChatApi;
+use ai_lib::types::{ChatCompletionRequest, FunctionCallPolicy, Message, Role, Tool};
 use ai_lib::AiClient;
 use ai_lib::Provider;
-use ai_lib::types::{ChatCompletionRequest, Message, Role, FunctionCallPolicy, Tool};
-use ai_lib::api::ChatApi;
 use serde_json::json;
 
 // This example demonstrates a simple function-calling loop using a mock transport or adapter.

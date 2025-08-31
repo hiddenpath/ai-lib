@@ -1,14 +1,15 @@
+/// 测试所有AI提供商示例 - Test all AI providers example
 use ai_lib::types::common::Content;
 use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🧪 测试所有AI提供商");
-    println!("==================");
+    println!("🧪 Test All AI Providers");
+    println!("=======================");
 
-    // 检查代理配置
+    // Check proxy configuration
     if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
-        println!("🌐 使用代理: {}", proxy_url);
+        println!("🌐 Using proxy: {}", proxy_url);
     }
 
     let providers = vec![
@@ -18,25 +19,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for (provider, name, model) in providers {
-        println!("\n🔍 测试提供商: {}", name);
+        println!("\n🔍 Testing Provider: {}", name);
         println!("{}", "─".repeat(30));
 
         match AiClient::new(provider) {
             Ok(client) => {
-                println!("✅ 客户端创建成功");
+                println!("✅ Client created successfully");
 
-                // 测试模型列表
+                // Test model list
                 match client.list_models().await {
                     Ok(models) => {
-                        println!("📋 可用模型数量: {}", models.len());
+                        println!("📋 Available models count: {}", models.len());
                         if !models.is_empty() {
-                            println!("   前3个模型: {:?}", &models[..models.len().min(3)]);
+                            println!("   First 3 models: {:?}", &models[..models.len().min(3)]);
                         }
                     }
-                    Err(e) => println!("⚠️  获取模型列表失败: {}", e),
+                    Err(e) => println!("⚠️  Failed to get model list: {}", e),
                 }
 
-                // 测试聊天完成
+                // Test chat completion
                 let request = ChatCompletionRequest::new(
                     model.to_string(),
                     vec![Message {
@@ -49,27 +50,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
                 .with_max_tokens(10);
 
-                println!("📤 发送测试请求到模型: {}", model);
+                println!("📤 Sending test request to model: {}", model);
                 match client.chat_completion(request).await {
                     Ok(response) => {
-                        println!("✅ 请求成功!");
-                        println!("   响应ID: {}", response.id);
-                        println!("   内容: {}", response.choices[0].message.content.as_text());
-                        println!("   使用tokens: {}", response.usage.total_tokens);
+                        println!("✅ Request successful!");
+                        println!("   Response ID: {}", response.id);
+                        println!(
+                            "   Content: {}",
+                            response.choices[0].message.content.as_text()
+                        );
+                        println!("   Tokens used: {}", response.usage.total_tokens);
                     }
-                    Err(e) => println!("❌ 请求失败: {}", e),
+                    Err(e) => println!("❌ Request failed: {}", e),
                 }
             }
             Err(e) => {
-                println!("❌ 客户端创建失败: {}", e);
+                println!("❌ Client creation failed: {}", e);
             }
         }
     }
 
-    println!("\n💡 提示:");
-    println!("   • 确保设置了对应的API密钥环境变量");
+    println!("\n💡 Tips:");
+    println!("   • Make sure to set corresponding API key environment variables");
     println!("   • GROQ_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY");
-    println!("   • 可选设置AI_PROXY_URL使用代理服务器");
+    println!("   • Optionally set AI_PROXY_URL to use proxy server");
 
     Ok(())
 }

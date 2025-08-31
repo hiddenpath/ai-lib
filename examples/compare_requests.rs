@@ -1,10 +1,11 @@
+/// 对比请求格式示例 - Compare request formats example
 use ai_lib::types::common::Content;
 use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🔍 对比请求格式");
-    println!("================");
+    println!("🔍 Compare Request Formats");
+    println!("==========================");
 
     let request = ChatCompletionRequest::new(
         "test-model".to_string(),
@@ -16,41 +17,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .with_max_tokens(10);
 
-    println!("📤 测试请求:");
-    println!("   模型: {}", request.model);
-    println!("   消息: {:?}", request.messages[0]);
+    println!("📤 Test Request:");
+    println!("   Model: {}", request.model);
+    println!("   Message: {:?}", request.messages[0]);
     println!("   max_tokens: {:?}", request.max_tokens);
 
-    // 测试Groq (工作正常)
-    println!("\n🟢 Groq (工作正常):");
+    // Test Groq (working normally)
+    println!("\n🟢 Groq (working normally):");
     if let Ok(_groq_client) = AiClient::new(Provider::Groq) {
-        // Groq使用独立适配器，我们知道它工作正常
-        println!("   ✅ 使用独立适配器 (GroqAdapter)");
-        println!("   ✅ 请求格式正确");
+        // Groq uses independent adapter, we know it works normally
+        println!("   ✅ Uses independent adapter (GroqAdapter)");
+        println!("   ✅ Request format correct");
     }
 
-    // 测试OpenAI (有问题)
-    println!("\n🔴 OpenAI (有问题):");
+    // Test OpenAI (has issues)
+    println!("\n🔴 OpenAI (has issues):");
     if let Ok(_openai_client) = AiClient::new(Provider::OpenAI) {
-        println!("   ❌ 使用配置驱动适配器 (GenericAdapter)");
-        println!("   ❌ 请求格式错误: 'you must provide a model parameter'");
-        println!("   🔍 可能的问题:");
-        println!("      - JSON序列化问题");
-        println!("      - 字段映射错误");
-        println!("      - 请求体构建错误");
+        println!("   ❌ Uses config-driven adapter (GenericAdapter)");
+        println!("   ❌ Request format error: 'you must provide a model parameter'");
+        println!("   🔍 Possible issues:");
+        println!("      - JSON serialization problem");
+        println!("      - Field mapping error");
+        println!("      - Request body construction error");
     }
 
-    println!("\n💡 解决方案:");
-    println!("   1. 检查GenericAdapter的convert_request方法");
-    println!("   2. 确保JSON字段名正确");
-    println!("   3. 验证请求体结构");
-    println!("   4. 考虑为OpenAI创建独立适配器");
+    println!("\n💡 Solutions:");
+    println!("   1. Check GenericAdapter's convert_request method");
+    println!("   2. Ensure JSON field names are correct");
+    println!("   3. Verify request body structure");
+    println!("   4. Consider creating independent adapter for OpenAI");
 
-    // 建议的修复
-    println!("\n🔧 建议修复:");
-    println!("   选项1: 修复GenericAdapter的请求转换逻辑");
-    println!("   选项2: 为OpenAI创建独立适配器 (像Groq一样)");
-    println!("   选项3: 添加更多调试信息来定位问题");
+    // Suggested fixes
+    println!("\n🔧 Suggested Fixes:");
+    println!("   Option 1: Fix GenericAdapter's request conversion logic");
+    println!("   Option 2: Create independent adapter for OpenAI (like Groq)");
+    println!("   Option 3: Add more debug information to locate the issue");
 
     Ok(())
 }

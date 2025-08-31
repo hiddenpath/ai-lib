@@ -1,12 +1,13 @@
+/// 配置驱动的AI-lib示例 - Config-driven AI-lib example
 use ai_lib::types::common::Content;
 use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🚀 配置驱动的AI-lib示例");
-    println!("========================");
+    println!("🚀 Config-driven AI-lib Example");
+    println!("================================");
 
-    // 演示配置驱动的优势：轻松切换提供商
+    // Demonstrate the advantages of config-driven approach: easy provider switching
     let providers = vec![
         (Provider::Groq, "Groq"),
         (Provider::OpenAI, "OpenAI"),
@@ -14,19 +15,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for (provider, name) in providers {
-        println!("\n📡 测试提供商: {}", name);
+        println!("\n📡 Testing Provider: {}", name);
 
-        // 创建客户端 - 只需改变枚举值
+        // Create client - just change the enum value
         let client = AiClient::new(provider)?;
-        println!("✅ 客户端创建成功: {:?}", client.current_provider());
+        println!(
+            "✅ Client created successfully: {:?}",
+            client.current_provider()
+        );
 
-        // 获取模型列表
+        // Get model list
         match client.list_models().await {
-            Ok(models) => println!("📋 可用模型: {:?}", models),
-            Err(e) => println!("⚠️  获取模型列表失败: {}", e),
+            Ok(models) => println!("📋 Available models: {:?}", models),
+            Err(e) => println!("⚠️  Failed to get model list: {}", e),
         }
 
-        // 创建测试请求
+        // Create test request
         let request = ChatCompletionRequest::new(
             "test-model".to_string(),
             vec![Message {
@@ -36,14 +40,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }],
         );
 
-        println!("📤 请求已准备，模型: {}", request.model);
-        println!("   (需要设置对应的API_KEY环境变量才能实际调用)");
+        println!("📤 Request prepared, model: {}", request.model);
+        println!("   (Need to set corresponding API_KEY environment variable for actual calls)");
     }
 
-    println!("\n🎯 配置驱动的核心优势:");
-    println!("   • 零代码切换: 只需改变Provider枚举值");
-    println!("   • 统一接口: 所有提供商使用相同的API");
-    println!("   • 快速扩展: 新增兼容提供商只需添加配置");
+    println!("\n🎯 Core advantages of config-driven approach:");
+    println!("   • Zero-code switching: just change Provider enum value");
+    println!("   • Unified interface: all providers use the same API");
+    println!("   • Rapid expansion: add new compatible providers with just configuration");
 
     Ok(())
 }

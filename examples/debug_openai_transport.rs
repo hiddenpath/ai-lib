@@ -1,25 +1,26 @@
+/// OpenAI传输层调试示例 - OpenAI transport layer debugging example
 use ai_lib::transport::{HttpClient, HttpTransport};
 use serde_json::json;
 use std::collections::HashMap;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🔍 OpenAI传输层调试");
-    println!("===================");
+    println!("🔍 OpenAI Transport Layer Debugging");
+    println!("==================================");
 
     let api_key = match std::env::var("OPENAI_API_KEY") {
         Ok(key) => key,
         Err(_) => {
-            println!("❌ 未设置OPENAI_API_KEY");
+            println!("❌ OPENAI_API_KEY not set");
             return Ok(());
         }
     };
 
-    // 使用我们的HttpTransport
+    // Use our HttpTransport
     let transport = HttpTransport::new();
 
-    // 测试GET请求 (模型列表) - 我们知道这个工作
-    println!("\n📋 测试GET请求 (模型列表):");
+    // Test GET request (model list) - we know this works
+    println!("\n📋 Test GET request (model list):");
     let mut headers = HashMap::new();
     headers.insert("Authorization".to_string(), format!("Bearer {}", api_key));
 
@@ -32,15 +33,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .as_array()
                 .map(|arr| arr.len())
                 .unwrap_or(0);
-            println!("✅ GET请求成功，获取到 {} 个模型", model_count);
+            println!("✅ GET request successful, got {} models", model_count);
         }
         Err(e) => {
-            println!("❌ GET请求失败: {}", e);
+            println!("❌ GET request failed: {}", e);
         }
     }
 
-    // 测试POST请求 (聊天完成) - 这个有问题
-    println!("\n💬 测试POST请求 (聊天完成):");
+    // Test POST request (chat completion) - this has issues
+    println!("\n💬 Test POST request (chat completion):");
     let mut headers = HashMap::new();
     headers.insert("Authorization".to_string(), format!("Bearer {}", api_key));
 
@@ -55,7 +56,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "max_tokens": 5
     });
 
-    println!("请求体: {}", serde_json::to_string_pretty(&request_body)?);
+    println!(
+        "Request body: {}",
+        serde_json::to_string_pretty(&request_body)?
+    );
 
     match transport
         .post::<serde_json::Value, serde_json::Value>(
@@ -66,28 +70,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
     {
         Ok(response) => {
-            println!("✅ POST请求成功!");
-            println!("响应: {}", serde_json::to_string_pretty(&response)?);
+            println!("✅ POST request successful!");
+            println!("Response: {}", serde_json::to_string_pretty(&response)?);
         }
         Err(e) => {
-            println!("❌ POST请求失败: {}", e);
+            println!("❌ POST request failed: {}", e);
 
-            // 分析错误类型
+            // Analyze error type
             let error_str = e.to_string();
             if error_str.contains("you must provide a model parameter") {
-                println!("🔍 这个错误很奇怪，因为我们确实提供了model参数");
-                println!("   可能的原因:");
-                println!("   1. 代理服务器修改了请求体");
-                println!("   2. Content-Type头部问题");
-                println!("   3. JSON序列化问题");
+                println!("🔍 This error is strange because we did provide the model parameter");
+                println!("   Possible reasons:");
+                println!("   1. Proxy server modified the request body");
+                println!("   2. Content-Type header issue");
+                println!("   3. JSON serialization issue");
             }
         }
     }
 
-    println!("\n💡 调试结论:");
-    println!("   • GET请求工作正常 → 认证和网络连接OK");
-    println!("   • POST请求失败 → 可能是代理或请求格式问题");
-    println!("   • 建议检查代理服务器的POST请求处理");
+    println!("\n💡 Debug Conclusion:");
+    println!("   • GET request works → authentication and network connection OK");
+    println!("   • POST request fails → may be proxy or request format issue");
+    println!("   • Recommend checking proxy server's POST request handling");
 
     Ok(())
 }

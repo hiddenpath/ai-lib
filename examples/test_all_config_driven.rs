@@ -1,10 +1,11 @@
+/// 配置驱动架构全面测试示例 - Comprehensive config-driven architecture test example
 use ai_lib::types::common::Content;
 use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🚀 配置驱动架构全面测试");
-    println!("========================");
+    println!("🚀 Comprehensive Config-Driven Architecture Test");
+    println!("=============================================");
 
     let providers = vec![
         (Provider::Groq, "Groq", "llama3-8b-8192", "GROQ_API_KEY"),
@@ -22,26 +23,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     ];
 
-    println!("📊 配置驱动提供商统计:");
-    println!("   • 总数: {} 个提供商", providers.len());
-    println!("   • 代码量: 每个仅需 ~10行配置");
-    println!("   • 复用: 共享GenericAdapter + SSE解析");
+    println!("📊 Config-Driven Provider Statistics:");
+    println!("   • Total: {} providers", providers.len());
+    println!("   • Code volume: only ~10 lines of configuration per provider");
+    println!("   • Reuse: shared GenericAdapter + SSE parsing");
 
     for (provider, name, model, api_key_env) in providers {
         println!("\n{}", "=".repeat(50));
-        println!("🔍 测试: {}", name);
+        println!("🔍 Testing: {}", name);
 
-        // 检查API密钥
+        // Check API key
         match std::env::var(api_key_env) {
             Ok(_) => {
-                println!("✅ API密钥已设置");
+                println!("✅ API key set");
 
-                // 创建客户端
+                // Create client
                 match AiClient::new(provider) {
                     Ok(client) => {
-                        println!("✅ 客户端创建成功 (GenericAdapter)");
+                        println!("✅ Client created successfully (GenericAdapter)");
 
-                        // 测试聊天
+                        // Test chat
                         let request = ChatCompletionRequest::new(
                             model.to_string(),
                             vec![Message {
@@ -57,57 +58,59 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         match client.chat_completion(request).await {
                             Ok(response) => {
-                                println!("✅ 聊天测试成功!");
+                                println!("✅ Chat test successful!");
                                 println!(
-                                    "   响应: '{}'",
+                                    "   Response: '{}'",
                                     response.choices[0].message.content.as_text()
                                 );
-                                println!("   Token: {}", response.usage.total_tokens);
+                                println!("   Tokens: {}", response.usage.total_tokens);
                             }
                             Err(e) => {
-                                println!("❌ 聊天测试失败: {}", e);
+                                println!("❌ Chat test failed: {}", e);
                                 if e.to_string().contains("402")
                                     || e.to_string().contains("Insufficient")
                                 {
-                                    println!("   (余额不足 - 连接正常)");
+                                    println!("   (Insufficient balance - connection OK)");
                                 }
                             }
                         }
 
-                        // 测试模型列表
+                        // Test model list
                         match client.list_models().await {
                             Ok(models) => {
-                                println!("✅ 模型列表: {} 个模型", models.len());
+                                println!("✅ Model list: {} models", models.len());
                             }
                             Err(_) => {
-                                println!("⚠️  模型列表不可用 (某些提供商不支持)");
+                                println!(
+                                    "⚠️  Model list unavailable (some providers don't support)"
+                                );
                             }
                         }
                     }
                     Err(e) => {
-                        println!("❌ 客户端创建失败: {}", e);
+                        println!("❌ Client creation failed: {}", e);
                     }
                 }
             }
             Err(_) => {
-                println!("⚠️  {} 未设置，跳过测试", api_key_env);
+                println!("⚠️  {} not set, skipping test", api_key_env);
             }
         }
     }
 
     println!("\n{}", "=".repeat(50));
-    println!("🎯 配置驱动架构优势总结:");
-    println!("   ✅ 代码复用: 3个提供商共享1套SSE解析逻辑");
-    println!("   ✅ 零代码扩展: 新增提供商只需配置");
-    println!("   ✅ 灵活配置: 支持不同端点、请求头、字段映射");
-    println!("   ✅ 统一接口: 所有提供商使用相同API");
-    println!("   ✅ 流式支持: 自动获得流式响应能力");
+    println!("🎯 Config-Driven Architecture Advantages Summary:");
+    println!("   ✅ Code reuse: 3 providers share 1 set of SSE parsing logic");
+    println!("   ✅ Zero-code expansion: add new providers with just configuration");
+    println!("   ✅ Flexible configuration: support different endpoints, headers, field mapping");
+    println!("   ✅ Unified interface: all providers use the same API");
+    println!("   ✅ Streaming support: automatically get streaming response capability");
 
-    println!("\n📈 架构演进进度:");
-    println!("   ✅ 第一阶段: GenericAdapter + ProviderConfig");
-    println!("   ✅ 第二阶段: 预定义配置 (Groq, DeepSeek, Anthropic)");
-    println!("   🔄 第三阶段: 混合架构 (配置驱动 + 独立适配器)");
-    println!("   📋 第四阶段: 配置文件支持 (待实现)");
+    println!("\n📈 Architecture Evolution Progress:");
+    println!("   ✅ Phase 1: GenericAdapter + ProviderConfig");
+    println!("   ✅ Phase 2: Predefined configurations (Groq, DeepSeek, Anthropic)");
+    println!("   🔄 Phase 3: Hybrid architecture (config-driven + independent adapters)");
+    println!("   📋 Phase 4: Configuration file support (to be implemented)");
 
     Ok(())
 }

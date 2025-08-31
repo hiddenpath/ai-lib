@@ -1,3 +1,4 @@
+/// AI-lib 基础用法示例 - AI-lib basic usage example
 use ai_lib::types::common::Content;
 use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 
@@ -6,18 +7,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 AI-lib Basic Usage Example");
     println!("================================");
 
-    // 切换模型提供商，只需更改 Provider 的值
+    // Switch model provider by changing Provider value
     let client = AiClient::new(Provider::Groq)?;
     println!(
         "✅ Created client with provider: {:?}",
         client.current_provider()
     );
 
-    // 获取支持的模型列表
+    // Get list of supported models
     let models = client.list_models().await?;
     println!("📋 Available models: {:?}", models);
 
-    // 创建聊天请求
+    // Create chat request
     let request = ChatCompletionRequest::new(
         "llama3-8b-8192".to_string(),
         vec![Message {
@@ -31,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("📤 Sending request to model: {}", request.model);
 
-    // 发送请求
+    // Send request
     let response = client.chat_completion(request).await?;
 
     println!("📥 Received response:");

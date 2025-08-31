@@ -1,18 +1,23 @@
+use crate::types::AiLibError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::types::AiLibError;
 
-/// 提供商配置模板，定义API访问参数
-///
 /// Provider configuration template defining API access parameters
+///
+/// This struct contains all necessary configuration for connecting to an AI provider,
+/// including base URL, API endpoints, authentication, and model specifications.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
-    /// Base URL
+    /// Base URL for the provider's API
     pub base_url: String,
-    /// API key environment variable name
+    /// Environment variable name for the API key
     pub api_key_env: String,
     /// Chat completion endpoint path
     pub chat_endpoint: String,
+    /// Default chat model for this provider
+    pub chat_model: String,
+    /// Optional multimodal model for this provider (if supported)
+    pub multimodal_model: Option<String>,
     /// Optional file upload endpoint path (e.g. OpenAI: "/v1/files")
     pub upload_endpoint: Option<String>,
     /// Optional file size limit (bytes) above which files should be uploaded instead of inlined
@@ -25,16 +30,17 @@ pub struct ProviderConfig {
     pub field_mapping: FieldMapping,
 }
 
-/// 字段映射配置，定义不同API格式的字段映射
-///
 /// Field mapping configuration defining field mappings for different API formats
+///
+/// This struct maps the standard ai-lib field names to provider-specific field names,
+/// allowing the library to work with different API formats seamlessly.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FieldMapping {
     /// Messages array field name (OpenAI: "messages", Gemini: "contents")
     pub messages_field: String,
     /// Model field name
     pub model_field: String,
-    /// Role field mapping
+    /// Role field mapping from ai-lib roles to provider roles
     pub role_mapping: HashMap<String, String>,
     /// Response content path (e.g. "choices.0.message.content")
     pub response_content_path: String,
@@ -42,7 +48,21 @@ pub struct FieldMapping {
 
 impl ProviderConfig {
     /// OpenAI-compatible configuration template
-    pub fn openai_compatible(base_url: &str, api_key_env: &str) -> Self {
+    ///
+    /// Creates a standard OpenAI-compatible configuration with default models.
+    /// The default chat model is "gpt-3.5-turbo" and multimodal model is "gpt-4o".
+    ///
+    /// # Arguments
+    /// * `base_url` - The base URL for the provider's API
+    /// * `api_key_env` - Environment variable name for the API key
+    /// * `chat_model` - Default chat model name
+    /// * `multimodal_model` - Optional multimodal model name
+    pub fn openai_compatible(
+        base_url: &str,
+        api_key_env: &str,
+        chat_model: &str,
+        multimodal_model: Option<&str>,
+    ) -> Self {
         let mut headers = HashMap::new();
         headers.insert("Content-Type".to_string(), "application/json".to_string());
 
@@ -55,6 +75,8 @@ impl ProviderConfig {
             base_url: base_url.to_string(),
             api_key_env: api_key_env.to_string(),
             chat_endpoint: "/chat/completions".to_string(),
+            chat_model: chat_model.to_string(),
+            multimodal_model: multimodal_model.map(|s| s.to_string()),
             upload_endpoint: Some("/v1/files".to_string()),
             upload_size_limit: Some(1024 * 64),
             models_endpoint: Some("/models".to_string()),
@@ -68,40 +90,62 @@ impl ProviderConfig {
         }
     }
 
-    /// 验证配置的完整性和正确性
+    /// OpenAI-compatible configuration template with default models
+    ///
+    /// This is a convenience method that uses standard default models.
+    /// For custom models, use `openai_compatible()` with explicit model names.
+    pub fn openai_compatible_default(base_url: &str, api_key_env: &str) -> Self {
+        Self::openai_compatible(base_url, api_key_env, "gpt-3.5-turbo", Some("gpt-4o"))
+    }
+
+    /// Validate the configuration for completeness and correctness
     ///
     /// # Returns
-    /// * `Result<(), AiLibError>` - 验证成功返回Ok，失败返回错误信息
+    /// * `Result<(), AiLibError>` - Ok on success, error information on failure
     pub fn validate(&self) -> Result<(), AiLibError> {
-        // 验证base_url
+        // Validate base_url
         if self.base_url.is_empty() {
-            return Err(AiLibError::ConfigurationError("base_url cannot be empty".to_string()));
-        }
-        
-        if !self.base_url.starts_with("http://") && !self.base_url.starts_with("https://") {
             return Err(AiLibError::ConfigurationError(
-                "base_url must be a valid HTTP/HTTPS URL".to_string()
+                "base_url cannot be empty".to_string(),
             ));
         }
 
-        // 验证api_key_env
+        if !self.base_url.starts_with("http://") && !self.base_url.starts_with("https://") {
+            return Err(AiLibError::ConfigurationError(
+                "base_url must be a valid HTTP/HTTPS URL".to_string(),
+            ));
+        }
+
+        // Validate api_key_env
         if self.api_key_env.is_empty() {
-            return Err(AiLibError::ConfigurationError("api_key_env cannot be empty".to_string()));
+            return Err(AiLibError::ConfigurationError(
+                "api_key_env cannot be empty".to_string(),
+            ));
         }
 
-        // 验证chat_endpoint
+        // Validate chat_endpoint
         if self.chat_endpoint.is_empty() {
-            return Err(AiLibError::ConfigurationError("chat_endpoint cannot be empty".to_string()));
+            return Err(AiLibError::ConfigurationError(
+                "chat_endpoint cannot be empty".to_string(),
+            ));
         }
 
-        // 验证field_mapping
+        // Validate chat_model
+        if self.chat_model.is_empty() {
+            return Err(AiLibError::ConfigurationError(
+                "chat_model cannot be empty".to_string(),
+            ));
+        }
+
+        // Validate field_mapping
         self.field_mapping.validate()?;
 
-        // 验证headers中的Content-Type
+        // Validate headers Content-Type
         if let Some(content_type) = self.headers.get("Content-Type") {
             if content_type != "application/json" && content_type != "multipart/form-data" {
                 return Err(AiLibError::ConfigurationError(
-                    "Content-Type header must be 'application/json' or 'multipart/form-data'".to_string()
+                    "Content-Type header must be 'application/json' or 'multipart/form-data'"
+                        .to_string(),
                 ));
             }
         }
@@ -109,53 +153,72 @@ impl ProviderConfig {
         Ok(())
     }
 
-    /// 获取完整的聊天完成URL
+    /// Get the complete chat completion URL
     pub fn chat_url(&self) -> String {
         format!("{}{}", self.base_url, self.chat_endpoint)
     }
 
-    /// 获取完整的模型列表URL
+    /// Get the complete models list URL
     pub fn models_url(&self) -> Option<String> {
-        self.models_endpoint.as_ref().map(|endpoint| {
-            format!("{}{}", self.base_url, endpoint)
-        })
+        self.models_endpoint
+            .as_ref()
+            .map(|endpoint| format!("{}{}", self.base_url, endpoint))
     }
 
-    /// 获取完整的文件上传URL
+    /// Get the complete file upload URL
     pub fn upload_url(&self) -> Option<String> {
-        self.upload_endpoint.as_ref().map(|endpoint| {
-            format!("{}{}", self.base_url, endpoint)
-        })
+        self.upload_endpoint
+            .as_ref()
+            .map(|endpoint| format!("{}{}", self.base_url, endpoint))
+    }
+
+    /// Get the default chat model for this provider
+    pub fn default_chat_model(&self) -> &str {
+        &self.chat_model
+    }
+
+    /// Get the multimodal model if available
+    pub fn multimodal_model(&self) -> Option<&str> {
+        self.multimodal_model.as_deref()
     }
 }
 
 impl FieldMapping {
-    /// 验证字段映射配置
+    /// Validate the field mapping configuration
     pub fn validate(&self) -> Result<(), AiLibError> {
         if self.messages_field.is_empty() {
-            return Err(AiLibError::ConfigurationError("messages_field cannot be empty".to_string()));
+            return Err(AiLibError::ConfigurationError(
+                "messages_field cannot be empty".to_string(),
+            ));
         }
 
         if self.model_field.is_empty() {
-            return Err(AiLibError::ConfigurationError("model_field cannot be empty".to_string()));
+            return Err(AiLibError::ConfigurationError(
+                "model_field cannot be empty".to_string(),
+            ));
         }
 
         if self.response_content_path.is_empty() {
-            return Err(AiLibError::ConfigurationError("response_content_path cannot be empty".to_string()));
+            return Err(AiLibError::ConfigurationError(
+                "response_content_path cannot be empty".to_string(),
+            ));
         }
 
-        // 验证role_mapping不为空
+        // Validate role_mapping is not empty
         if self.role_mapping.is_empty() {
-            return Err(AiLibError::ConfigurationError("role_mapping cannot be empty".to_string()));
+            return Err(AiLibError::ConfigurationError(
+                "role_mapping cannot be empty".to_string(),
+            ));
         }
 
-        // 验证必需的role映射
+        // Validate required role mappings
         let required_roles = ["System", "User", "Assistant"];
         for role in &required_roles {
             if !self.role_mapping.contains_key(*role) {
-                return Err(AiLibError::ConfigurationError(
-                    format!("role_mapping must contain '{}' role", role)
-                ));
+                return Err(AiLibError::ConfigurationError(format!(
+                    "role_mapping must contain '{}' role",
+                    role
+                )));
             }
         }
 

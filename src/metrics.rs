@@ -79,7 +79,12 @@ impl Default for NoopMetrics {
 #[allow(async_fn_in_trait)]
 pub trait MetricsExt: Metrics {
     /// Record a request with timing and success/failure
-    async fn record_request(&self, name: &str, timer: Option<Box<dyn Timer + Send>>, success: bool) {
+    async fn record_request(
+        &self,
+        name: &str,
+        timer: Option<Box<dyn Timer + Send>>,
+        success: bool,
+    ) {
         if let Some(t) = timer {
             t.stop();
         }
@@ -99,18 +104,22 @@ pub trait MetricsExt: Metrics {
         }
         self.record_success(name, success).await;
         // Record additional metrics with tags
-        self.incr_counter_with_tags(&format!("{}.total", name), 1, tags).await;
+        self.incr_counter_with_tags(&format!("{}.total", name), 1, tags)
+            .await;
         if success {
-            self.incr_counter_with_tags(&format!("{}.success", name), 1, tags).await;
+            self.incr_counter_with_tags(&format!("{}.success", name), 1, tags)
+                .await;
         } else {
-            self.incr_counter_with_tags(&format!("{}.failure", name), 1, tags).await;
+            self.incr_counter_with_tags(&format!("{}.failure", name), 1, tags)
+                .await;
         }
     }
 
     /// Record an error with context
     async fn record_error_with_context(&self, name: &str, error_type: &str, context: &str) {
         self.record_error(name, error_type).await;
-        self.incr_counter_with_tags(name, 1, &[("error_type", error_type), ("context", context)]).await;
+        self.incr_counter_with_tags(name, 1, &[("error_type", error_type), ("context", context)])
+            .await;
     }
 }
 

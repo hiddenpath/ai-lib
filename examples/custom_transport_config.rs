@@ -1,6 +1,6 @@
-use ai_lib::ProviderConfigs;
-use ai_lib::transport::{HttpTransport, HttpTransportConfig};
 use ai_lib::provider::GenericAdapter;
+use ai_lib::transport::{HttpTransport, HttpTransportConfig};
+use ai_lib::ProviderConfigs;
 use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

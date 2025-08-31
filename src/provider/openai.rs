@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
 
-/// OpenAI适配器，支持GPT系列模型
+/// OpenAI adapter, supporting GPT series models
 ///
 /// OpenAI adapter supporting GPT series models
 pub struct OpenAiAdapter {
@@ -324,9 +324,9 @@ impl ChatApi for OpenAiAdapter {
             .unwrap_or(serde_json::json!({}));
         let url = format!("{}/chat/completions", self.base_url);
 
-    // Record a request counter and start a timer using standardized keys
-    self.metrics.incr_counter("openai.requests", 1).await;
-    let timer = self.metrics.start_timer("openai.request_duration_ms").await;
+        // Record a request counter and start a timer using standardized keys
+        self.metrics.incr_counter("openai.requests", 1).await;
+        let timer = self.metrics.start_timer("openai.request_duration_ms").await;
 
         let mut headers = HashMap::new();
         headers.insert(

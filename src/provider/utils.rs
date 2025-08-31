@@ -182,8 +182,6 @@ pub(crate) fn parse_upload_response(
     ))
 }
 
-
-
 /// Simple health check helper for provider base URLs.
 /// Tries to GET {base_url}/models (common OpenAI-compatible endpoint) or the base URL
 /// and returns Ok(()) if reachable and returns an AiLibError otherwise.
@@ -231,7 +229,6 @@ pub async fn health_check(base_url: &str) -> Result<(), AiLibError> {
             }
         }
     }
-
 }
 
 // Tests moved to file end to satisfy clippy::items-after-test-module

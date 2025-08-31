@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
 
-/// Google Gemini独立适配器，支持多模态AI服务
+/// Google Gemini independent adapter, supporting multimodal AI services
 ///
 /// Google Gemini independent adapter for multimodal AI service
 ///
@@ -221,8 +221,8 @@ impl ChatApi for GeminiAdapter {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
-    self.metrics.incr_counter("gemini.requests", 1).await;
-    let timer = self.metrics.start_timer("gemini.request_duration_ms").await;
+        self.metrics.incr_counter("gemini.requests", 1).await;
+        let timer = self.metrics.start_timer("gemini.request_duration_ms").await;
 
         let gemini_request = self.convert_to_gemini_request(&request);
 

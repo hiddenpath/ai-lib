@@ -58,7 +58,10 @@ impl DynHttpTransport for CapturingTransport {
         _url: &'a str,
         _headers: Option<HashMap<String, String>>,
         _body: serde_json::Value,
-    ) -> futures::future::BoxFuture<'a, Result<Pin<Box<dyn Stream<Item = Result<Bytes, AiLibError>> + Send>>, AiLibError>> {
+    ) -> futures::future::BoxFuture<
+        'a,
+        Result<Pin<Box<dyn Stream<Item = Result<Bytes, AiLibError>> + Send>>, AiLibError>,
+    > {
         Box::pin(async move {
             Err(AiLibError::ProviderError(
                 "stream not supported".to_string(),
@@ -96,7 +99,8 @@ async fn generic_adapter_uploads_image_and_returns_file_id() {
     });
 
     let transport = Arc::new(CapturingTransport::new(upload_resp, post_resp));
-    let config = ProviderConfig::openai_compatible("http://example", "API_KEY");
+    let config =
+        ProviderConfig::openai_compatible("http://example", "API_KEY", "gpt-3.5-turbo", None);
     // set upload_size_limit to 0 so file is considered large and uploaded
     let mut cfg = config.clone();
     cfg.upload_size_limit = Some(0);
@@ -146,8 +150,7 @@ async fn generic_adapter_upload_failure_falls_back_to_inline() {
             &'a self,
             _url: &'a str,
             _headers: Option<HashMap<String, String>>,
-        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>>
-        {
+        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>> {
             let resp = self.post_resp.clone();
             Box::pin(async move { Ok(resp) })
         }
@@ -156,8 +159,7 @@ async fn generic_adapter_upload_failure_falls_back_to_inline() {
             _url: &'a str,
             _headers: Option<HashMap<String, String>>,
             _body: serde_json::Value,
-        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>>
-        {
+        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>> {
             let resp = self.post_resp.clone();
             Box::pin(async move { Ok(resp) })
         }
@@ -166,7 +168,10 @@ async fn generic_adapter_upload_failure_falls_back_to_inline() {
             _url: &'a str,
             _headers: Option<HashMap<String, String>>,
             _body: serde_json::Value,
-        ) -> futures::future::BoxFuture<'a, Result<Pin<Box<dyn Stream<Item = Result<Bytes, AiLibError>> + Send>>, AiLibError>> {
+        ) -> futures::future::BoxFuture<
+            'a,
+            Result<Pin<Box<dyn Stream<Item = Result<Bytes, AiLibError>> + Send>>, AiLibError>,
+        > {
             Box::pin(async move {
                 Err(AiLibError::ProviderError(
                     "stream not supported".to_string(),
@@ -180,8 +185,7 @@ async fn generic_adapter_upload_failure_falls_back_to_inline() {
             _field_name: &'a str,
             _file_name: &'a str,
             _bytes: Vec<u8>,
-        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>>
-        {
+        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>> {
             Box::pin(async move {
                 Err(AiLibError::ProviderError(
                     "simulated upload failure".to_string(),
@@ -200,7 +204,8 @@ async fn generic_adapter_upload_failure_falls_back_to_inline() {
     });
 
     let transport = Arc::new(FailUploadTransport { post_resp });
-    let config = ProviderConfig::openai_compatible("http://example", "API_KEY");
+    let config =
+        ProviderConfig::openai_compatible("http://example", "API_KEY", "gpt-3.5-turbo", None);
     let mut cfg = config.clone();
     cfg.upload_size_limit = Some(0);
 
@@ -250,8 +255,7 @@ async fn generic_adapter_size_boundary_respects_upload_size_limit() {
             &'a self,
             _url: &'a str,
             _headers: Option<HashMap<String, String>>,
-        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>>
-        {
+        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>> {
             let resp = self.post_resp.clone();
             Box::pin(async move { Ok(resp) })
         }
@@ -260,8 +264,7 @@ async fn generic_adapter_size_boundary_respects_upload_size_limit() {
             _url: &'a str,
             _headers: Option<HashMap<String, String>>,
             _body: serde_json::Value,
-        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>>
-        {
+        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>> {
             let resp = self.post_resp.clone();
             Box::pin(async move { Ok(resp) })
         }
@@ -270,7 +273,10 @@ async fn generic_adapter_size_boundary_respects_upload_size_limit() {
             _url: &'a str,
             _headers: Option<HashMap<String, String>>,
             _body: serde_json::Value,
-        ) -> futures::future::BoxFuture<'a, Result<Pin<Box<dyn Stream<Item = Result<Bytes, AiLibError>> + Send>>, AiLibError>> {
+        ) -> futures::future::BoxFuture<
+            'a,
+            Result<Pin<Box<dyn Stream<Item = Result<Bytes, AiLibError>> + Send>>, AiLibError>,
+        > {
             Box::pin(async move {
                 Err(AiLibError::ProviderError(
                     "stream not supported".to_string(),
@@ -284,8 +290,7 @@ async fn generic_adapter_size_boundary_respects_upload_size_limit() {
             _field_name: &'a str,
             _file_name: &'a str,
             _bytes: Vec<u8>,
-        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>>
-        {
+        ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, AiLibError>> {
             panic!("upload_multipart should not be called for small files");
         }
     }
@@ -300,7 +305,8 @@ async fn generic_adapter_size_boundary_respects_upload_size_limit() {
     });
 
     let transport = Arc::new(PanicUploadTransport { post_resp });
-    let config = ProviderConfig::openai_compatible("http://example", "API_KEY");
+    let config =
+        ProviderConfig::openai_compatible("http://example", "API_KEY", "gpt-3.5-turbo", None);
     let mut cfg = config.clone();
     // set upload_size_limit large so file is inlined
     cfg.upload_size_limit = Some(1024 * 1024);

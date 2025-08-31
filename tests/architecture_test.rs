@@ -5,14 +5,14 @@ mod tests {
 
     #[test]
     fn test_provider_enum() {
-        // 测试Provider枚举
+        // Test Provider enum
         let provider = Provider::Groq;
         assert!(matches!(provider, Provider::Groq));
     }
 
     #[test]
     fn test_client_creation() {
-        // 测试客户端创建（不实际调用API）
+        // Test client creation (without actual API calls)
         let client_result = AiClient::new(Provider::Groq);
         assert!(client_result.is_ok());
 
@@ -22,7 +22,7 @@ mod tests {
 
     #[test]
     fn test_request_builder() {
-        // 测试请求构建器
+        // Test request builder
         let request = ChatCompletionRequest::new(
             "test-model".to_string(),
             vec![Message {
@@ -42,7 +42,7 @@ mod tests {
 
     #[test]
     fn test_role_enum() {
-        // 测试Role枚举
+        // Test Role enum
         let user_role = Role::User;
         let system_role = Role::System;
         let assistant_role = Role::Assistant;

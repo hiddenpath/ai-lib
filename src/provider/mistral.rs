@@ -271,8 +271,11 @@ impl ChatApi for MistralAdapter {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
-    self.metrics.incr_counter("mistral.requests", 1).await;
-    let timer = self.metrics.start_timer("mistral.request_duration_ms").await;
+        self.metrics.incr_counter("mistral.requests", 1).await;
+        let timer = self
+            .metrics
+            .start_timer("mistral.request_duration_ms")
+            .await;
 
         let provider_request = self.convert_request(&request);
         let url = format!("{}{}", self.base_url, "/v1/chat/completions");

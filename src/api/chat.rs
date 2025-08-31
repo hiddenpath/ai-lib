@@ -2,7 +2,7 @@ use crate::types::{AiLibError, ChatCompletionRequest, ChatCompletionResponse};
 use async_trait::async_trait;
 use futures::stream::Stream;
 
-/// 通用的聊天API接口，定义所有AI服务的核心能力
+/// Chat API module
 ///
 /// Generic chat API interface
 ///
@@ -52,8 +52,6 @@ pub trait ChatApi: Send + Sync {
     /// * `Result<ModelInfo, AiLibError>` - Returns model information on success, error on failure
     async fn get_model_info(&self, model_id: &str) -> Result<ModelInfo, AiLibError>;
 
-    /// 批处理聊天完成请求
-    ///
     /// Batch chat completion requests
     ///
     /// # Arguments
@@ -71,8 +69,6 @@ pub trait ChatApi: Send + Sync {
     }
 }
 
-/// 流式响应的数据块
-///
 /// Streaming response data chunk
 #[derive(Debug, Clone)]
 pub struct ChatCompletionChunk {
@@ -83,8 +79,6 @@ pub struct ChatCompletionChunk {
     pub choices: Vec<ChoiceDelta>,
 }
 
-/// 流式响应的选择项增量
-///
 /// Streaming response choice delta
 #[derive(Debug, Clone)]
 pub struct ChoiceDelta {
@@ -93,8 +87,6 @@ pub struct ChoiceDelta {
     pub finish_reason: Option<String>,
 }
 
-/// 消息增量
-///
 /// Message delta
 #[derive(Debug, Clone)]
 pub struct MessageDelta {
@@ -102,7 +94,7 @@ pub struct MessageDelta {
     pub content: Option<String>,
 }
 
-/// 模型信息
+/// Model information
 ///
 /// Model information
 #[derive(Debug, Clone)]
@@ -114,8 +106,6 @@ pub struct ModelInfo {
     pub permission: Vec<ModelPermission>,
 }
 
-/// 模型权限
-///
 /// Model permission
 #[derive(Debug, Clone)]
 pub struct ModelPermission {
@@ -136,8 +126,6 @@ pub struct ModelPermission {
 // Re-export Role type as it's also needed in streaming responses
 use crate::types::Role;
 
-/// 批处理结果，包含成功和失败的响应
-///
 /// Batch processing result containing successful and failed responses
 #[derive(Debug)]
 pub struct BatchResult {
@@ -187,8 +175,6 @@ impl BatchResult {
     }
 }
 
-/// 批处理工具函数
-///
 /// Batch processing utility functions
 pub mod batch_utils {
     use super::*;
@@ -196,8 +182,6 @@ pub mod batch_utils {
     use std::sync::Arc;
     use tokio::sync::Semaphore;
 
-    /// 并发处理批处理请求的默认实现
-    ///
     /// Default implementation for concurrent batch processing
     pub async fn process_batch_concurrent<T: ChatApi + ?Sized>(
         api: &T,
@@ -209,17 +193,24 @@ pub mod batch_utils {
         }
 
         let semaphore = concurrency_limit.map(|limit| Arc::new(Semaphore::new(limit)));
-        
+
         let futures = requests.into_iter().enumerate().map(|(index, request)| {
             let api_ref = api;
             let semaphore_ref = semaphore.clone();
-            
+
             async move {
                 // Acquire permit if concurrency limit is set
                 let _permit = if let Some(sem) = &semaphore_ref {
                     match sem.acquire().await {
                         Ok(permit) => Some(permit),
-                        Err(_) => return (index, Err(AiLibError::ProviderError("Failed to acquire semaphore permit".to_string()))),
+                        Err(_) => {
+                            return (
+                                index,
+                                Err(AiLibError::ProviderError(
+                                    "Failed to acquire semaphore permit".to_string(),
+                                )),
+                            )
+                        }
                     }
                 } else {
                     None
@@ -227,7 +218,7 @@ pub mod batch_utils {
 
                 // Process the request
                 let result = api_ref.chat_completion(request).await;
-                
+
                 // Return result with index for ordering
                 (index, result)
             }
@@ -241,7 +232,9 @@ pub mod batch_utils {
 
         // Sort results by original index to maintain order
         let mut sorted_results = Vec::with_capacity(results.len());
-        sorted_results.resize_with(results.len(), || Err(AiLibError::ProviderError("Placeholder".to_string())));
+        sorted_results.resize_with(results.len(), || {
+            Err(AiLibError::ProviderError("Placeholder".to_string()))
+        });
         for (index, result) in results {
             sorted_results[index] = result;
         }
@@ -249,25 +242,21 @@ pub mod batch_utils {
         Ok(sorted_results)
     }
 
-    /// 顺序处理批处理请求的实现
-    ///
     /// Sequential batch processing implementation
     pub async fn process_batch_sequential<T: ChatApi + ?Sized>(
         api: &T,
         requests: Vec<ChatCompletionRequest>,
     ) -> Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError> {
         let mut results = Vec::with_capacity(requests.len());
-        
+
         for request in requests {
             let result = api.chat_completion(request).await;
             results.push(result);
         }
-        
+
         Ok(results)
     }
 
-    /// 智能批处理：根据请求类型和大小自动选择处理策略
-    ///
     /// Smart batch processing: automatically choose processing strategy based on request type and size
     pub async fn process_batch_smart<T: ChatApi + ?Sized>(
         api: &T,
@@ -275,12 +264,12 @@ pub mod batch_utils {
         concurrency_limit: Option<usize>,
     ) -> Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError> {
         let request_count = requests.len();
-        
+
         // For small batches, use sequential processing
         if request_count <= 3 {
             return process_batch_sequential(api, requests).await;
         }
-        
+
         // For larger batches, use concurrent processing
         process_batch_concurrent(api, requests, concurrency_limit).await
     }

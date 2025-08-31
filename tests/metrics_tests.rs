@@ -9,8 +9,8 @@ mod utils {
     include!("utils/mock_transport.rs");
 }
 
-use std::sync::{Mutex, OnceLock};
 use ai_lib::ChatApi;
+use std::sync::{Mutex, OnceLock};
 
 static TIMER_STORE: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 
@@ -80,8 +80,8 @@ impl ai_lib::metrics::Timer for MockTimer {
 
 #[tokio::test]
 async fn generic_adapter_calls_metrics() -> Result<(), AiLibError> {
-    use ai_lib::provider::generic::GenericAdapter;
     use ai_lib::provider::config::ProviderConfig;
+    use ai_lib::provider::generic::GenericAdapter;
     use ai_lib::types::{ChatCompletionRequest, Message, Role};
 
     // use existing MockTransport from tests/utils to avoid network
@@ -95,25 +95,39 @@ async fn generic_adapter_calls_metrics() -> Result<(), AiLibError> {
     });
 
     let transport = Arc::new(utils::MockTransport::new(post_resp));
-    let cfg = ProviderConfig::openai_compatible("http://example", "API_KEY");
+    let cfg = ProviderConfig::openai_compatible("http://example", "API_KEY", "gpt-3.5-turbo", None);
     let metrics_arc = Arc::new(MockMetrics::new());
     let metrics: Arc<dyn Metrics> = metrics_arc.clone();
 
-    let adapter = GenericAdapter::with_transport_ref_and_metrics(cfg, transport.clone(), metrics.clone())?;
+    let adapter =
+        GenericAdapter::with_transport_ref_and_metrics(cfg, transport.clone(), metrics.clone())?;
 
-    let msg = Message { role: Role::User, content: ai_lib::types::common::Content::Text("hi".to_string()), function_call: None };
+    let msg = Message {
+        role: Role::User,
+        content: ai_lib::types::common::Content::Text("hi".to_string()),
+        function_call: None,
+    };
     let req = ChatCompletionRequest::new("m".to_string(), vec![msg]);
 
     let _ = adapter.chat_completion(req).await?;
 
     let calls = metrics_arc.take_calls().await;
-    assert!(calls.iter().any(|(n, _)| n.contains("generic.requests") || n.contains("requests")));
+    assert!(calls
+        .iter()
+        .any(|(n, _)| n.contains("generic.requests") || n.contains("requests")));
 
     // timers should have been started and stopped, or at least the adapter recorded a timer event
     let timers = take_timers_global();
-    let timer_ok = timers.iter().any(|t| t.contains("generic.request_duration_ms"));
-    let fallback_ok = calls.iter().any(|(n, _)| n == "generic.request_timer_recorded");
-    assert!(timer_ok || fallback_ok, "no timer recorded and no fallback counter present");
+    let timer_ok = timers
+        .iter()
+        .any(|t| t.contains("generic.request_duration_ms"));
+    let fallback_ok = calls
+        .iter()
+        .any(|(n, _)| n == "generic.request_timer_recorded");
+    assert!(
+        timer_ok || fallback_ok,
+        "no timer recorded and no fallback counter present"
+    );
     Ok(())
 }
 
@@ -135,17 +149,30 @@ async fn openai_adapter_calls_metrics() -> Result<(), AiLibError> {
     let metrics_arc = Arc::new(MockMetrics::new());
     let metrics: Arc<dyn Metrics> = metrics_arc.clone();
 
-    let adapter = OpenAiAdapter::with_transport_ref_and_metrics(transport.clone(), "API_KEY".to_string(), "http://example.com".to_string(), metrics.clone())?;
+    let adapter = OpenAiAdapter::with_transport_ref_and_metrics(
+        transport.clone(),
+        "API_KEY".to_string(),
+        "http://example.com".to_string(),
+        metrics.clone(),
+    )?;
 
-    let msg = Message { role: Role::User, content: ai_lib::types::common::Content::Text("hi".to_string()), function_call: None };
+    let msg = Message {
+        role: Role::User,
+        content: ai_lib::types::common::Content::Text("hi".to_string()),
+        function_call: None,
+    };
     let req = ChatCompletionRequest::new("m".to_string(), vec![msg]);
 
     let _ = adapter.chat_completion(req).await?;
 
     let calls = metrics_arc.take_calls().await;
-    assert!(calls.iter().any(|(n, _)| n.contains("openai.requests") || n.contains("requests")));
+    assert!(calls
+        .iter()
+        .any(|(n, _)| n.contains("openai.requests") || n.contains("requests")));
 
     let timers = take_timers_global();
-    assert!(timers.iter().any(|t| t.contains("openai.request_duration_ms")));
+    assert!(timers
+        .iter()
+        .any(|t| t.contains("openai.request_duration_ms")));
     Ok(())
 }

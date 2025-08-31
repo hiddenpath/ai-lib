@@ -1,7 +1,7 @@
 use crate::types::AiLibError;
 use bytes::Bytes;
-use futures::Stream;
 use futures::future::BoxFuture;
+use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;

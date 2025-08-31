@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-/// 传输层错误类型，统一封装HTTP和JSON错误
+/// Transport layer error types, unified encapsulation of HTTP and JSON errors
 ///
 /// Transport layer error types with unified encapsulation of HTTP and JSON errors
 ///

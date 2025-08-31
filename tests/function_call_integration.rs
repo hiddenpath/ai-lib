@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 #[path = "utils/mock_transport.rs"]
 mod mock_transport;
-use mock_transport::MockTransport;
 use ai_lib::api::ChatApi;
+use mock_transport::MockTransport;
 
 #[tokio::test]
 async fn openai_adapter_parses_function_call_from_response() {
@@ -31,9 +31,21 @@ async fn openai_adapter_parses_function_call_from_response() {
 
     let mock = Arc::new(MockTransport::new(resp));
     // OpenAiAdapter expects transport + api_key + base_url in with_transport_ref
-    let adapter = OpenAiAdapter::with_transport_ref(mock.clone(), "test-key".to_string(), "https://api.openai.com/v1".to_string()).unwrap();
+    let adapter = OpenAiAdapter::with_transport_ref(
+        mock.clone(),
+        "test-key".to_string(),
+        "https://api.openai.com/v1".to_string(),
+    )
+    .unwrap();
 
-    let req = ChatCompletionRequest::new("gpt-test".to_string(), vec![Message { role: Role::User, content: ai_lib::types::common::Content::Text("Hello".to_string()), function_call: None }]);
+    let req = ChatCompletionRequest::new(
+        "gpt-test".to_string(),
+        vec![Message {
+            role: Role::User,
+            content: ai_lib::types::common::Content::Text("Hello".to_string()),
+            function_call: None,
+        }],
+    );
 
     let res = adapter.chat_completion(req).await.unwrap();
     let fc = &res.choices[0].message.function_call;

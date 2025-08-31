@@ -4,6 +4,7 @@ pub mod configs;
 pub mod gemini;
 pub mod generic;
 pub mod mistral;
+pub mod models;
 pub mod openai;
 pub mod utils;
 

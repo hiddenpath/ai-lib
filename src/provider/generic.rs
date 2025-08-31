@@ -20,9 +20,9 @@ pub struct GenericAdapter {
 
 impl GenericAdapter {
     pub fn new(config: ProviderConfig) -> Result<Self, AiLibError> {
-        // 验证配置
+        // Validate configuration
         config.validate()?;
-        
+
         // For generic/config-driven providers we treat the API key as optional.
         // Some deployments (e.g. local Ollama) don't require a key. If the env var
         // is missing we continue with None and callers will simply omit auth headers.
@@ -41,9 +41,9 @@ impl GenericAdapter {
         config: ProviderConfig,
         transport: HttpTransport,
     ) -> Result<Self, AiLibError> {
-        // 验证配置
+        // Validate configuration
         config.validate()?;
-        
+
         let api_key = env::var(&config.api_key_env).ok();
 
         Ok(Self {
@@ -59,9 +59,9 @@ impl GenericAdapter {
         config: ProviderConfig,
         transport: DynHttpTransportRef,
     ) -> Result<Self, AiLibError> {
-        // 验证配置
+        // Validate configuration
         config.validate()?;
-        
+
         let api_key = env::var(&config.api_key_env).ok();
         Ok(Self {
             transport,
@@ -77,9 +77,9 @@ impl GenericAdapter {
         transport: DynHttpTransportRef,
         metrics: Arc<dyn Metrics>,
     ) -> Result<Self, AiLibError> {
-        // 验证配置
+        // Validate configuration
         config.validate()?;
-        
+
         let api_key = env::var(&config.api_key_env).ok();
         Ok(Self {
             transport,
@@ -94,9 +94,9 @@ impl GenericAdapter {
         config: ProviderConfig,
         metrics: Arc<dyn Metrics>,
     ) -> Result<Self, AiLibError> {
-        // 验证配置
+        // Validate configuration
         config.validate()?;
-        
+
         let api_key = env::var(&config.api_key_env).ok();
         Ok(Self {
             transport: HttpTransport::new().boxed(),
@@ -447,14 +447,20 @@ impl ChatApi for GenericAdapter {
                 if let Some(t) = timer {
                     t.stop();
                     // record that we stopped the timer in case test-inspection needs a metric
-                    let _ = self.metrics.incr_counter("generic.request_timer_recorded", 1).await;
+                    let _ = self
+                        .metrics
+                        .incr_counter("generic.request_timer_recorded", 1)
+                        .await;
                 }
                 v
             }
             Err(e) => {
                 if let Some(t) = timer {
                     t.stop();
-                    let _ = self.metrics.incr_counter("generic.request_timer_recorded", 1).await;
+                    let _ = self
+                        .metrics
+                        .incr_counter("generic.request_timer_recorded", 1)
+                        .await;
                 }
                 return Err(e);
             }

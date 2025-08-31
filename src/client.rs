@@ -9,10 +9,12 @@ use futures::Future;
 use std::sync::Arc;
 use tokio::sync::oneshot;
 
-/// AI模型提供商枚举
+/// Unified AI client module
+///
+/// AI model provider enumeration
 #[derive(Debug, Clone, Copy)]
 pub enum Provider {
-    // 驱动配置
+    // Config-driven providers
     Groq,
     XaiGrok,
     Ollama,
@@ -21,12 +23,12 @@ pub enum Provider {
     AzureOpenAI,
     HuggingFace,
     TogetherAI,
-    // 中国区域提供商（OpenAI 兼容或配置驱动）
+    // Chinese providers (OpenAI-compatible or config-driven)
     BaiduWenxin,
     TencentHunyuan,
     IflytekSpark,
     Moonshot,
-    // 特殊适配器
+    // Independent adapters
     OpenAI,
     Qwen,
     Gemini,
@@ -35,15 +37,15 @@ pub enum Provider {
     // Bedrock removed (deferred)
 }
 
-/// 统一AI客户端
+/// Unified AI client
 ///
-/// 使用示例：
+/// Usage example:
 /// ```rust
 /// use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     // 切换模型提供商，只需更改 Provider 的值
+///     // Switch model provider by changing Provider value
 ///     let client = AiClient::new(Provider::Groq)?;
 ///     
 ///     let request = ChatCompletionRequest::new(
@@ -55,8 +57,8 @@ pub enum Provider {
 ///         }],
 ///     );
 ///     
-///     // 注意：这里需要设置GROQ_API_KEY环境变量才能实际调用API
-///     // 可选：设置AI_PROXY_URL环境变量使用代理服务器
+///     // Note: Set GROQ_API_KEY environment variable for actual API calls
+///     // Optional: Set AI_PROXY_URL environment variable to use proxy server
 ///     // let response = client.chat_completion(request).await?;
 ///     
 ///     println!("Client created successfully with provider: {:?}", client.current_provider());
@@ -66,18 +68,18 @@ pub enum Provider {
 /// }
 /// ```
 ///
-/// # 代理服务器配置
+/// # Proxy Configuration
 ///
-/// 通过设置 `AI_PROXY_URL` 环境变量来配置代理服务器：
+/// Configure proxy server by setting the `AI_PROXY_URL` environment variable:
 ///
 /// ```bash
 /// export AI_PROXY_URL=http://proxy.example.com:8080
 /// ```
 ///
-/// 支持的代理格式：
-/// - HTTP代理: `http://proxy.example.com:8080`
-/// - HTTPS代理: `https://proxy.example.com:8080`  
-/// - 带认证: `http://user:pass@proxy.example.com:8080`
+/// Supported proxy formats:
+/// - HTTP proxy: `http://proxy.example.com:8080`
+/// - HTTPS proxy: `https://proxy.example.com:8080`  
+/// - With authentication: `http://user:pass@proxy.example.com:8080`
 pub struct AiClient {
     provider: Provider,
     adapter: Box<dyn ChatApi>,
@@ -85,13 +87,13 @@ pub struct AiClient {
 }
 
 impl AiClient {
-    /// 创建新的AI客户端
+    /// Create a new AI client
     ///
     /// # Arguments
-    /// * `provider` - 选择要使用的AI模型提供商
+    /// * `provider` - The AI model provider to use
     ///
     /// # Returns
-    /// * `Result<Self, AiLibError>` - 成功时返回客户端实例，失败时返回错误
+    /// * `Result<Self, AiLibError>` - Client instance on success, error on failure
     ///
     /// # Example
     /// ```rust
@@ -101,36 +103,39 @@ impl AiClient {
     /// # Ok::<(), ai_lib::AiLibError>(())
     /// ```
     pub fn new(provider: Provider) -> Result<Self, AiLibError> {
-        let adapter: Box<dyn ChatApi> = match provider {
-            // 使用配置驱动的通用适配器
-            Provider::Groq => Box::new(GenericAdapter::new(ProviderConfigs::groq())?),
-            Provider::XaiGrok => Box::new(GenericAdapter::new(ProviderConfigs::xai_grok())?),
-            Provider::Ollama => Box::new(GenericAdapter::new(ProviderConfigs::ollama())?),
-            Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
-            Provider::Qwen => Box::new(GenericAdapter::new(ProviderConfigs::qwen())?),
-            Provider::BaiduWenxin => Box::new(GenericAdapter::new(ProviderConfigs::baidu_wenxin())?),
-            Provider::TencentHunyuan => Box::new(GenericAdapter::new(ProviderConfigs::tencent_hunyuan())?),
-            Provider::IflytekSpark => Box::new(GenericAdapter::new(ProviderConfigs::iflytek_spark())?),
-            Provider::Moonshot => Box::new(GenericAdapter::new(ProviderConfigs::moonshot())?),
-            Provider::Anthropic => Box::new(GenericAdapter::new(ProviderConfigs::anthropic())?),
-            Provider::AzureOpenAI => {
-                Box::new(GenericAdapter::new(ProviderConfigs::azure_openai())?)
-            }
-            Provider::HuggingFace => Box::new(GenericAdapter::new(ProviderConfigs::huggingface())?),
-            Provider::TogetherAI => Box::new(GenericAdapter::new(ProviderConfigs::together_ai())?),
-            // 使用独立适配器
-            Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
-            Provider::Gemini => Box::new(GeminiAdapter::new()?),
-            Provider::Mistral => Box::new(MistralAdapter::new()?),
-            Provider::Cohere => Box::new(CohereAdapter::new()?),
-            // Bedrock deferred; not available
-        };
+        // Use the new builder to create client with automatic environment variable detection
+        AiClientBuilder::new(provider).build()
+    }
 
-        Ok(Self {
-            provider,
-            adapter,
-            metrics: Arc::new(NoopMetrics::new()),
-        })
+    /// Create a new AI client builder
+    ///
+    /// The builder pattern allows more flexible client configuration:
+    /// - Automatic environment variable detection
+    /// - Support for custom base_url and proxy
+    /// - Support for custom timeout and connection pool configuration
+    ///
+    /// # Arguments
+    /// * `provider` - The AI model provider to use
+    ///
+    /// # Returns
+    /// * `AiClientBuilder` - Builder instance
+    ///
+    /// # Example
+    /// ```rust
+    /// use ai_lib::{AiClient, Provider};
+    ///
+    /// // Simplest usage - automatic environment variable detection
+    /// let client = AiClient::builder(Provider::Groq).build()?;
+    ///
+    /// // Custom base_url and proxy
+    /// let client = AiClient::builder(Provider::Groq)
+    ///     .with_base_url("https://custom.groq.com")
+    ///     .with_proxy("http://proxy.example.com:8080")
+    ///     .build()?;
+    /// # Ok::<(), ai_lib::AiLibError>(())
+    /// ```
+    pub fn builder(provider: Provider) -> AiClientBuilder {
+        AiClientBuilder::new(provider)
     }
 
     /// Create AiClient with injected metrics implementation
@@ -145,9 +150,15 @@ impl AiClient {
             Provider::DeepSeek => Box::new(GenericAdapter::new(ProviderConfigs::deepseek())?),
             Provider::Qwen => Box::new(GenericAdapter::new(ProviderConfigs::qwen())?),
             Provider::Anthropic => Box::new(GenericAdapter::new(ProviderConfigs::anthropic())?),
-            Provider::BaiduWenxin => Box::new(GenericAdapter::new(ProviderConfigs::baidu_wenxin())?),
-            Provider::TencentHunyuan => Box::new(GenericAdapter::new(ProviderConfigs::tencent_hunyuan())?),
-            Provider::IflytekSpark => Box::new(GenericAdapter::new(ProviderConfigs::iflytek_spark())?),
+            Provider::BaiduWenxin => {
+                Box::new(GenericAdapter::new(ProviderConfigs::baidu_wenxin())?)
+            }
+            Provider::TencentHunyuan => {
+                Box::new(GenericAdapter::new(ProviderConfigs::tencent_hunyuan())?)
+            }
+            Provider::IflytekSpark => {
+                Box::new(GenericAdapter::new(ProviderConfigs::iflytek_spark())?)
+            }
             Provider::Moonshot => Box::new(GenericAdapter::new(ProviderConfigs::moonshot())?),
             Provider::AzureOpenAI => {
                 Box::new(GenericAdapter::new(ProviderConfigs::azure_openai())?)
@@ -173,13 +184,13 @@ impl AiClient {
         self
     }
 
-    /// 发送聊天完成请求
+    /// Send chat completion request
     ///
     /// # Arguments
-    /// * `request` - 聊天完成请求
+    /// * `request` - Chat completion request
     ///
     /// # Returns
-    /// * `Result<ChatCompletionResponse, AiLibError>` - 成功时返回响应，失败时返回错误
+    /// * `Result<ChatCompletionResponse, AiLibError>` - Response on success, error on failure
     pub async fn chat_completion(
         &self,
         request: ChatCompletionRequest,
@@ -187,13 +198,13 @@ impl AiClient {
         self.adapter.chat_completion(request).await
     }
 
-    /// 流式聊天完成请求
+    /// Streaming chat completion request
     ///
     /// # Arguments
-    /// * `request` - 聊天完成请求
+    /// * `request` - Chat completion request
     ///
     /// # Returns
-    /// * `Result<impl Stream<Item = Result<ChatCompletionChunk, AiLibError>>, AiLibError>` - 成功时返回流式响应
+    /// * `Result<impl Stream<Item = Result<ChatCompletionChunk, AiLibError>>, AiLibError>` - Stream response on success
     pub async fn chat_completion_stream(
         &self,
         mut request: ChatCompletionRequest,
@@ -205,13 +216,13 @@ impl AiClient {
         self.adapter.chat_completion_stream(request).await
     }
 
-    /// 带取消控制的流式聊天完成请求
+    /// Streaming chat completion request with cancel control
     ///
     /// # Arguments
-    /// * `request` - 聊天完成请求
+    /// * `request` - Chat completion request
     ///
     /// # Returns
-    /// * `Result<(impl Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin, CancelHandle), AiLibError>` - 成功时返回流式响应和取消句柄
+    /// * `Result<(impl Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin, CancelHandle), AiLibError>` - Returns streaming response and cancel handle on success
     pub async fn chat_completion_stream_with_cancel(
         &self,
         mut request: ChatCompletionRequest,
@@ -228,19 +239,19 @@ impl AiClient {
         let cancel_handle = CancelHandle {
             sender: Some(cancel_tx),
         };
-        
+
         let controlled_stream = ControlledStream::new(stream, cancel_rx);
         Ok((Box::new(controlled_stream), cancel_handle))
     }
 
-    /// 批量聊天完成请求
+    /// Batch chat completion requests
     ///
     /// # Arguments
-    /// * `requests` - 聊天完成请求列表
-    /// * `concurrency_limit` - 最大并发请求数（None表示无限制）
+    /// * `requests` - List of chat completion requests
+    /// * `concurrency_limit` - Maximum concurrent request count (None means unlimited)
     ///
     /// # Returns
-    /// * `Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError>` - 返回所有请求的响应结果
+    /// * `Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError>` - Returns response results for all requests
     ///
     /// # Example
     /// ```rust
@@ -270,7 +281,7 @@ impl AiClient {
     ///         ),
     ///     ];
     ///     
-    ///     // 限制并发数为5
+    ///     // Limit concurrency to 5
     ///     let responses = client.chat_completion_batch(requests, Some(5)).await?;
     ///     
     ///     for (i, response) in responses.iter().enumerate() {
@@ -288,33 +299,36 @@ impl AiClient {
         requests: Vec<ChatCompletionRequest>,
         concurrency_limit: Option<usize>,
     ) -> Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError> {
-        self.adapter.chat_completion_batch(requests, concurrency_limit).await
+        self.adapter
+            .chat_completion_batch(requests, concurrency_limit)
+            .await
     }
 
-    /// 智能批量处理：根据请求数量自动选择处理策略
+    /// Smart batch processing: automatically choose processing strategy based on request count
     ///
     /// # Arguments
-    /// * `requests` - 聊天完成请求列表
+    /// * `requests` - List of chat completion requests
     ///
     /// # Returns
-    /// * `Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError>` - 返回所有请求的响应结果
+    /// * `Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError>` - Returns response results for all requests
     pub async fn chat_completion_batch_smart(
         &self,
         requests: Vec<ChatCompletionRequest>,
     ) -> Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError> {
-        // 小批量使用顺序处理，大批量使用并发处理
+        // Use sequential processing for small batches, concurrent processing for large batches
         let concurrency_limit = if requests.len() <= 3 { None } else { Some(10) };
-        self.chat_completion_batch(requests, concurrency_limit).await
+        self.chat_completion_batch(requests, concurrency_limit)
+            .await
     }
 
-    /// 批量聊天完成请求
+    /// Batch chat completion requests
     ///
     /// # Arguments
-    /// * `requests` - 聊天完成请求列表
-    /// * `concurrency_limit` - 最大并发请求数（None表示无限制）
+    /// * `requests` - List of chat completion requests
+    /// * `concurrency_limit` - Maximum concurrent request count (None means unlimited)
     ///
     /// # Returns
-    /// * `Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError>` - 返回所有请求的响应结果
+    /// * `Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError>` - Returns response results for all requests
     ///
     /// # Example
     /// ```rust
@@ -344,7 +358,7 @@ impl AiClient {
     ///         ),
     ///     ];
     ///     
-    ///     // 限制并发数为5
+    ///     // Limit concurrency to 5
     ///     let responses = client.chat_completion_batch(requests, Some(5)).await?;
     ///     
     ///     for (i, response) in responses.iter().enumerate() {
@@ -356,28 +370,30 @@ impl AiClient {
     ///     
     ///     Ok(())
     /// }
-    /// 获取支持的模型列表
+    /// ```
+    ///
+    /// Get list of supported models
     ///
     /// # Returns
-    /// * `Result<Vec<String>, AiLibError>` - 成功时返回模型列表，失败时返回错误
+    /// * `Result<Vec<String>, AiLibError>` - Returns model list on success, error on failure
     pub async fn list_models(&self) -> Result<Vec<String>, AiLibError> {
         self.adapter.list_models().await
     }
 
-    /// 切换AI模型提供商
+    /// Switch AI model provider
     ///
     /// # Arguments
-    /// * `provider` - 新的提供商
+    /// * `provider` - New provider
     ///
     /// # Returns
-    /// * `Result<(), AiLibError>` - 成功时返回()，失败时返回错误
+    /// * `Result<(), AiLibError>` - Returns () on success, error on failure
     ///
     /// # Example
     /// ```rust
     /// use ai_lib::{AiClient, Provider};
     ///
     /// let mut client = AiClient::new(Provider::Groq)?;
-    /// // 从Groq切换到Groq（演示切换功能）
+    /// // Switch from Groq to Groq (demonstrating switch functionality)
     /// client.switch_provider(Provider::Groq)?;
     /// # Ok::<(), ai_lib::AiLibError>(())
     /// ```
@@ -390,9 +406,15 @@ impl AiClient {
             Provider::Qwen => Box::new(GenericAdapter::new(ProviderConfigs::qwen())?),
             Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
             Provider::Anthropic => Box::new(GenericAdapter::new(ProviderConfigs::anthropic())?),
-            Provider::BaiduWenxin => Box::new(GenericAdapter::new(ProviderConfigs::baidu_wenxin())?),
-            Provider::TencentHunyuan => Box::new(GenericAdapter::new(ProviderConfigs::tencent_hunyuan())?),
-            Provider::IflytekSpark => Box::new(GenericAdapter::new(ProviderConfigs::iflytek_spark())?),
+            Provider::BaiduWenxin => {
+                Box::new(GenericAdapter::new(ProviderConfigs::baidu_wenxin())?)
+            }
+            Provider::TencentHunyuan => {
+                Box::new(GenericAdapter::new(ProviderConfigs::tencent_hunyuan())?)
+            }
+            Provider::IflytekSpark => {
+                Box::new(GenericAdapter::new(ProviderConfigs::iflytek_spark())?)
+            }
             Provider::Moonshot => Box::new(GenericAdapter::new(ProviderConfigs::moonshot())?),
             Provider::Gemini => Box::new(GeminiAdapter::new()?),
             Provider::AzureOpenAI => {
@@ -410,19 +432,19 @@ impl AiClient {
         Ok(())
     }
 
-    /// 获取当前使用的提供商
+    /// Get current provider
     pub fn current_provider(&self) -> Provider {
         self.provider
     }
 }
 
-/// 流式响应取消句柄
+/// Streaming response cancel handle
 pub struct CancelHandle {
     sender: Option<oneshot::Sender<()>>,
 }
 
 impl CancelHandle {
-    /// 取消流式响应
+    /// Cancel streaming response
     pub fn cancel(mut self) {
         if let Some(sender) = self.sender.take() {
             let _ = sender.send(());
@@ -430,7 +452,414 @@ impl CancelHandle {
     }
 }
 
-/// 可控制的流式响应
+/// AI client builder with progressive custom configuration
+///
+/// Usage examples:
+/// ```rust
+/// use ai_lib::{AiClientBuilder, Provider};
+///
+/// // Simplest usage - automatic environment variable detection
+/// let client = AiClientBuilder::new(Provider::Groq).build()?;
+///
+/// // Custom base_url and proxy
+/// let client = AiClientBuilder::new(Provider::Groq)
+///     .with_base_url("https://custom.groq.com")
+///     .with_proxy("http://proxy.example.com:8080")
+///     .build()?;
+///
+/// // Full custom configuration
+/// let client = AiClientBuilder::new(Provider::Groq)
+///     .with_base_url("https://custom.groq.com")
+///     .with_proxy("http://proxy.example.com:8080")
+///     .with_timeout(std::time::Duration::from_secs(60))
+///     .with_pool_config(32, std::time::Duration::from_secs(90))
+///     .build()?;
+/// # Ok::<(), ai_lib::AiLibError>(())
+/// ```
+pub struct AiClientBuilder {
+    provider: Provider,
+    base_url: Option<String>,
+    proxy_url: Option<String>,
+    timeout: Option<std::time::Duration>,
+    pool_max_idle: Option<usize>,
+    pool_idle_timeout: Option<std::time::Duration>,
+    metrics: Option<Arc<dyn Metrics>>,
+}
+
+impl AiClientBuilder {
+    /// Create a new builder instance
+    ///
+    /// # Arguments
+    /// * `provider` - The AI model provider to use
+    ///
+    /// # Returns
+    /// * `Self` - Builder instance
+    pub fn new(provider: Provider) -> Self {
+        Self {
+            provider,
+            base_url: None,
+            proxy_url: None,
+            timeout: None,
+            pool_max_idle: None,
+            pool_idle_timeout: None,
+            metrics: None,
+        }
+    }
+
+    /// Set custom base URL
+    ///
+    /// # Arguments
+    /// * `base_url` - Custom base URL
+    ///
+    /// # Returns
+    /// * `Self` - Builder instance for method chaining
+    pub fn with_base_url(mut self, base_url: &str) -> Self {
+        self.base_url = Some(base_url.to_string());
+        self
+    }
+
+    /// Set custom proxy URL
+    ///
+    /// # Arguments
+    /// * `proxy_url` - Custom proxy URL
+    ///
+    /// # Returns
+    /// * `Self` - Builder instance for method chaining
+    pub fn with_proxy(mut self, proxy_url: &str) -> Self {
+        self.proxy_url = Some(proxy_url.to_string());
+        self
+    }
+
+    /// Set custom timeout duration
+    ///
+    /// # Arguments
+    /// * `timeout` - Custom timeout duration
+    ///
+    /// # Returns
+    /// * `Self` - Builder instance for method chaining
+    pub fn with_timeout(mut self, timeout: std::time::Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    /// Set connection pool configuration
+    ///
+    /// # Arguments
+    /// * `max_idle` - Maximum idle connections per host
+    /// * `idle_timeout` - Idle connection timeout duration
+    ///
+    /// # Returns
+    /// * `Self` - Builder instance for method chaining
+    pub fn with_pool_config(mut self, max_idle: usize, idle_timeout: std::time::Duration) -> Self {
+        self.pool_max_idle = Some(max_idle);
+        self.pool_idle_timeout = Some(idle_timeout);
+        self
+    }
+
+    /// Set custom metrics implementation
+    ///
+    /// # Arguments
+    /// * `metrics` - Custom metrics implementation
+    ///
+    /// # Returns
+    /// * `Self` - Builder instance for method chaining
+    pub fn with_metrics(mut self, metrics: Arc<dyn Metrics>) -> Self {
+        self.metrics = Some(metrics);
+        self
+    }
+
+    /// Build AiClient instance
+    ///
+    /// The build process applies configuration in the following priority order:
+    /// 1. Explicitly set configuration (via with_* methods)
+    /// 2. Environment variable configuration
+    /// 3. Default configuration
+    ///
+    /// # Returns
+    /// * `Result<AiClient, AiLibError>` - Returns client instance on success, error on failure
+    pub fn build(self) -> Result<AiClient, AiLibError> {
+        // 1. Determine base_url: explicit setting > environment variable > default
+        let base_url = self.determine_base_url()?;
+
+        // 2. Determine proxy_url: explicit setting > environment variable
+        let proxy_url = self.determine_proxy_url();
+
+        // 3. Determine timeout: explicit setting > default
+        let timeout = self
+            .timeout
+            .unwrap_or_else(|| std::time::Duration::from_secs(30));
+
+        // 4. Create custom ProviderConfig (if needed)
+        let config = self.create_custom_config(base_url)?;
+
+        // 5. Create custom HttpTransport (if needed)
+        let transport = self.create_custom_transport(proxy_url, timeout)?;
+
+        // 6. Create adapter
+        let adapter: Box<dyn ChatApi> = match self.provider {
+            // Use config-driven generic adapter
+            Provider::Groq => {
+                if let Some(custom_transport) = transport {
+                    Box::new(GenericAdapter::with_transport_ref(
+                        config,
+                        custom_transport,
+                    )?)
+                } else {
+                    Box::new(GenericAdapter::new(config)?)
+                }
+            }
+            Provider::XaiGrok => {
+                if let Some(custom_transport) = transport {
+                    Box::new(GenericAdapter::with_transport_ref(
+                        config,
+                        custom_transport,
+                    )?)
+                } else {
+                    Box::new(GenericAdapter::new(config)?)
+                }
+            }
+            Provider::Ollama => {
+                if let Some(custom_transport) = transport {
+                    Box::new(GenericAdapter::with_transport_ref(
+                        config,
+                        custom_transport,
+                    )?)
+                } else {
+                    Box::new(GenericAdapter::new(config)?)
+                }
+            }
+            Provider::DeepSeek => {
+                if let Some(custom_transport) = transport {
+                    Box::new(GenericAdapter::with_transport_ref(
+                        config,
+                        custom_transport,
+                    )?)
+                } else {
+                    Box::new(GenericAdapter::new(config)?)
+                }
+            }
+            Provider::Qwen => {
+                if let Some(custom_transport) = transport {
+                    Box::new(GenericAdapter::with_transport_ref(
+                        config,
+                        custom_transport,
+                    )?)
+                } else {
+                    Box::new(GenericAdapter::new(config)?)
+                }
+            }
+            Provider::BaiduWenxin => {
+                if let Some(custom_transport) = transport {
+                    Box::new(GenericAdapter::with_transport_ref(
+                        config,
+                        custom_transport,
+                    )?)
+                } else {
+                    Box::new(GenericAdapter::new(config)?)
+                }
+            }
+            Provider::TencentHunyuan => {
+                if let Some(custom_transport) = transport {
+                    Box::new(GenericAdapter::with_transport_ref(
+                        config,
+                        custom_transport,
+                    )?)
+                } else {
+                    Box::new(GenericAdapter::new(config)?)
+                }
+            }
+            Provider::IflytekSpark => {
+                if let Some(custom_transport) = transport {
+                    Box::new(GenericAdapter::with_transport_ref(
+                        config,
+                        custom_transport,
+                    )?)
+                } else {
+                    Box::new(GenericAdapter::new(config)?)
+                }
+            }
+            Provider::Moonshot => {
+                if let Some(custom_transport) = transport {
+                    Box::new(GenericAdapter::with_transport_ref(
+                        config,
+                        custom_transport,
+                    )?)
+                } else {
+                    Box::new(GenericAdapter::new(config)?)
+                }
+            }
+            Provider::Anthropic => {
+                if let Some(custom_transport) = transport {
+                    Box::new(GenericAdapter::with_transport_ref(
+                        config,
+                        custom_transport,
+                    )?)
+                } else {
+                    Box::new(GenericAdapter::new(config)?)
+                }
+            }
+            Provider::AzureOpenAI => {
+                if let Some(custom_transport) = transport {
+                    Box::new(GenericAdapter::with_transport_ref(
+                        config,
+                        custom_transport,
+                    )?)
+                } else {
+                    Box::new(GenericAdapter::new(config)?)
+                }
+            }
+            Provider::HuggingFace => {
+                if let Some(custom_transport) = transport {
+                    Box::new(GenericAdapter::with_transport_ref(
+                        config,
+                        custom_transport,
+                    )?)
+                } else {
+                    Box::new(GenericAdapter::new(config)?)
+                }
+            }
+            Provider::TogetherAI => {
+                if let Some(custom_transport) = transport {
+                    Box::new(GenericAdapter::with_transport_ref(
+                        config,
+                        custom_transport,
+                    )?)
+                } else {
+                    Box::new(GenericAdapter::new(config)?)
+                }
+            }
+            // Use independent adapters (these don't support custom configuration)
+            Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
+            Provider::Gemini => Box::new(GeminiAdapter::new()?),
+            Provider::Mistral => Box::new(MistralAdapter::new()?),
+            Provider::Cohere => Box::new(CohereAdapter::new()?),
+        };
+
+        // 7. Create AiClient
+        let client = AiClient {
+            provider: self.provider,
+            adapter,
+            metrics: self.metrics.unwrap_or_else(|| Arc::new(NoopMetrics::new())),
+        };
+
+        Ok(client)
+    }
+
+    /// Determine base_url, priority: explicit setting > environment variable > default
+    fn determine_base_url(&self) -> Result<String, AiLibError> {
+        // 1. Explicitly set base_url
+        if let Some(ref base_url) = self.base_url {
+            return Ok(base_url.clone());
+        }
+
+        // 2. base_url from environment variable
+        let env_var_name = self.get_base_url_env_var_name();
+        if let Ok(base_url) = std::env::var(&env_var_name) {
+            return Ok(base_url);
+        }
+
+        // 3. Use default configuration
+        let default_config = self.get_default_provider_config()?;
+        Ok(default_config.base_url)
+    }
+
+    /// Determine proxy_url, priority: explicit setting > environment variable
+    fn determine_proxy_url(&self) -> Option<String> {
+        // 1. Explicitly set proxy_url
+        if let Some(ref proxy_url) = self.proxy_url {
+            return Some(proxy_url.clone());
+        }
+
+        // 2. AI_PROXY_URL from environment variable
+        std::env::var("AI_PROXY_URL").ok()
+    }
+
+    /// Get environment variable name for corresponding provider
+    fn get_base_url_env_var_name(&self) -> String {
+        match self.provider {
+            Provider::Groq => "GROQ_BASE_URL".to_string(),
+            Provider::XaiGrok => "GROK_BASE_URL".to_string(),
+            Provider::Ollama => "OLLAMA_BASE_URL".to_string(),
+            Provider::DeepSeek => "DEEPSEEK_BASE_URL".to_string(),
+            Provider::Qwen => "DASHSCOPE_BASE_URL".to_string(),
+            Provider::BaiduWenxin => "BAIDU_WENXIN_BASE_URL".to_string(),
+            Provider::TencentHunyuan => "TENCENT_HUNYUAN_BASE_URL".to_string(),
+            Provider::IflytekSpark => "IFLYTEK_BASE_URL".to_string(),
+            Provider::Moonshot => "MOONSHOT_BASE_URL".to_string(),
+            Provider::Anthropic => "ANTHROPIC_BASE_URL".to_string(),
+            Provider::AzureOpenAI => "AZURE_OPENAI_BASE_URL".to_string(),
+            Provider::HuggingFace => "HUGGINGFACE_BASE_URL".to_string(),
+            Provider::TogetherAI => "TOGETHER_BASE_URL".to_string(),
+            // These providers don't support custom base_url
+            Provider::OpenAI | Provider::Gemini | Provider::Mistral | Provider::Cohere => {
+                "".to_string()
+            }
+        }
+    }
+
+    /// Get default provider configuration
+    fn get_default_provider_config(
+        &self,
+    ) -> Result<crate::provider::config::ProviderConfig, AiLibError> {
+        match self.provider {
+            Provider::Groq => Ok(ProviderConfigs::groq()),
+            Provider::XaiGrok => Ok(ProviderConfigs::xai_grok()),
+            Provider::Ollama => Ok(ProviderConfigs::ollama()),
+            Provider::DeepSeek => Ok(ProviderConfigs::deepseek()),
+            Provider::Qwen => Ok(ProviderConfigs::qwen()),
+            Provider::BaiduWenxin => Ok(ProviderConfigs::baidu_wenxin()),
+            Provider::TencentHunyuan => Ok(ProviderConfigs::tencent_hunyuan()),
+            Provider::IflytekSpark => Ok(ProviderConfigs::iflytek_spark()),
+            Provider::Moonshot => Ok(ProviderConfigs::moonshot()),
+            Provider::Anthropic => Ok(ProviderConfigs::anthropic()),
+            Provider::AzureOpenAI => Ok(ProviderConfigs::azure_openai()),
+            Provider::HuggingFace => Ok(ProviderConfigs::huggingface()),
+            Provider::TogetherAI => Ok(ProviderConfigs::together_ai()),
+            // These providers don't support custom configuration
+            Provider::OpenAI | Provider::Gemini | Provider::Mistral | Provider::Cohere => {
+                Err(AiLibError::ConfigurationError(
+                    "This provider does not support custom configuration".to_string(),
+                ))
+            }
+        }
+    }
+
+    /// Create custom ProviderConfig
+    fn create_custom_config(
+        &self,
+        base_url: String,
+    ) -> Result<crate::provider::config::ProviderConfig, AiLibError> {
+        let mut config = self.get_default_provider_config()?;
+        config.base_url = base_url;
+        Ok(config)
+    }
+
+    /// Create custom HttpTransport
+    fn create_custom_transport(
+        &self,
+        proxy_url: Option<String>,
+        timeout: std::time::Duration,
+    ) -> Result<Option<crate::transport::DynHttpTransportRef>, AiLibError> {
+        // If no custom configuration, return None (use default transport)
+        if proxy_url.is_none() && self.pool_max_idle.is_none() && self.pool_idle_timeout.is_none() {
+            return Ok(None);
+        }
+
+        // Create custom HttpTransportConfig
+        let transport_config = crate::transport::HttpTransportConfig {
+            timeout,
+            proxy: proxy_url,
+            pool_max_idle_per_host: self.pool_max_idle,
+            pool_idle_timeout: self.pool_idle_timeout,
+        };
+
+        // Create custom HttpTransport
+        let transport = crate::transport::HttpTransport::new_with_config(transport_config)?;
+        Ok(Some(transport.boxed()))
+    }
+}
+
+/// Controllable streaming response
 struct ControlledStream {
     inner: Box<dyn Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin>,
     cancel_rx: Option<oneshot::Receiver<()>>,
@@ -458,7 +887,7 @@ impl Stream for ControlledStream {
         use futures::stream::StreamExt;
         use std::task::Poll;
 
-        // 检查是否被取消
+        // Check if cancelled
         if let Some(ref mut cancel_rx) = self.cancel_rx {
             match Future::poll(std::pin::Pin::new(cancel_rx), cx) {
                 Poll::Ready(_) => {
@@ -471,7 +900,7 @@ impl Stream for ControlledStream {
             }
         }
 
-        // 轮询内部流
+        // Poll inner stream
         self.inner.poll_next_unpin(cx)
     }
 }

@@ -1,71 +1,75 @@
+/// 网络连接诊断示例 - Network connection diagnosis example
 use ai_lib::{AiClient, Provider};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🔧 网络连接诊断");
-    println!("================");
+    println!("🔧 Network Connection Diagnosis");
+    println!("===============================");
 
-    // 检查代理设置
+    // Check proxy settings
     match std::env::var("AI_PROXY_URL") {
         Ok(proxy_url) => {
-            println!("🌐 当前代理设置: {}", proxy_url);
+            println!("🌐 Current proxy setting: {}", proxy_url);
         }
         Err(_) => {
-            println!("ℹ️  未设置代理");
+            println!("ℹ️  No proxy set");
         }
     }
 
-    // 检查API密钥
+    // Check API keys
     let providers = vec![
         ("GROQ_API_KEY", Provider::Groq, "Groq"),
         ("OPENAI_API_KEY", Provider::OpenAI, "OpenAI"),
         ("DEEPSEEK_API_KEY", Provider::DeepSeek, "DeepSeek"),
     ];
 
-    println!("\n🔑 API密钥检查:");
+    println!("\n🔑 API Key Check:");
     for (env_var, provider, name) in &providers {
         match std::env::var(env_var) {
             Ok(_) => {
-                println!("   ✅ {}: 已设置", name);
+                println!("   ✅ {}: Set", name);
 
-                // 测试客户端创建
+                // Test client creation
                 match AiClient::new(*provider) {
-                    Ok(_) => println!("      ✅ 客户端创建成功"),
-                    Err(e) => println!("      ❌ 客户端创建失败: {}", e),
+                    Ok(_) => println!("      ✅ Client creation successful"),
+                    Err(e) => println!("      ❌ Client creation failed: {}", e),
                 }
             }
             Err(_) => {
-                println!("   ❌ {}: 未设置", name);
+                println!("   ❌ {}: Not set", name);
             }
         }
     }
 
-    // 测试基本网络连接
-    println!("\n🌐 网络连接测试:");
+    // Test basic network connection
+    println!("\n🌐 Network Connection Test:");
 
-    // 使用reqwest直接测试
+    // Use reqwest directly for testing
     let client = reqwest::Client::new();
 
-    // 测试DeepSeek (国内)
-    println!("   测试DeepSeek连接...");
+    // Test DeepSeek (domestic)
+    println!("   Testing DeepSeek connection...");
     match client
         .get("https://api.deepseek.com/v1/models")
         .send()
         .await
     {
         Ok(response) => {
-            println!("      ✅ DeepSeek连接成功 (状态: {})", response.status());
+            println!(
+                "      ✅ DeepSeek connection successful (status: {})",
+                response.status()
+            );
         }
         Err(e) => {
-            println!("      ❌ DeepSeek连接失败: {}", e);
+            println!("      ❌ DeepSeek connection failed: {}", e);
         }
     }
 
-    println!("\n💡 诊断建议:");
-    println!("   1. 确保网络连接正常");
-    println!("   2. 检查防火墙设置");
-    println!("   3. 验证代理服务器配置");
-    println!("   4. 确认API密钥有效性");
+    println!("\n💡 Diagnosis Suggestions:");
+    println!("   1. Ensure network connection is normal");
+    println!("   2. Check firewall settings");
+    println!("   3. Verify proxy server configuration");
+    println!("   4. Confirm API key validity");
 
     Ok(())
 }
