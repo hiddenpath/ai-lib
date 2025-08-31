@@ -12,3 +12,6 @@ git_status.txt
 .vscode/
 .idea/
 
+# Local development examples (not for git)
+aitest/
+

@@ -54,13 +54,13 @@ let client = AiClientBuilder::new(Provider::Groq)
 // Level 3: Add proxy support
 let client = AiClientBuilder::new(Provider::Groq)
     .with_base_url("https://custom.groq.com")
-    .with_proxy("http://proxy.example.com:8080")
+    .with_proxy(Some("http://proxy.example.com:8080"))
     .build()?;
 
 // Level 4: Advanced configuration
 let client = AiClientBuilder::new(Provider::Groq)
     .with_base_url("https://custom.groq.com")
-    .with_proxy("http://proxy.example.com:8080")
+    .with_proxy(Some("http://proxy.example.com:8080"))
     .with_timeout(Duration::from_secs(60))
     .with_pool_config(32, Duration::from_secs(90))
     .build()?;
@@ -86,6 +86,29 @@ while let Some(item) = stream.next().await {
 - **Smart error classification** (retryable vs. permanent)
 - **Proxy support** with authentication
 - **Timeout management** and graceful degradation
+
+### 🌐 **Flexible Proxy Configuration**
+The library provides flexible proxy configuration options to avoid automatic environment variable reading:
+
+```rust
+// Default: No proxy, no environment variable reading
+let client = AiClientBuilder::new(Provider::Groq).build()?;
+
+// Explicitly disable proxy
+let client = AiClientBuilder::new(Provider::Groq)
+    .without_proxy()
+    .build()?;
+
+// Use specific proxy URL
+let client = AiClientBuilder::new(Provider::Groq)
+    .with_proxy(Some("http://proxy.example.com:8080"))
+    .build()?;
+
+// Use AI_PROXY_URL environment variable
+let client = AiClientBuilder::new(Provider::Groq)
+    .with_proxy(None)
+    .build()?;
+```
 
 ```rust
 match client.chat_completion(request).await {

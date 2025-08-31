@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = AiClientBuilder::new(Provider::Groq)
         .with_base_url("https://custom.groq.com")
-        .with_proxy("http://proxy.example.com:8080")
+        .with_proxy(Some("http://proxy.example.com:8080"))
         .build()?;
     println!("✅ Client created successfully with custom base_url and proxy");
 
@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = AiClientBuilder::new(Provider::Groq)
         .with_base_url("https://custom.groq.com")
-        .with_proxy("http://proxy.example.com:8080")
+        .with_proxy(Some("http://proxy.example.com:8080"))
         .with_timeout(Duration::from_secs(60))
         .with_pool_config(32, Duration::from_secs(90))
         .build()?;
@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = AiClient::builder(Provider::Groq)
         .with_base_url("https://custom.groq.com")
-        .with_proxy("http://proxy.example.com:8080")
+        .with_proxy(Some("http://proxy.example.com:8080"))
         .build()?;
     println!("✅ Client created successfully using convenient builder method");
 
@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Explicit settings override environment variables
     let client = AiClientBuilder::new(Provider::Groq)
         .with_base_url("https://explicit.groq.com")
-        .with_proxy("http://explicit.proxy.com:8080")
+        .with_proxy(Some("http://explicit.proxy.com:8080"))
         .build()?;
     println!(
         "✅ Client created successfully, explicit configuration overrides environment variables"
@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // DeepSeek
     let deepseek_client = AiClientBuilder::new(Provider::DeepSeek)
         .with_base_url("https://custom.deepseek.com")
-        .with_proxy("http://proxy.example.com:8080")
+        .with_proxy(Some("http://proxy.example.com:8080"))
         .build()?;
     println!("✅ DeepSeek client created successfully");
 

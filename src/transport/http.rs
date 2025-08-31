@@ -105,15 +105,28 @@ impl HttpTransport {
     /// Create new HTTP transport instance
     ///
     /// Automatically detects AI_PROXY_URL environment variable for proxy configuration
+    /// 
+    /// Note: This method will always check for AI_PROXY_URL environment variable.
+    /// If you want to avoid automatic proxy detection, use `new_without_proxy()` instead.
     pub fn new() -> Self {
         Self::with_timeout(Duration::from_secs(30))
+    }
+
+    /// Create new HTTP transport instance without automatic proxy detection
+    ///
+    /// This method creates a transport instance without checking AI_PROXY_URL environment variable.
+    /// Use this when you want explicit control over proxy configuration.
+    pub fn new_without_proxy() -> Self {
+        Self::with_timeout_without_proxy(Duration::from_secs(30))
     }
 
     /// Create HTTP transport instance with timeout
     ///
     /// Automatically detects AI_PROXY_URL environment variable for proxy configuration
     pub fn with_timeout(timeout: Duration) -> Self {
-        let mut client_builder = Client::builder().timeout(timeout);
+        let mut client_builder = Client::builder()
+            .timeout(timeout)
+            .http1_only();
 
         // Check proxy configuration
         if let Ok(proxy_url) = env::var("AI_PROXY_URL") {
@@ -127,6 +140,21 @@ impl HttpTransport {
             }
         }
 
+        let client = client_builder
+            .build()
+            .expect("Failed to create HTTP client");
+
+        Self { client, timeout }
+    }
+
+    /// Create HTTP transport instance with timeout without automatic proxy detection
+    ///
+    /// This method creates a transport instance with timeout but without checking AI_PROXY_URL environment variable.
+    pub fn with_timeout_without_proxy(timeout: Duration) -> Self {
+        let client_builder = Client::builder()
+            .timeout(timeout)
+            .http1_only();
+        
         let client = client_builder
             .build()
             .expect("Failed to create HTTP client");
@@ -367,12 +395,12 @@ impl DynHttpTransport for HttpTransportBoxed {
     fn post_json<'a>(
         &'a self,
         url: &'a str,
-        _headers: Option<HashMap<String, String>>,
+        headers: Option<HashMap<String, String>>,
         body: serde_json::Value,
     ) -> futures::future::BoxFuture<'a, Result<serde_json::Value, crate::types::AiLibError>> {
         Box::pin(async move {
             let res: Result<serde_json::Value, TransportError> =
-                self.inner.post(url, None, &body).await;
+                self.inner.post(url, headers, &body).await;
             match res {
                 Ok(v) => Ok(v),
                 Err(e) => Err(crate::types::AiLibError::ProviderError(format!(

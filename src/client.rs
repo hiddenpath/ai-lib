@@ -130,7 +130,7 @@ impl AiClient {
     /// // Custom base_url and proxy
     /// let client = AiClient::builder(Provider::Groq)
     ///     .with_base_url("https://custom.groq.com")
-    ///     .with_proxy("http://proxy.example.com:8080")
+    ///     .with_proxy(Some("http://proxy.example.com:8080"))
     ///     .build()?;
     /// # Ok::<(), ai_lib::AiLibError>(())
     /// ```
@@ -464,13 +464,13 @@ impl CancelHandle {
 /// // Custom base_url and proxy
 /// let client = AiClientBuilder::new(Provider::Groq)
 ///     .with_base_url("https://custom.groq.com")
-///     .with_proxy("http://proxy.example.com:8080")
+///     .with_proxy(Some("http://proxy.example.com:8080"))
 ///     .build()?;
 ///
 /// // Full custom configuration
 /// let client = AiClientBuilder::new(Provider::Groq)
 ///     .with_base_url("https://custom.groq.com")
-///     .with_proxy("http://proxy.example.com:8080")
+///     .with_proxy(Some("http://proxy.example.com:8080"))
 ///     .with_timeout(std::time::Duration::from_secs(60))
 ///     .with_pool_config(32, std::time::Duration::from_secs(90))
 ///     .build()?;
@@ -521,12 +521,48 @@ impl AiClientBuilder {
     /// Set custom proxy URL
     ///
     /// # Arguments
-    /// * `proxy_url` - Custom proxy URL
+    /// * `proxy_url` - Custom proxy URL, or None to use AI_PROXY_URL environment variable
     ///
     /// # Returns
     /// * `Self` - Builder instance for method chaining
-    pub fn with_proxy(mut self, proxy_url: &str) -> Self {
-        self.proxy_url = Some(proxy_url.to_string());
+    ///
+    /// # Examples
+    /// ```rust
+    /// use ai_lib::{AiClientBuilder, Provider};
+    ///
+    /// // Use specific proxy URL
+    /// let client = AiClientBuilder::new(Provider::Groq)
+    ///     .with_proxy(Some("http://proxy.example.com:8080"))
+    ///     .build()?;
+    ///
+    /// // Use AI_PROXY_URL environment variable
+    /// let client = AiClientBuilder::new(Provider::Groq)
+    ///     .with_proxy(None)
+    ///     .build()?;
+    /// # Ok::<(), ai_lib::AiLibError>(())
+    /// ```
+    pub fn with_proxy(mut self, proxy_url: Option<&str>) -> Self {
+        self.proxy_url = proxy_url.map(|s| s.to_string());
+        self
+    }
+
+    /// Explicitly disable proxy usage
+    ///
+    /// This method ensures that no proxy will be used, regardless of environment variables.
+    ///
+    /// # Returns
+    /// * `Self` - Builder instance for method chaining
+    ///
+    /// # Example
+    /// ```rust
+    /// use ai_lib::{AiClientBuilder, Provider};
+    ///
+    /// let client = AiClientBuilder::new(Provider::Groq)
+    ///     .build()?;
+    /// # Ok::<(), ai_lib::AiLibError>(())
+    /// ```
+    pub fn without_proxy(mut self) -> Self {
+        self.proxy_url = Some("".to_string());
         self
     }
 
@@ -593,7 +629,9 @@ impl AiClientBuilder {
         let config = self.create_custom_config(base_url)?;
 
         // 5. Create custom HttpTransport (if needed)
-        let transport = self.create_custom_transport(proxy_url, timeout)?;
+        let transport = self.create_custom_transport(proxy_url.clone(), timeout)?;
+        
+
 
         // 6. Create adapter
         let adapter: Box<dyn ChatApi> = match self.provider {
@@ -767,6 +805,10 @@ impl AiClientBuilder {
     fn determine_proxy_url(&self) -> Option<String> {
         // 1. Explicitly set proxy_url
         if let Some(ref proxy_url) = self.proxy_url {
+            // If proxy_url is empty string, it means explicitly no proxy
+            if proxy_url.is_empty() {
+                return None;
+            }
             return Some(proxy_url.clone());
         }
 

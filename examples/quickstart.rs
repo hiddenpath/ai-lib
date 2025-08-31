@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📋 Custom configuration:");
     let client = AiClientBuilder::new(Provider::Groq)
         .with_base_url("https://custom.groq.com") // Optional: custom server
-        .with_proxy("http://proxy.example.com:8080") // Optional: custom proxy
+        .with_proxy(Some("http://proxy.example.com:8080")) // Optional: custom proxy
         .build()?;
     println!("✅ Custom client created successfully!");
 

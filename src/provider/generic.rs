@@ -29,7 +29,7 @@ impl GenericAdapter {
         let api_key = env::var(&config.api_key_env).ok();
 
         Ok(Self {
-            transport: HttpTransport::new().boxed(),
+            transport: HttpTransport::new_without_proxy().boxed(),
             config,
             api_key,
             metrics: Arc::new(NoopMetrics::new()),
@@ -438,33 +438,15 @@ impl ChatApi for GenericAdapter {
             }
         }
 
-        let response = match self
+        let response = self
             .transport
-            .post_json(&url, Some(headers), provider_request)
-            .await
-        {
-            Ok(v) => {
-                if let Some(t) = timer {
-                    t.stop();
-                    // record that we stopped the timer in case test-inspection needs a metric
-                    let _ = self
-                        .metrics
-                        .incr_counter("generic.request_timer_recorded", 1)
-                        .await;
-                }
-                v
-            }
-            Err(e) => {
-                if let Some(t) = timer {
-                    t.stop();
-                    let _ = self
-                        .metrics
-                        .incr_counter("generic.request_timer_recorded", 1)
-                        .await;
-                }
-                return Err(e);
-            }
-        };
+            .post_json(&url, Some(headers.clone()), provider_request.clone())
+            .await?;
+
+        // Stop timer and record success
+        if let Some(t) = timer {
+            t.stop();
+        }
 
         self.parse_response(response)
     }
