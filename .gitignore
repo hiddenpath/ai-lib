@@ -18,3 +18,14 @@ aitest/
 # Release checklists (local only, not for GitHub)
 RELEASE_CHECKLIST_*.md
 
+# Docs watch baseline snapshot (created automatically by workflow)
+data/api_doc_snapshots.json
+
+# Docs watch output (temporary)
+changes_out.json
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
