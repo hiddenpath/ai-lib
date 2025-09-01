@@ -1,31 +1,63 @@
+## Rust build output
 /target
 
-# Local logs and temporary files
+## Local logs and temporary files
 *.log
 build_log.txt
 test_log.txt
 git_branch.txt
 git_diff.txt
 git_status.txt
+logs/
+tmp/
+*.tmp
+*.swp
+*.swo
 
-# Editor/IDE
+## OS noise
+.DS_Store
+Thumbs.db
+
+## Editor/IDE
 .vscode/
 .idea/
+*.iml
 
-# Local development examples (not for git)
+## Local development examples (not for git)
 aitest/
 
-# Release checklists (local only, not for GitHub)
+## Release checklists (local only, not for GitHub)
 RELEASE_CHECKLIST_*.md
 
-# Docs watch baseline snapshot (created automatically by workflow)
+## Docs watch artifacts
 data/api_doc_snapshots.json
-
-# Docs watch output (temporary)
 changes_out.json
 
-# Python cache files
+## Python cache / venv / tooling
 __pycache__/
 *.py[cod]
 *$py.class
+.mypy_cache/
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
+.venv/
+venv/
+.env
+.env.*
+Pipfile
+Pipfile.lock
+poetry.lock
+*.egg-info/
+
+## Node / Frontend (future tooling safeguard)
+node_modules/
+dist/
+build/
+
+## Misc
+*.bak
+*.orig
+*.rej
 
