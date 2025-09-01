@@ -3,6 +3,7 @@
 """
 每日抓取各大 AI Provider API 文档，检测变更并输出 changes_out.json
 首次运行仅建立 baseline，不创建 Issue。
+
 改进：
 - OpenAI 使用官方 openapi.yaml，避免网页 403。
 - 增强请求头，增加备用浏览器 UA。
@@ -17,6 +18,7 @@ import datetime
 import difflib
 from pathlib import Path
 from typing import Optional
+
 import requests
 from bs4 import BeautifulSoup
 
@@ -89,8 +91,11 @@ def fetch_page(url: str) -> str:
             time.sleep(RETRY_SLEEP)
     raise RuntimeError(f"Failed to fetch {url}: {last_exc}")
 
+
 def compute_hash(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
 def load_snapshots():
     if SNAPSHOT_PATH.exists():
         try:
@@ -99,9 +104,11 @@ def load_snapshots():
             return {}
     return {}
 
+
 def save_snapshots(data):
     SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
     SNAPSHOT_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
 
 def unified_diff(old: str, new: str) -> str:
     diff_lines = list(
@@ -118,6 +125,7 @@ def unified_diff(old: str, new: str) -> str:
         truncated.append(f"...(diff truncated, total {len(diff_lines)} lines)")
         return "\n".join(truncated)
     return "\n".join(diff_lines)
+
 
 def main():
     now_iso = datetime.datetime.utcnow().isoformat() + "Z"
