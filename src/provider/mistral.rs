@@ -38,6 +38,23 @@ impl MistralAdapter {
         })
     }
 
+    /// Explicit API key / base_url overrides.
+    pub fn new_with_overrides(
+        api_key: Option<String>,
+        base_url: Option<String>,
+    ) -> Result<Self, AiLibError> {
+        let boxed = HttpTransport::new().boxed();
+        Ok(Self {
+            transport: boxed,
+            api_key,
+            base_url: base_url.unwrap_or_else(|| {
+                std::env::var("MISTRAL_BASE_URL")
+                    .unwrap_or_else(|_| "https://api.mistral.ai".to_string())
+            }),
+            metrics: Arc::new(NoopMetrics::new()),
+        })
+    }
+
     /// Construct using an injected object-safe transport reference (for testing/SDKs)
     pub fn with_transport(
         transport: DynHttpTransportRef,

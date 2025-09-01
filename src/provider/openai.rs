@@ -35,6 +35,19 @@ impl OpenAiAdapter {
         })
     }
 
+    /// Explicit API key override (takes precedence over env var) + optional base_url override.
+    pub fn new_with_overrides(
+        api_key: String,
+        base_url: Option<String>,
+    ) -> Result<Self, AiLibError> {
+        Ok(Self {
+            transport: HttpTransport::new().boxed(),
+            api_key,
+            base_url: base_url.unwrap_or_else(|| "https://api.openai.com/v1".to_string()),
+            metrics: Arc::new(NoopMetrics::new()),
+        })
+    }
+
     /// Construct with an injected object-safe transport reference
     pub fn with_transport_ref(
         transport: DynHttpTransportRef,

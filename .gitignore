@@ -15,3 +15,6 @@ git_status.txt
 # Local development examples (not for git)
 aitest/
 
+# Release checklists (local only, not for GitHub)
+RELEASE_CHECKLIST_*.md
+

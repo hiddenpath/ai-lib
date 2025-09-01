@@ -41,6 +41,20 @@ impl GeminiAdapter {
         })
     }
 
+    /// Explicit overrides for api_key and optional base_url (takes precedence over env vars)
+    pub fn new_with_overrides(
+        api_key: String,
+        base_url: Option<String>,
+    ) -> Result<Self, AiLibError> {
+        Ok(Self {
+            transport: HttpTransport::new().boxed(),
+            api_key,
+            base_url: base_url
+                .unwrap_or_else(|| "https://generativelanguage.googleapis.com/v1beta".to_string()),
+            metrics: Arc::new(NoopMetrics::new()),
+        })
+    }
+
     /// Construct using object-safe transport reference
     pub fn with_transport_ref(
         transport: DynHttpTransportRef,

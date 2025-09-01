@@ -142,6 +142,22 @@ impl CohereAdapter {
         })
     }
 
+    /// Explicit overrides for api_key and optional base_url (takes precedence over env vars)
+    pub fn new_with_overrides(
+        api_key: String,
+        base_url: Option<String>,
+    ) -> Result<Self, AiLibError> {
+        let resolved_base = base_url.unwrap_or_else(|| {
+            std::env::var("COHERE_BASE_URL").unwrap_or_else(|_| "https://api.cohere.ai".to_string())
+        });
+        Ok(Self {
+            transport: HttpTransport::new().boxed(),
+            api_key,
+            base_url: resolved_base,
+            metrics: Arc::new(NoopMetrics::new()),
+        })
+    }
+
     /// Create adapter with injectable transport (for testing)
     pub fn with_transport(transport: HttpTransport, api_key: String, base_url: String) -> Self {
         Self {

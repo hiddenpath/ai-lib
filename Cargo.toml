@@ -1,6 +1,6 @@
 [package]
 name = "ai-lib"
-version = "0.2.11"
+version = "0.2.12"
 edition = "2021"
 authors = ["AI-lib Contributors"]
 description = "A unified AI SDK for Rust providing a single interface for multiple AI providers with hybrid architecture"
@@ -39,4 +39,4 @@ chrono = "0.4"
 backoff = { version = "0.4", features = ["tokio"] }
 bytes = "1.4"
 base64 = "0.22.1"
-httpmock = "0.6.8"
+httpmock = "0.7.0"

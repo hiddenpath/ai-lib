@@ -48,11 +48,12 @@
 
 pub mod api;
 pub mod client;
+pub mod config;
 pub mod metrics;
 pub mod provider;
 pub mod transport;
 pub mod types;
-pub mod utils;
+pub mod utils; // minimal explicit configuration entrypoint
 
 // Re-export main types for user convenience
 pub use api::ChatApi;
@@ -68,6 +69,8 @@ pub use metrics::{Metrics, MetricsExt, NoopMetrics, NoopTimer, Timer};
 pub use transport::{
     DynHttpTransport, DynHttpTransportRef, HttpClient, HttpTransport, TransportError,
 };
+// Re-export minimal configuration type
+pub use config::ConnectionOptions;
 pub use types::common::Content;
 
 // Re-export configuration types

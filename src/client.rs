@@ -1,4 +1,5 @@
 use crate::api::{ChatApi, ChatCompletionChunk};
+use crate::config::ConnectionOptions;
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::provider::{
     CohereAdapter, GeminiAdapter, GenericAdapter, MistralAdapter, OpenAiAdapter, ProviderConfigs,
@@ -84,6 +85,7 @@ pub struct AiClient {
     provider: Provider,
     adapter: Box<dyn ChatApi>,
     metrics: Arc<dyn Metrics>,
+    connection_options: Option<ConnectionOptions>,
 }
 
 impl AiClient {
@@ -104,7 +106,245 @@ impl AiClient {
     /// ```
     pub fn new(provider: Provider) -> Result<Self, AiLibError> {
         // Use the new builder to create client with automatic environment variable detection
-        AiClientBuilder::new(provider).build()
+        let mut c = AiClientBuilder::new(provider).build()?;
+        c.connection_options = None;
+        Ok(c)
+    }
+
+    /// Create client with minimal explicit options (base_url/proxy/timeout). Not all providers
+    /// support overrides; unsupported providers ignore unspecified fields gracefully.
+    pub fn with_options(provider: Provider, opts: ConnectionOptions) -> Result<Self, AiLibError> {
+        let config_driven = matches!(
+            provider,
+            Provider::Groq
+                | Provider::XaiGrok
+                | Provider::Ollama
+                | Provider::DeepSeek
+                | Provider::Qwen
+                | Provider::BaiduWenxin
+                | Provider::TencentHunyuan
+                | Provider::IflytekSpark
+                | Provider::Moonshot
+                | Provider::Anthropic
+                | Provider::AzureOpenAI
+                | Provider::HuggingFace
+                | Provider::TogetherAI
+        );
+        let need_builder = config_driven
+            && (opts.base_url.is_some()
+                || opts.proxy.is_some()
+                || opts.timeout.is_some()
+                || opts.disable_proxy);
+        if need_builder {
+            let mut b = AiClient::builder(provider);
+            if let Some(ref base) = opts.base_url {
+                b = b.with_base_url(base);
+            }
+            if opts.disable_proxy {
+                b = b.without_proxy();
+            } else if let Some(ref proxy) = opts.proxy {
+                if proxy.is_empty() {
+                    b = b.without_proxy();
+                } else {
+                    b = b.with_proxy(Some(proxy));
+                }
+            }
+            if let Some(t) = opts.timeout {
+                b = b.with_timeout(t);
+            }
+            let mut client = b.build()?;
+            // If api_key override + generic provider path: re-wrap adapter using override
+            if opts.api_key.is_some() {
+                // Only applies to config-driven generic adapter providers
+                let new_adapter: Option<Box<dyn ChatApi>> = match provider {
+                    Provider::Groq => Some(Box::new(GenericAdapter::new_with_api_key(
+                        ProviderConfigs::groq(),
+                        opts.api_key.clone(),
+                    )?)),
+                    Provider::XaiGrok => Some(Box::new(GenericAdapter::new_with_api_key(
+                        ProviderConfigs::xai_grok(),
+                        opts.api_key.clone(),
+                    )?)),
+                    Provider::Ollama => Some(Box::new(GenericAdapter::new_with_api_key(
+                        ProviderConfigs::ollama(),
+                        opts.api_key.clone(),
+                    )?)),
+                    Provider::DeepSeek => Some(Box::new(GenericAdapter::new_with_api_key(
+                        ProviderConfigs::deepseek(),
+                        opts.api_key.clone(),
+                    )?)),
+                    Provider::Qwen => Some(Box::new(GenericAdapter::new_with_api_key(
+                        ProviderConfigs::qwen(),
+                        opts.api_key.clone(),
+                    )?)),
+                    Provider::BaiduWenxin => Some(Box::new(GenericAdapter::new_with_api_key(
+                        ProviderConfigs::baidu_wenxin(),
+                        opts.api_key.clone(),
+                    )?)),
+                    Provider::TencentHunyuan => Some(Box::new(GenericAdapter::new_with_api_key(
+                        ProviderConfigs::tencent_hunyuan(),
+                        opts.api_key.clone(),
+                    )?)),
+                    Provider::IflytekSpark => Some(Box::new(GenericAdapter::new_with_api_key(
+                        ProviderConfigs::iflytek_spark(),
+                        opts.api_key.clone(),
+                    )?)),
+                    Provider::Moonshot => Some(Box::new(GenericAdapter::new_with_api_key(
+                        ProviderConfigs::moonshot(),
+                        opts.api_key.clone(),
+                    )?)),
+                    Provider::Anthropic => Some(Box::new(GenericAdapter::new_with_api_key(
+                        ProviderConfigs::anthropic(),
+                        opts.api_key.clone(),
+                    )?)),
+                    Provider::AzureOpenAI => Some(Box::new(GenericAdapter::new_with_api_key(
+                        ProviderConfigs::azure_openai(),
+                        opts.api_key.clone(),
+                    )?)),
+                    Provider::HuggingFace => Some(Box::new(GenericAdapter::new_with_api_key(
+                        ProviderConfigs::huggingface(),
+                        opts.api_key.clone(),
+                    )?)),
+                    Provider::TogetherAI => Some(Box::new(GenericAdapter::new_with_api_key(
+                        ProviderConfigs::together_ai(),
+                        opts.api_key.clone(),
+                    )?)),
+                    _ => None,
+                };
+                if let Some(a) = new_adapter {
+                    client.adapter = a;
+                }
+            }
+            client.connection_options = Some(opts);
+            return Ok(client);
+        }
+
+        // Independent adapters: OpenAI / Gemini / Mistral / Cohere
+        if matches!(
+            provider,
+            Provider::OpenAI | Provider::Gemini | Provider::Mistral | Provider::Cohere
+        ) {
+            let adapter: Box<dyn ChatApi> = match provider {
+                Provider::OpenAI => {
+                    if let Some(ref k) = opts.api_key {
+                        let inner =
+                            OpenAiAdapter::new_with_overrides(k.clone(), opts.base_url.clone())?;
+                        Box::new(inner)
+                    } else {
+                        let inner = OpenAiAdapter::new()?;
+                        Box::new(inner)
+                    }
+                }
+                Provider::Gemini => {
+                    if let Some(ref k) = opts.api_key {
+                        let inner =
+                            GeminiAdapter::new_with_overrides(k.clone(), opts.base_url.clone())?;
+                        Box::new(inner)
+                    } else {
+                        let inner = GeminiAdapter::new()?;
+                        Box::new(inner)
+                    }
+                }
+                Provider::Mistral => {
+                    if opts.api_key.is_some() || opts.base_url.is_some() {
+                        let inner = MistralAdapter::new_with_overrides(
+                            opts.api_key.clone(),
+                            opts.base_url.clone(),
+                        )?;
+                        Box::new(inner)
+                    } else {
+                        let inner = MistralAdapter::new()?;
+                        Box::new(inner)
+                    }
+                }
+                Provider::Cohere => {
+                    if let Some(ref k) = opts.api_key {
+                        let inner =
+                            CohereAdapter::new_with_overrides(k.clone(), opts.base_url.clone())?;
+                        Box::new(inner)
+                    } else {
+                        let inner = CohereAdapter::new()?;
+                        Box::new(inner)
+                    }
+                }
+                _ => unreachable!(),
+            };
+            return Ok(AiClient {
+                provider,
+                adapter,
+                metrics: Arc::new(NoopMetrics::new()),
+                connection_options: Some(opts),
+            });
+        }
+
+        // Simple config-driven without overrides
+        let mut client = AiClient::new(provider)?;
+        if let Some(ref k) = opts.api_key {
+            let override_adapter: Option<Box<dyn ChatApi>> = match provider {
+                Provider::Groq => Some(Box::new(GenericAdapter::new_with_api_key(
+                    ProviderConfigs::groq(),
+                    Some(k.clone()),
+                )?)),
+                Provider::XaiGrok => Some(Box::new(GenericAdapter::new_with_api_key(
+                    ProviderConfigs::xai_grok(),
+                    Some(k.clone()),
+                )?)),
+                Provider::Ollama => Some(Box::new(GenericAdapter::new_with_api_key(
+                    ProviderConfigs::ollama(),
+                    Some(k.clone()),
+                )?)),
+                Provider::DeepSeek => Some(Box::new(GenericAdapter::new_with_api_key(
+                    ProviderConfigs::deepseek(),
+                    Some(k.clone()),
+                )?)),
+                Provider::Qwen => Some(Box::new(GenericAdapter::new_with_api_key(
+                    ProviderConfigs::qwen(),
+                    Some(k.clone()),
+                )?)),
+                Provider::BaiduWenxin => Some(Box::new(GenericAdapter::new_with_api_key(
+                    ProviderConfigs::baidu_wenxin(),
+                    Some(k.clone()),
+                )?)),
+                Provider::TencentHunyuan => Some(Box::new(GenericAdapter::new_with_api_key(
+                    ProviderConfigs::tencent_hunyuan(),
+                    Some(k.clone()),
+                )?)),
+                Provider::IflytekSpark => Some(Box::new(GenericAdapter::new_with_api_key(
+                    ProviderConfigs::iflytek_spark(),
+                    Some(k.clone()),
+                )?)),
+                Provider::Moonshot => Some(Box::new(GenericAdapter::new_with_api_key(
+                    ProviderConfigs::moonshot(),
+                    Some(k.clone()),
+                )?)),
+                Provider::Anthropic => Some(Box::new(GenericAdapter::new_with_api_key(
+                    ProviderConfigs::anthropic(),
+                    Some(k.clone()),
+                )?)),
+                Provider::AzureOpenAI => Some(Box::new(GenericAdapter::new_with_api_key(
+                    ProviderConfigs::azure_openai(),
+                    Some(k.clone()),
+                )?)),
+                Provider::HuggingFace => Some(Box::new(GenericAdapter::new_with_api_key(
+                    ProviderConfigs::huggingface(),
+                    Some(k.clone()),
+                )?)),
+                Provider::TogetherAI => Some(Box::new(GenericAdapter::new_with_api_key(
+                    ProviderConfigs::together_ai(),
+                    Some(k.clone()),
+                )?)),
+                _ => None,
+            };
+            if let Some(a) = override_adapter {
+                client.adapter = a;
+            }
+        }
+        client.connection_options = Some(opts);
+        Ok(client)
+    }
+
+    pub fn connection_options(&self) -> Option<&ConnectionOptions> {
+        self.connection_options.as_ref()
     }
 
     /// Create a new AI client builder
@@ -175,6 +415,7 @@ impl AiClient {
             provider,
             adapter,
             metrics,
+            connection_options: None,
         })
     }
 
@@ -630,8 +871,6 @@ impl AiClientBuilder {
 
         // 5. Create custom HttpTransport (if needed)
         let transport = self.create_custom_transport(proxy_url.clone(), timeout)?;
-        
-
 
         // 6. Create adapter
         let adapter: Box<dyn ChatApi> = match self.provider {
@@ -778,6 +1017,7 @@ impl AiClientBuilder {
             provider: self.provider,
             adapter,
             metrics: self.metrics.unwrap_or_else(|| Arc::new(NoopMetrics::new())),
+            connection_options: None,
         };
 
         Ok(client)

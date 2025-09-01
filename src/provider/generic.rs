@@ -36,6 +36,21 @@ impl GenericAdapter {
         })
     }
 
+    /// Create adapter with an explicit API key override (takes precedence over env var).
+    pub fn new_with_api_key(
+        config: ProviderConfig,
+        api_key_override: Option<String>,
+    ) -> Result<Self, AiLibError> {
+        config.validate()?;
+        let api_key = api_key_override.or_else(|| env::var(&config.api_key_env).ok());
+        Ok(Self {
+            transport: HttpTransport::new_without_proxy().boxed(),
+            config,
+            api_key,
+            metrics: Arc::new(NoopMetrics::new()),
+        })
+    }
+
     /// Create adapter with custom transport layer (for testing)
     pub fn with_transport(
         config: ProviderConfig,
@@ -54,6 +69,22 @@ impl GenericAdapter {
         })
     }
 
+    /// Custom transport + API key override.
+    pub fn with_transport_api_key(
+        config: ProviderConfig,
+        transport: HttpTransport,
+        api_key_override: Option<String>,
+    ) -> Result<Self, AiLibError> {
+        config.validate()?;
+        let api_key = api_key_override.or_else(|| env::var(&config.api_key_env).ok());
+        Ok(Self {
+            transport: transport.boxed(),
+            config,
+            api_key,
+            metrics: Arc::new(NoopMetrics::new()),
+        })
+    }
+
     /// Accept an object-safe transport reference directly
     pub fn with_transport_ref(
         config: ProviderConfig,
@@ -63,6 +94,22 @@ impl GenericAdapter {
         config.validate()?;
 
         let api_key = env::var(&config.api_key_env).ok();
+        Ok(Self {
+            transport,
+            config,
+            api_key,
+            metrics: Arc::new(NoopMetrics::new()),
+        })
+    }
+
+    /// Object-safe transport + API key override.
+    pub fn with_transport_ref_api_key(
+        config: ProviderConfig,
+        transport: DynHttpTransportRef,
+        api_key_override: Option<String>,
+    ) -> Result<Self, AiLibError> {
+        config.validate()?;
+        let api_key = api_key_override.or_else(|| env::var(&config.api_key_env).ok());
         Ok(Self {
             transport,
             config,

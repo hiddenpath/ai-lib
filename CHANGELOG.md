@@ -7,7 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.1] - 2024-12-19
+## [0.2.12] 
+
+### Added
+- **System Configuration Management**: Comprehensive configuration system with environment variable support and explicit overrides
+- **Configuration Validation Tools**: Built-in tools for validating configuration settings
+- **Enhanced Documentation**: Complete rewrite of README with feature-focused organization
+- **Context Control**: Advanced conversation management with context control features
+- **File Upload & Multimodal Processing**: Automatic file handling with upload and inline support
+- **Performance Optimizations**: Enterprise-grade performance with minimal overhead
+- **Security & Privacy Features**: Built-in security features for enterprise environments
+
+### Enhanced
+- **README Documentation**: Restructured and enhanced both English and Chinese README files
+- **Provider Support**: Updated provider information with detailed feature descriptions
+- **Configuration Examples**: Added comprehensive configuration examples and best practices
+- **Performance Documentation**: Added performance characteristics and optimization tips
+- **Use Case Examples**: Added enterprise, research, production, and privacy-first use cases
+
+### Changed
+- **Documentation Structure**: Reorganized documentation to highlight key features and capabilities
+- **Configuration Management**: Enhanced configuration management with validation tools
+- **Performance Metrics**: Updated performance documentation with specific benchmarks
+
+### Examples
+- **Configuration Check**: `cargo run --example check_config` - Validate configuration settings
+- **Network Diagnosis**: `cargo run --example network_diagnosis` - Troubleshoot connectivity
+- **Proxy Testing**: `cargo run --example proxy_example` - Test proxy configuration
+- **Explicit Config**: `cargo run --example explicit_config` - Runtime configuration
+
+## [0.2.1] 
 
 ### Added
 - **Client Builder Pattern**: New `AiClientBuilder` for flexible client configuration with progressive customization levels
@@ -41,7 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Production Ready**: Load balancing, health checks, and sophisticated model selection
 - **Extensible**: Build custom model managers for any provider or use case
 
-## [0.2.0] - 2024-12-18
+## [0.2.0] 
 
 ### Added
 - Hybrid architecture with universal streaming support
