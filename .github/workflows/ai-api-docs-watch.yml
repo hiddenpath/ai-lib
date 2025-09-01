@@ -1,0 +1,91 @@
+name: AI API Docs Watch (Daily)
+
+on:
+  schedule:
+    - cron: "10 2 * * *"   # 每天 02:10 UTC 运行
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 jq
+
+      - name: Run watcher
+        run: |
+          python scripts/ai_api_docs_watch.py
+
+      - name: Commit snapshots (if changed)
+        run: |
+          if [ -n "$(git status --porcelain data/api_doc_snapshots.json 2>/dev/null)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/api_doc_snapshots.json
+            git commit -m "chore(docs-watch): update snapshots [skip ci]"
+            git push
+          else
+            echo "No snapshot changes to commit."
+          fi
+
+      - name: Create / Update daily issue
+        run: |
+          if [ ! -f changes_out.json ]; then
+            echo "changes_out.json missing, abort."
+            exit 0
+          fi
+          BASELINE=$(jq -r '.baseline // false' changes_out.json)
+          COUNT=$(jq '.changes | length' changes_out.json)
+          DATE=$(date -u +"%Y-%m-%d")
+          TITLE="[DocsWatch] AI Provider API 文档变更 ${DATE}"
+
+          if [ "$BASELINE" = "true" ]; then
+            echo "Baseline run: skip issue creation."
+            exit 0
+          fi
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No changes today."
+            exit 0
+          fi
+
+          BODY_HEADER="本 Issue 汇总 ${DATE} 检测到的各大 AI Provider API 文档变更。\n\n变更总数: ${COUNT}\n\n"
+          CHANGES_MD=""
+          jq -r '.changes[] | @base64' changes_out.json | while read -r row; do
+            obj=$(echo "$row" | base64 --decode)
+            provider=$(echo "$obj" | jq -r '.provider')
+            url=$(echo "$obj" | jq -r '.url')
+            title=$(echo "$obj" | jq -r '.title')
+            new_hash=$(echo "$obj" | jq -r '.new_hash')
+            old_hash=$(echo "$obj" | jq -r '.old_hash')
+            diff=$(echo "$obj" | jq -r '.diff')
+            CHANGES_MD+="### ${provider}: ${title}\nURL: ${url}\nOld: ${old_hash}\nNew: ${new_hash}\n\n\`\`\`diff\n${diff}\n\`\`\`\n\n\n"
+          done
+
+          EXIST=$(gh issue list --search "$TITLE in:title" --state open --json number | jq 'length')
+          if [ "$EXIST" -eq 0 ]; then
+            echo "Create new issue: $TITLE"
+            gh issue create --title "$TITLE" --body "$BODY_HEADER$CHANGES_MD" --label "docs-watch"
+          else
+            echo "Append to existing issue."
+            NUMBER=$(gh issue list --search "$TITLE in:title" --state open --json number | jq -r '.[0].number')
+            CURR=$(gh issue view "$NUMBER" --json body -q '.body')
+            NEW_BODY="${CURR}\n\n---\n(追加更新于 $(date -u +"%H:%M:%SZ"))\n\n${CHANGES_MD}"
+            gh issue edit "$NUMBER" --body "$NEW_BODY"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
