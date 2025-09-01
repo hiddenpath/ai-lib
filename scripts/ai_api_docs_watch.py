@@ -24,7 +24,7 @@ SNAPSHOT_PATH = Path("data/api_doc_snapshots.json")
 OUTPUT_PATH = Path("changes_out.json")
 
 PROVIDER_PAGES = [
-    {"provider": "OpenAI", "url": "https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.yaml", "title": "OpenAI OpenAPI Spec"},
+    {"provider": "OpenAI", "url": "https://raw.githubusercontent.com/openai/openai-openapi/main/openapi.yaml", "title": "OpenAI OpenAPI Spec"},
     {"provider": "Anthropic", "url": "https://docs.anthropic.com/en/api/reference", "title": "Anthropic API Reference"},
     {"provider": "Google Gemini", "url": "https://ai.google.dev/api/rest", "title": "Google Gemini REST API"},
     {"provider": "Cohere", "url": "https://docs.cohere.com/reference/about", "title": "Cohere API Reference Overview"},
@@ -120,7 +120,7 @@ def unified_diff(old: str, new: str) -> str:
     return "\n".join(diff_lines)
 
 def main():
-    now_iso = datetime.datetime.utcnow().isoformat() + "Z"
+    now_iso = datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
     snapshots = load_snapshots()
     is_baseline = not SNAPSHOT_PATH.exists()
     changes = []
