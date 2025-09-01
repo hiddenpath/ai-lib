@@ -24,3 +24,8 @@ data/api_doc_snapshots.json
 # Docs watch output (temporary)
 changes_out.json
 
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
