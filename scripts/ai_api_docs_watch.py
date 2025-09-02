@@ -25,7 +25,7 @@ OUTPUT_PATH = Path("changes_out.json")
 
 PROVIDER_PAGES = [
     # Independent adapters
-    {"provider": "OpenAI", "url": "https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.yaml", "title": "OpenAI OpenAPI Spec"},
+    {"provider": "OpenAI", "url": "https://platform.openai.com/docs/api-reference/introduction", "title": "OpenAI API Reference"},
     {"provider": "Anthropic", "url": "https://docs.anthropic.com/claude/docs", "title": "Anthropic Claude API Documentation"},
     {"provider": "Google Gemini", "url": "https://ai.google.dev/gemini-api/docs", "title": "Google Gemini API Documentation"},
     {"provider": "Cohere", "url": "https://docs.cohere.com/reference/about", "title": "Cohere API Reference Overview"},
@@ -33,18 +33,18 @@ PROVIDER_PAGES = [
     
     # Config-driven providers
     {"provider": "Groq", "url": "https://groq.com/docs", "title": "Groq API Documentation"},
-    {"provider": "DeepSeek", "url": "https://deepseek.com/docs", "title": "DeepSeek API Documentation"},
-    {"provider": "Qwen", "url": "https://qwen.com/docs", "title": "Qwen API Documentation"},
+    {"provider": "DeepSeek", "url": "https://platform.deepseek.com/api-docs", "title": "DeepSeek API Documentation"},
+    {"provider": "Qwen", "url": "https://help.aliyun.com/zh/dashscope/developer-reference/api-details", "title": "Qwen API Documentation"},
     {"provider": "HuggingFace", "url": "https://huggingface.co/docs", "title": "HuggingFace API Documentation"},
     {"provider": "TogetherAI", "url": "https://docs.together.ai/docs", "title": "TogetherAI API Documentation"},
-    {"provider": "Ollama", "url": "https://docs.ollama.ai/", "title": "Ollama API Documentation"},
-    {"provider": "xAI Grok", "url": "https://x.ai/docs", "title": "xAI Grok API Documentation"},
+    {"provider": "Ollama", "url": "https://ollama.ai/docs/api", "title": "Ollama API Documentation"},
+    {"provider": "xAI Grok", "url": "https://docs.x.ai/", "title": "xAI Grok API Documentation"},
     
     # Chinese providers
     {"provider": "Baidu Wenxin", "url": "https://cloud.baidu.com/doc/WENXINWORKSHOP/s/1lilb2u4t", "title": "Baidu Wenxin API Documentation"},
     {"provider": "Tencent Hunyuan", "url": "https://cloud.tencent.com/document/product/1129/74712", "title": "Tencent Hunyuan API Documentation"},
-    {"provider": "iFlytek Spark", "url": "https://www.xfyun.cn/doc/spark/introduce.html", "title": "iFlytek Spark API Documentation"},
-    {"provider": "Moonshot Kimi", "url": "https://docs.moonshot.cn/docs", "title": "Moonshot Kimi API Documentation"},
+    {"provider": "iFlytek Spark", "url": "https://www.xfyun.cn/doc/spark/Web-API.html", "title": "iFlytek Spark API Documentation"},
+    {"provider": "Moonshot Kimi", "url": "https://platform.moonshot.cn/docs", "title": "Moonshot Kimi API Documentation"},
     
     # Enterprise providers
     {"provider": "Azure OpenAI", "url": "https://learn.microsoft.com/en-us/azure/ai-services/openai/reference", "title": "Azure OpenAI REST API Reference"},
@@ -138,7 +138,7 @@ def unified_diff(old: str, new: str) -> str:
     return "\n".join(diff_lines)
 
 def main():
-    now_iso = datetime.datetime.utcnow().isoformat() + "Z"
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z')
     snapshots = load_snapshots()
     is_baseline = not SNAPSHOT_PATH.exists()
     changes = []
