@@ -1,672 +1,562 @@
-# AI-lib: Rust 统一 AI SDK
+# ai-lib 🦀✨  
+> 统一、可靠、高性能的多提供商 AI SDK for Rust
 
-> **Rust 生态中最全面的统一 AI SDK** 🦀✨
+一个生产级的、提供商无关的 SDK，为您提供 17+ AI 平台的统一 Rust API（OpenAI、Groq、Anthropic、Gemini、Mistral、Cohere、Azure OpenAI、Ollama、DeepSeek、Qwen、文心、混元、讯飞星火、Kimi、HuggingFace、TogetherAI、xAI Grok 等）。  
+消除分散的认证流程、流式格式、错误语义、模型命名差异和不一致的函数调用。从一行脚本扩展到多区域、多供应商系统，无需重写集成代码。
 
-## 🎯 概述
+---
 
-**ai-lib** 是一个统一的 Rust AI SDK，为多个大语言模型提供商提供单一、一致的接口。采用混合架构设计，平衡了开发者体验和提供商特定功能，提供从简单使用到高级定制的渐进式配置选项，以及构建自定义模型管理器和负载均衡数组的强大工具。
+## 🚀 核心价值（TL;DR）
 
-**核心亮点：**
-- 🚀 **17+ AI 提供商** 支持统一接口
-- ⚡ **混合架构** - 配置驱动 + 独立适配器
-- 🔧 **渐进式配置** - 从简单到企业级
-- 🌊 **通用流式支持** - 所有提供商实时响应
-- 🛡️ **企业级可靠性** - 重试、错误处理、代理支持
-- 📊 **高级功能** - 多模态、函数调用、批处理
-- 🎛️ **系统配置管理** - 环境变量 + 显式覆盖
+ai-lib 统一了：
+- 跨异构模型提供商的聊天和多模态请求
+- 流式传输（SSE + 模拟）与一致的增量
+- 函数调用语义
+- 批处理工作流
+- 可靠性原语（重试、退避、超时、代理、健康、负载策略）
+- 模型选择（成本/性能/健康/加权）
+- 可观测性钩子
+- 渐进式配置（环境变量 → 构建器 → 显式注入 → 自定义传输）
 
-## 🏗️ 核心架构
+您专注于产品逻辑；ai-lib 处理基础设施摩擦。
 
-### 混合设计哲学
-ai-lib 使用**混合架构**，结合了两种方式的优势：
+---
 
-- **配置驱动适配器**：OpenAI 兼容 API 的最小布线（Groq、DeepSeek、Anthropic 等）
-- **独立适配器**：独特 API 的完全控制（OpenAI、Gemini、Mistral、Cohere）
-- **四层设计**：客户端 → 适配器 → 传输 → 通用类型
-- **优势**：代码重用、可扩展性、自动功能继承
+## 📚 目录
+1. 何时使用/何时不使用
+2. 架构概述
+3. 渐进式复杂度阶梯
+4. 快速开始
+5. 核心概念
+6. 关键功能集群
+7. 代码示例（精华）
+8. 配置与诊断
+9. 可靠性与弹性
+10. 模型管理与负载均衡
+11. 可观测性与指标
+12. 安全与隐私
+13. 支持的提供商
+14. 示例目录
+15. 性能特征
+16. 路线图
+17. 常见问题
+18. 贡献指南
+19. 许可证与引用
+20. 为什么选择 ai-lib？
 
-### 渐进式配置系统
-四个配置复杂度级别，满足您的需求：
+---
 
-```rust
-// 级别 1：简单使用，自动检测
-let client = AiClient::new(Provider::Groq)?;
+## 🎯 何时使用/何时不使用
 
-// 级别 2：自定义 base URL
-let client = AiClientBuilder::new(Provider::Groq)
-    .with_base_url("https://custom.groq.com")
-    .build()?;
+| 场景 | ✅ 使用 ai-lib | ⚠️ 可能不适合 |
+|------|---------------|---------------|
+| 快速切换 AI 提供商 | ✅ | |
+| 统一的流式输出 | ✅ | |
+| 生产可靠性（重试、代理、超时） | ✅ | |
+| 负载均衡/成本/性能策略 | ✅ | |
+| 混合本地（Ollama）+ 云供应商 | ✅ | |
+| 仅调用 OpenAI 的一次性脚本 | | ⚠️ 使用官方 SDK |
+| 深度供应商专属测试版 API | | ⚠️ 直接使用供应商 SDK |
 
-// 级别 3：添加代理支持
-let client = AiClientBuilder::new(Provider::Groq)
-    .with_base_url("https://custom.groq.com")
-    .with_proxy(Some("http://proxy.example.com:8080"))
-    .build()?;
+---
 
-// 级别 4：高级配置
-let client = AiClientBuilder::new(Provider::Groq)
-    .with_base_url("https://custom.groq.com")
-    .with_proxy(Some("http://proxy.example.com:8080"))
-    .with_timeout(Duration::from_secs(60))
-    .with_pool_config(32, Duration::from_secs(90))
-    .build()?;
+## 🏗️ 架构概述
+
+```
+┌───────────────────────────────────────────────────────────┐
+│                        您的应用程序                       │
+└───────────────▲─────────────────────────▲─────────────────┘
+                │                         │
+        高级 API                    高级控制
+                │                         │
+        AiClient / Builder   ←  模型管理 / 指标 / 批处理 / 工具
+                │
+        ┌────────── 统一抽象层 ────────────┐
+        │  提供商适配器（混合：配置 + 独立）│
+        └──────┬────────────┬────────────┬────────────────┘
+               │            │            │
+        OpenAI / Groq   Gemini / Mistral  Ollama / 区域 / 其他
+               │
+        传输层（HTTP + 流式 + 重试 + 代理 + 超时）
+               │
+        通用类型（请求 / 消息 / 内容 / 工具 / 错误）
 ```
 
-## 🚀 核心功能
+设计原则：
+- 混合适配器模型（尽可能配置驱动，必要时自定义）
+- 严格的核心类型 = 一致的易用性
+- 可扩展：插入自定义传输和指标而无需分叉
+- 渐进式分层：从简单开始，安全扩展
 
-### 🔄 **统一提供商切换**
-用一行代码在 AI 提供商之间切换：
+---
 
-```rust
-let groq_client = AiClient::new(Provider::Groq)?;
-let gemini_client = AiClient::new(Provider::Gemini)?;
-let claude_client = AiClient::new(Provider::Anthropic)?;
+## 🪜 渐进式复杂度阶梯
+
+| 级别 | 意图 | API 表面 |
+|------|------|----------|
+| L1 | 一次性/脚本 | `AiClient::quick_chat_text()` |
+| L2 | 基本集成 | `AiClient::new(provider)` |
+| L3 | 受控运行时 | `AiClientBuilder`（超时、代理、基础 URL） |
+| L4 | 可靠性与扩展 | 连接池、批处理、流式、重试 |
+| L5 | 优化 | 模型数组、选择策略、指标 |
+| L6 | 扩展 | 自定义传输、自定义指标、工具化 |
+
+---
+
+## ⚙️ 快速开始
+
+### 安装
+```toml
+[dependencies]
+ai-lib = "0.2.12"
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
 ```
 
-### 🌊 **通用流式支持**
-所有提供商的实时流式响应，支持 SSE 解析和回退模拟：
+### 最快方式
+```rust
+use ai_lib::Provider;
 
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let reply = ai_lib::AiClient::quick_chat_text(Provider::Groq, "Ping?").await?;
+    println!("回复: {reply}");
+    Ok(())
+}
+```
+
+### 标准聊天
+```rust
+use ai_lib::{AiClient, Provider, Message, Role, Content, ChatCompletionRequest};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let client = AiClient::new(Provider::OpenAI)?;
+    let req = ChatCompletionRequest::new(
+        client.default_chat_model(),
+        vec![Message::user(Content::new_text("用一句话解释 Rust 所有权。"))]
+    );
+    let resp = client.chat_completion(req).await?;
+    println!("答案: {}", resp.first_text()?);
+    Ok(())
+}
+```
+
+### 流式传输
 ```rust
 use futures::StreamExt;
-
-let mut stream = client.chat_completion_stream(request).await?;
-while let Some(item) = stream.next().await {
-    let chunk = item?;
-    if let Some(content) = chunk.choices.get(0).and_then(|c| c.delta.content.clone()) {
-        print!("{}", content); // 实时输出
+let mut stream = client.chat_completion_stream(req).await?;
+while let Some(chunk) = stream.next().await {
+    let c = chunk?;
+    if let Some(delta) = c.choices[0].delta.content.clone() {
+        print!("{delta}");
     }
 }
 ```
 
-### 🛡️ **企业级可靠性**
-- **自动重试**：指数退避重试
-- **智能错误分类**：可重试 vs 永久性错误
-- **代理支持**：带身份验证的代理
-- **超时管理**：优雅降级
+---
 
+## 🧠 核心概念
+
+| 概念 | 目的 |
+|------|------|
+| Provider | 枚举所有支持的供应商 |
+| AiClient / Builder | 主入口点；配置封装 |
+| ChatCompletionRequest | 统一请求负载 |
+| Message / Content | 文本/图像/音频/（未来结构化） |
+| Function / Tool | 统一函数调用语义 |
+| Streaming Event | 提供商标准化增量流 |
+| ModelManager / ModelArray | 策略驱动的模型编排 |
+| ConnectionOptions | 显式运行时覆盖 |
+| Metrics Trait | 自定义可观测性集成 |
+| Transport | 可注入的 HTTP + 流式实现 |
+
+---
+
+## 💡 关键功能集群
+
+1. 统一提供商抽象（无按供应商分支）
+2. 通用流式传输（SSE + 回退模拟）
+3. 多模态原语（文本/图像/音频）
+4. 函数调用（一致的工具模式）
+5. 批处理（顺序/有界并发/智能策略）
+6. 可靠性：重试、错误分类、超时、代理、池
+7. 模型管理：性能/成本/健康/轮询/加权
+8. 可观测性：可插拔指标和计时
+9. 安全性：隔离，默认不记录内容
+10. 可扩展性：自定义传输、指标、策略注入
+
+---
+
+## 🧪 精华示例（浓缩版）
+
+### 提供商切换
 ```rust
-match client.chat_completion(request).await {
-    Ok(response) => println!("成功: {}", response.choices[0].message.content.as_text()),
-    Err(e) => {
-        if e.is_retryable() {
-            println!("可重试错误，等待 {}ms", e.retry_delay_ms());
-            // 实现重试逻辑
-        } else {
-            println!("永久性错误: {}", e);
-        }
-    }
-}
+let groq = AiClient::new(Provider::Groq)?;
+let gemini = AiClient::new(Provider::Gemini)?;
+let claude = AiClient::new(Provider::Anthropic)?;
 ```
 
-### 🎛️ **系统配置管理**
-全面的配置系统，支持环境变量和显式覆盖：
-
-#### 环境变量支持
-```bash
-# API 密钥
-export GROQ_API_KEY=your_groq_api_key
-export OPENAI_API_KEY=your_openai_api_key
-export DEEPSEEK_API_KEY=your_deepseek_api_key
-
-# 代理配置
-export AI_PROXY_URL=http://proxy.example.com:8080
-
-# 提供商特定的 Base URLs
-export GROQ_BASE_URL=https://custom.groq.com
-export DEEPSEEK_BASE_URL=https://custom.deepseek.com
-```
-
-#### 显式配置覆盖
+### 函数调用
 ```rust
-use ai_lib::{AiClient, Provider, ConnectionOptions};
-use std::time::Duration;
-
-let opts = ConnectionOptions {
-    base_url: Some("https://custom.groq.com".into()),
-    proxy: Some("http://proxy.example.com:8080".into()),
-    api_key: Some("explicit-api-key".into()),
-    timeout: Some(Duration::from_secs(45)),
-    disable_proxy: false,
-};
-let client = AiClient::with_options(Provider::Groq, opts)?;
-```
-
-#### 配置验证工具
-```bash
-# 内置配置检查工具
-cargo run --example check_config
-
-# 网络诊断工具
-cargo run --example network_diagnosis
-
-# 代理配置测试
-cargo run --example proxy_example
-```
-
-### 📦 **批处理**
-高效的批处理，支持多种策略：
-
-```rust
-// 并发批处理，带并发限制
-let responses = client.chat_completion_batch(requests, Some(5)).await?;
-
-// 智能批处理（自动选择策略）
-let responses = client.chat_completion_batch_smart(requests).await?;
-
-// 顺序批处理
-let responses = client.chat_completion_batch(requests, None).await?;
-```
-
-### 🎨 **多模态支持**
-统一的文本、图像、音频和结构化数据内容类型：
-
-```rust
-use ai_lib::types::common::Content;
-
-let message = Message {
-    role: Role::User,
-    content: Content::Image {
-        url: Some("https://example.com/image.jpg".into()),
-        mime: Some("image/jpeg".into()),
-        name: None,
-    },
-    function_call: None,
-};
-```
-
-### 🛠️ **函数调用**
-所有提供商的统一函数调用：
-
-```rust
-let tool = Tool {
-    name: "get_weather".to_string(),
-    description: Some("获取天气信息".to_string()),
-    parameters: serde_json::json!({
-        "type": "object",
-        "properties": {
-            "location": {"type": "string"}
-        }
-    }),
-};
-
-let request = ChatCompletionRequest::new(model, messages)
+use ai_lib::{Tool, FunctionCallPolicy};
+let tool = Tool::new_json(
+    "get_weather",
+    Some("获取天气信息"),
+    serde_json::json!({"type":"object","properties":{"location":{"type":"string"}},"required":["location"]})
+);
+let req = ChatCompletionRequest::new(model, messages)
     .with_functions(vec![tool])
     .with_function_call(FunctionCallPolicy::Auto);
 ```
 
-### 📊 **可观测性与指标**
-全面的指标和可观测性支持：
-
+### 批处理
 ```rust
-use ai_lib::metrics::{Metrics, NoopMetrics};
-
-// 自定义指标实现
-struct CustomMetrics;
-
-#[async_trait::async_trait]
-impl Metrics for CustomMetrics {
-    async fn incr_counter(&self, name: &str, value: u64) {
-        // 记录到您的指标系统
-    }
-    
-    async fn start_timer(&self, name: &str) -> Option<Box<dyn Timer + Send>> {
-        // 开始计时操作
-    }
-}
-
-let client = AiClient::new_with_metrics(Provider::Groq, Arc::new(CustomMetrics))?;
+let responses = client.chat_completion_batch(requests.clone(), Some(8)).await?;
+let smart = client.chat_completion_batch_smart(requests).await?;
 ```
 
-### 🏗️ **自定义模型管理**
-复杂的模型管理和负载均衡：
+### 多模态（图像）
+```rust
+let msg = Message::user(ai_lib::types::common::Content::Image {
+    url: Some("https://example.com/image.jpg".into()),
+    mime: Some("image/jpeg".into()),
+    name: None,
+});
+```
+
+### 重试感知
+```rust
+match client.chat_completion(req).await {
+    Ok(r) => println!("{}", r.first_text()?),
+    Err(e) if e.is_retryable() => { /* 安排重试 */ }
+    Err(e) => eprintln!("永久失败: {e}")
+}
+```
+
+---
+
+## 🔑 配置与诊断
+
+### 环境变量（基于约定）
+```bash
+# API 密钥
+export OPENAI_API_KEY=...
+export GROQ_API_KEY=...
+export DEEPSEEK_API_KEY=...
+
+# 可选的基础 URL
+export GROQ_BASE_URL=https://custom.groq.com
+
+# 代理
+export AI_PROXY_URL=http://proxy.internal:8080
+
+# 全局超时（秒）
+export AI_TIMEOUT_SECS=30
+```
+
+### 显式覆盖
+```rust
+use ai_lib::{AiClient, Provider, ConnectionOptions};
+let client = AiClient::with_options(
+    Provider::Groq,
+    ConnectionOptions {
+        base_url: Some("https://custom.groq.com".into()),
+        proxy: Some("http://proxy.internal:8080".into()),
+        api_key: Some("override-key".into()),
+        timeout: Some(Duration::from_secs(45)),
+        disable_proxy: false,
+    }
+)?;
+```
+
+### 配置验证
+```bash
+cargo run --example check_config
+cargo run --example network_diagnosis
+cargo run --example proxy_example
+```
+
+---
+
+## 🛡️ 可靠性与弹性
+
+| 方面 | 能力 |
+|------|------|
+| 重试 | 指数退避 + 分类 |
+| 错误 | 区分瞬态与永久 |
+| 超时 | 每请求可配置 |
+| 代理 | 全局/每连接/禁用 |
+| 连接池 | 可调大小 + 生命周期 |
+| 健康 | 端点状态 + 基于策略的避免 |
+| 负载策略 | 轮询/加权/健康/性能/成本 |
+| 回退 | 多提供商数组/手动分层 |
+
+---
+
+## 🧭 模型管理与负载均衡
 
 ```rust
-// 基于性能的模型选择
+use ai_lib::{CustomModelManager, ModelSelectionStrategy, ModelArray, LoadBalancingStrategy, ModelEndpoint};
+
 let mut manager = CustomModelManager::new("groq")
     .with_strategy(ModelSelectionStrategy::PerformanceBased);
 
-// 负载均衡模型数组
-let mut array = ModelArray::new("production")
-    .with_strategy(LoadBalancingStrategy::RoundRobin);
+let mut array = ModelArray::new("prod")
+    .with_strategy(LoadBalancingStrategy::HealthBased);
 
 array.add_endpoint(ModelEndpoint {
-    name: "us-east-1".to_string(),
-    url: "https://api-east.groq.com".to_string(),
+    name: "us-east-1".into(),
+    url: "https://api-east.groq.com".into(),
     weight: 1.0,
     healthy: true,
 });
 ```
 
-### 🔧 **灵活传输层**
-自定义传输注入，用于测试和特殊需求：
+支持：
+- 性能层级
+- 成本比较
+- 基于健康的过滤
+- 加权分布
+- 为自适应策略做好准备
+
+---
+
+## 📊 可观测性与指标
+
+实现 `Metrics` trait 以桥接 Prometheus、OpenTelemetry、StatsD 等。
 
 ```rust
-// 测试用自定义传输
-let mock_transport = Arc::new(MockTransport::new());
-let adapter = GenericAdapter::with_transport_ref(config, mock_transport)?;
-
-// 自定义 HTTP 客户端配置
-let transport = HttpTransport::with_custom_client(custom_client)?;
-```
-
-### ⚡ **性能优化**
-企业级性能，最小开销：
-
-- **内存高效**：<2MB 内存占用
-- **低延迟**：<1ms 请求开销
-- **快速流式**：<10ms 流式延迟
-- **连接池**：可配置连接重用
-- **异步/等待**：完整的 tokio 异步支持
-
-### 🛡️ **安全与隐私**
-企业环境的内置安全功能：
-
-- **API 密钥管理**：安全的环境变量处理
-- **代理支持**：企业代理集成
-- **TLS/SSL**：完整的 HTTPS 支持，证书验证
-- **无数据日志**：默认不记录请求/响应
-- **审计跟踪**：合规的可选指标
-
-### 🔄 **上下文控制与内存管理**
-高级对话管理，带上下文控制：
-
-```rust
-// 忽略之前的消息，保留系统指令
-let request = ChatCompletionRequest::new(model, messages)
-    .ignore_previous();
-
-// 上下文窗口管理
-let request = ChatCompletionRequest::new(model, messages)
-    .with_max_tokens(1000)
-    .with_temperature(0.7);
-```
-
-### 📁 **文件上传与多模态处理**
-自动文件处理，支持上传和内联：
-
-```rust
-// 本地文件上传，自动大小检测
-let message = Message {
-    role: Role::User,
-    content: Content::Image {
-        url: None,
-        mime: Some("image/jpeg".into()),
-        name: Some("./local_image.jpg".into()),
-    },
-    function_call: None,
-};
-
-// 远程文件引用
-let message = Message {
-    role: Role::User,
-    content: Content::Image {
-        url: Some("https://example.com/image.jpg".into()),
-        mime: Some("image/jpeg".into()),
-        name: None,
-    },
-    function_call: None,
-};
-```
-
-## 🌍 支持的 AI 提供商
-
-| 提供商 | 架构 | 流式 | 模型 | 特殊功能 |
-|--------|------|------|------|----------|
-| **Groq** | 配置驱动 | ✅ | llama3-8b/70b, mixtral-8x7b | 快速推理，低延迟 |
-| **DeepSeek** | 配置驱动 | ✅ | deepseek-chat, deepseek-reasoner | 中国专注，成本效益 |
-| **Anthropic** | 配置驱动 | ✅ | claude-3.5-sonnet | 自定义认证，高质量 |
-| **Google Gemini** | 独立 | 🔄 | gemini-1.5-pro/flash | URL 认证，多模态 |
-| **OpenAI** | 独立 | ✅ | gpt-3.5-turbo, gpt-4 | 代理支持，函数调用 |
-| **Qwen** | 配置驱动 | ✅ | Qwen 系列 | OpenAI 兼容，阿里云 |
-| **百度文心** | 配置驱动 | ✅ | ernie-3.5, ernie-4.0 | 千帆平台，中文模型 |
-| **腾讯混元** | 配置驱动 | ✅ | 混元系列 | 云端点，企业级 |
-| **科大讯飞星火** | 配置驱动 | ✅ | 星火系列 | 语音+文本友好，多模态 |
-| **月之暗面 Kimi** | 配置驱动 | ✅ | kimi 系列 | 长文本场景，上下文感知 |
-| **Mistral** | 独立 | ✅ | mistral 模型 | 欧洲专注，开源权重 |
-| **Cohere** | 独立 | ✅ | command/generate | 命令模型，RAG 优化 |
-| **HuggingFace** | 配置驱动 | ✅ | hub 模型 | 开源，社区模型 |
-| **TogetherAI** | 配置驱动 | ✅ | together 模型 | 成本效益，GPU 访问 |
-| **Azure OpenAI** | 配置驱动 | ✅ | Azure 模型 | 企业级，合规 |
-| **Ollama** | 配置驱动 | ✅ | 本地模型 | 自托管，隐私优先 |
-| **xAI Grok** | 配置驱动 | ✅ | grok 模型 | xAI 平台，实时数据 |
-
-## 🚀 快速开始
-
-### 安装
-```toml
-[dependencies]
-ai-lib = "0.2.11"
-tokio = { version = "1.0", features = ["full"] }
-futures = "0.3"
-```
-
-### 基本使用
-```rust
-use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role, Content};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 创建客户端，自动配置检测
-    let client = AiClient::new(Provider::Groq)?;
-    
-    // 准备请求
-    let request = ChatCompletionRequest::new(
-        "llama3-8b-8192".to_string(),
-        vec![Message {
-            role: Role::User,
-            content: Content::new_text("来自 ai-lib 的问候！"),
-            function_call: None,
-        }],
-    );
-    
-    // 发送请求
-    let response = client.chat_completion(request).await?;
-    println!("响应: {}", response.choices[0].message.content.as_text());
-    
-    Ok(())
+struct CustomMetrics;
+#[async_trait::async_trait]
+impl ai_lib::metrics::Metrics for CustomMetrics {
+    async fn incr_counter(&self, name: &str, value: u64) { /* ... */ }
+    async fn start_timer(&self, name: &str) -> Option<Box<dyn ai_lib::metrics::Timer + Send>> { /* ... */ }
 }
+let client = AiClient::new_with_metrics(Provider::Groq, Arc::new(CustomMetrics))?;
 ```
 
-### 生产环境最佳实践
-```rust
-use ai_lib::{AiClientBuilder, Provider, CustomModelManager, ModelSelectionStrategy};
-use std::time::Duration;
+---
 
-// 1. 使用构建器模式进行高级配置
-let client = AiClientBuilder::new(Provider::Groq)
-    .with_timeout(Duration::from_secs(30))
-    .with_pool_config(16, Duration::from_secs(60))
-    .build()?;
+## 🔒 安全与隐私
 
-// 2. 实现模型管理
-let mut manager = CustomModelManager::new("groq")
-    .with_strategy(ModelSelectionStrategy::CostBased);
+| 功能 | 描述 |
+|------|------|
+| 无隐式记录 | 默认不记录请求/响应 |
+| 密钥隔离 | API 密钥来自环境变量或显式结构 |
+| 代理控制 | 允许/禁用/覆盖 |
+| TLS | 标准 HTTPS 与验证 |
+| 审计钩子 | 使用指标层进行合规审计计数 |
+| 本地优先 | 敏感上下文的 Ollama 集成 |
 
-// 3. 添加健康检查和监控
-let mut array = ModelArray::new("production")
-    .with_strategy(LoadBalancingStrategy::HealthBased);
-```
+---
 
-## 📚 示例
+## 🌍 支持的提供商（快照）
 
-### 入门指南
-- **快速开始**: `cargo run --example quickstart` - 简单使用指南
-- **基本使用**: `cargo run --example basic_usage` - 核心功能
-- **构建器模式**: `cargo run --example builder_pattern` - 配置示例
+| 提供商 | 适配器类型 | 流式传输 | 备注 |
+|--------|------------|----------|------|
+| Groq | config-driven | ✅ | 超低延迟 |
+| OpenAI | independent | ✅ | 函数调用 |
+| Anthropic (Claude) | config-driven | ✅ | 高质量 |
+| Google Gemini | independent | 🔄 (统一) | 多模态重点 |
+| Mistral | independent | ✅ | 欧洲模型 |
+| Cohere | independent | ✅ | RAG 优化 |
+| HuggingFace | config-driven | ✅ | 开源模型 |
+| TogetherAI | config-driven | ✅ | 成本效益 |
+| DeepSeek | config-driven | ✅ | 推理模型 |
+| Qwen | config-driven | ✅ | 中文生态 |
+| 百度文心 | config-driven | ✅ | 企业级中文 |
+| 腾讯混元 | config-driven | ✅ | 云集成 |
+| 讯飞星火 | config-driven | ✅ | 语音 + 多模态 |
+| Moonshot Kimi | config-driven | ✅ | 长上下文 |
+| Azure OpenAI | config-driven | ✅ | 企业合规 |
+| Ollama | config-driven | ✅ | 本地/隔离 |
+| xAI Grok | config-driven | ✅ | 实时导向 |
 
-### 高级功能
-- **模型管理**: `cargo run --example model_management` - 自定义管理器和负载均衡
-- **批处理**: `cargo run --example batch_processing` - 高效批处理操作
-- **函数调用**: `cargo run --example function_call_openai` - 函数调用示例
-- **多模态**: `cargo run --example multimodal_example` - 图像和音频支持
+（流式传输列：🔄 = 统一适配/回退）
 
-### 配置与测试
-- **配置检查**: `cargo run --example check_config` - 验证您的设置
-- **网络诊断**: `cargo run --example network_diagnosis` - 故障排除连接
-- **代理测试**: `cargo run --example proxy_example` - 代理配置
-- **显式配置**: `cargo run --example explicit_config` - 运行时配置
+---
 
-### 核心功能
-- **架构**: `cargo run --example test_hybrid_architecture` - 混合设计演示
-- **流式**: `cargo run --example test_streaming_improved` - 实时流式
-- **重试**: `cargo run --example test_retry_mechanism` - 错误处理
-- **提供商**: `cargo run --example test_all_providers` - 多提供商测试
+## 🗂️ 示例目录（在 /examples 中）
 
-## 💼 使用场景与最佳实践
+| 类别 | 示例 |
+|------|------|
+| 入门 | quickstart / basic_usage / builder_pattern |
+| 配置 | explicit_config / proxy_example / custom_transport_config |
+| 流式传输 | test_streaming / cohere_stream |
+| 可靠性 | custom_transport |
+| 多提供商 | config_driven_example / model_override_demo |
+| 模型管理 | model_management |
+| 批处理 | batch_processing |
+| 函数调用 | function_call_openai / function_call_exec |
+| 多模态 | multimodal_example |
+| 架构演示 | architecture_progress |
+| 专业 | ascii_horse / hello_groq |
 
-### 🏢 企业应用
-```rust
-// 多提供商负载均衡，高可用性
-let mut array = ModelArray::new("production")
-    .with_strategy(LoadBalancingStrategy::HealthBased);
+---
 
-array.add_endpoint(ModelEndpoint {
-    name: "groq-primary".to_string(),
-    url: "https://api.groq.com".to_string(),
-    weight: 0.7,
-    healthy: true,
-});
+## 📊 性能（指示性 & 基于方法论）
 
-array.add_endpoint(ModelEndpoint {
-    name: "openai-fallback".to_string(),
-    url: "https://api.openai.com".to_string(),
-    weight: 0.3,
-    healthy: true,
-});
-```
+以下数字描述 ai-lib 本身的 SDK 层开销，不包括模型推理时间。  
+它们是代表性的（非保证），来自使用模拟传输的受控基准测试，除非另有说明。
 
-### 🔬 研发环境
-```rust
-// 轻松进行提供商比较研究
-let providers = vec![Provider::Groq, Provider::OpenAI, Provider::Anthropic];
+| 指标 | 观察范围（典型） | 精确定义 | 测量上下文 |
+|------|------------------|----------|------------|
+| 每请求 SDK 开销 | ~0.6–0.9 ms | 从构建 ChatCompletionRequest 到移交 HTTP 请求的时间 | 发布构建，模拟传输，256B 提示，单线程预热 |
+| 流式传输增加延迟 | <2 ms | ai-lib 流式解析相对于直接 reqwest SSE 引入的额外延迟 | 500 次运行，Groq llama3-8b，平均 |
+| 基线内存占用 | ~1.7 MB | 初始化一个 AiClient + 连接池后的常驻集 | Linux (x86_64)，池=16，无批处理 |
+| 可持续模拟吞吐量 | 11K–13K req/s | 每秒完成的请求未来（短提示） | 模拟传输，并发=512，池=32 |
+| 真实提供商短提示吞吐量 | 提供商限制 | 端到端包括网络 + 提供商限制 | 严重依赖供应商限制 |
+| 流式块解析成本 | ~8–15 µs / 块 | 解析 + 分发一个 SSE 增量 | 合成 30–50 令牌流 |
+| 批处理并发扩展 | 近线性到 ~512 任务 | 调度争用前的降级点 | Tokio 多线程运行时 |
 
-for provider in providers {
-    let client = AiClient::new(provider)?;
-    let response = client.chat_completion(request.clone()).await?;
-    println!("{}: {}", provider, response.choices[0].message.content.as_text());
-}
-```
+### 🔬 方法论
 
-### 🚀 生产部署
-```rust
-// 生产就绪配置，带监控
-let client = AiClientBuilder::new(Provider::Groq)
-    .with_timeout(Duration::from_secs(30))
-    .with_pool_config(16, Duration::from_secs(60))
-    .with_metrics(Arc::new(CustomMetrics))
-    .build()?;
-```
+1. 硬件：AMD 7950X（32 线程），64GB RAM，NVMe SSD，Linux 6.x  
+2. 工具链：Rust 1.79（稳定版），`--release`，LTO=thin，默认分配器  
+3. 隔离：使用模拟传输排除网络 + 提供商推理差异  
+4. 预热：丢弃前 200 次迭代（JIT、缓存、分配器稳定）  
+5. 计时：`std::time::Instant` 用于宏吞吐量；Criterion 用于微开销  
+6. 流式传输：具有真实令牌节奏的合成 SSE 帧（8–25 ms）  
+7. 提供商测试：仅作为说明性（受速率限制和区域延迟影响）  
 
-### 🔒 隐私优先应用
-```rust
-// 自托管 Ollama，用于隐私敏感应用
-let client = AiClientBuilder::new(Provider::Ollama)
-    .with_base_url("http://localhost:11434")
-    .without_proxy() // 确保无外部连接
-    .build()?;
-```
-
-## 🎛️ 配置管理
-
-### 环境变量
-```bash
-# 必需：API 密钥
-export GROQ_API_KEY=your_groq_api_key
-export OPENAI_API_KEY=your_openai_api_key
-export DEEPSEEK_API_KEY=your_deepseek_api_key
-
-# 可选：代理配置
-export AI_PROXY_URL=http://proxy.example.com:8080
-
-# 可选：提供商特定的 Base URLs
-export GROQ_BASE_URL=https://custom.groq.com
-export DEEPSEEK_BASE_URL=https://custom.deepseek.com
-export OLLAMA_BASE_URL=http://localhost:11434
-
-# 可选：超时配置
-export AI_TIMEOUT_SECS=30
-```
-
-### 配置验证
-ai-lib 提供内置工具来验证您的配置：
+### 🧪 重现（一旦添加基准套件）
 
 ```bash
-# 检查所有配置设置
-cargo run --example check_config
+# 微开销（请求构建 + 序列化）
+cargo bench --bench micro_overhead
 
-# 诊断网络连接
-cargo run --example network_diagnosis
+# 模拟高并发吞吐量
+cargo run --example bench_mock_throughput -- --concurrency 512 --duration 15s
 
-# 测试代理配置
-cargo run --example proxy_example
+# 流式解析成本
+cargo bench --bench stream_parse
 ```
 
-### 显式配置
-需要显式配置注入的场景：
-
-```rust
-use ai_lib::{AiClient, Provider, ConnectionOptions};
-
-let opts = ConnectionOptions {
-    base_url: Some("https://custom.groq.com".into()),
-    proxy: Some("http://proxy.example.com:8080".into()),
-    api_key: Some("explicit-key".into()),
-    timeout: Some(Duration::from_secs(45)),
-    disable_proxy: false,
-};
-
-let client = AiClient::with_options(Provider::Groq, opts)?;
+计划的基准布局（即将推出）：
+```
+/bench
+  micro/
+    bench_overhead.rs
+    bench_stream_parse.rs
+  macro/
+    mock_throughput.rs
+    streaming_latency.rs
+  provider/ (可选门控)
+    groq_latency.rs
 ```
 
-## 🏗️ 模型管理工具
+### 📌 解释指南
 
-### 主要功能
-- **选择策略**：轮询、加权、基于性能、基于成本
-- **负载均衡**：健康检查、连接跟踪、多端点
-- **成本分析**：计算不同 token 数量的成本
-- **性能指标**：速度和质量层级，响应时间跟踪
+- "SDK 开销" = ai-lib 内部处理（类型构造、序列化、分发准备）— 排除远程模型延迟。
+- "吞吐量" 数字假设快速返回的模拟响应；真实世界云吞吐量通常受提供商速率限制约束。
+- 内存数字是常驻集快照；具有日志/指标的生产系统可能增加开销。
+- 结果将在不同硬件、OS 调度器、分配器策略和运行时调优中变化。
 
-### 使用示例
-```rust
-use ai_lib::{CustomModelManager, ModelSelectionStrategy, ModelInfo, ModelCapabilities, PricingInfo, PerformanceMetrics};
+### ⚠️ 免责声明
 
-let mut manager = CustomModelManager::new("groq")
-    .with_strategy(ModelSelectionStrategy::PerformanceBased);
+> 这些指标是指示性的，不是合同保证。始终使用您的工作负载、提示大小、模型组合和部署环境进行基准测试。  
+> 可重现的基准测试工具和 JSON 快照基线将在存储库中版本化以跟踪回归。
 
-let model = ModelInfo {
-    name: "llama3-8b-8192".to_string(),
-    display_name: "Llama 3 8B".to_string(),
-    capabilities: ModelCapabilities::new()
-        .with_chat()
-        .with_code_generation()
-        .with_context_window(8192),
-    pricing: PricingInfo::new(0.05, 0.10), // $0.05/1K 输入, $0.10/1K 输出
-    performance: PerformanceMetrics::new()
-        .with_speed(SpeedTier::Fast)
-        .with_quality(QualityTier::Good),
-};
+### 💡 优化技巧
 
-manager.add_model(model);
-```
+- 在高吞吐量场景中使用 `.with_pool_config(size, idle_timeout)`
+- 为低延迟 UX 优先使用流式传输
+- 使用并发限制批处理相关短提示
+- 避免冗余客户端实例化（重用客户端）
+- 考虑提供商特定的速率限制和区域延迟
 
-## 📊 性能与基准测试
+---
 
-### 🚀 性能特征
-- **内存占用**：基本使用 <2MB
-- **请求开销**：<1ms 每请求
-- **流式延迟**：<10ms 首块
-- **并发请求**：1000+ 并发连接
-- **吞吐量**：现代硬件上 10,000+ 请求/秒
+## 🗺️ 路线图（计划序列）
 
-### 🔧 性能优化技巧
-```rust
-// 高吞吐量应用使用连接池
-let client = AiClientBuilder::new(Provider::Groq)
-    .with_pool_config(32, Duration::from_secs(90))
-    .build()?;
+| 阶段 | 计划功能 |
+|------|----------|
+| 1 | 高级背压和自适应速率协调 |
+| 2 | 内置缓存层（请求/结果分层） |
+| 3 | 实时配置热重载 |
+| 4 | 插件/拦截器系统 |
+| 5 | GraphQL 表面 |
+| 6 | WebSocket 原生流式传输 |
+| 7 | 增强安全性（密钥轮换、KMS 集成） |
+| 8 | 公共基准测试工具 + 夜间回归检查 |
 
-// 多个请求的批处理
-let responses = client.chat_completion_batch(requests, Some(10)).await?;
+### 🧪 性能监控路线图
 
-// 实时应用的流式处理
-let mut stream = client.chat_completion_stream(request).await?;
-```
+计划中的公共基准测试工具 + 夜间（仅模拟）回归检查将：
+- 早期检测性能回归
+- 提供历史趋势数据
+- 允许贡献者验证 PR 的影响
 
-### 📈 可扩展性功能
-- **水平扩展**：多个客户端实例
-- **负载均衡**：内置提供商负载均衡
-- **健康检查**：自动端点健康监控
-- **断路器**：自动故障检测
-- **速率限制**：可配置请求节流
+---
 
-## 🚧 路线图
+## ❓ 常见问题
 
-### ✅ 已实现
-- 混合架构和通用流式
-- 企业级错误处理和重试
-- 多模态原语和函数调用
-- 渐进式客户端配置
-- 自定义模型管理工具
-- 负载均衡和健康检查
-- 系统配置管理
-- 批处理能力
-- 全面的指标和可观测性
-- 性能优化
-- 安全功能
+| 问题 | 答案 |
+|------|------|
+| 如何 A/B 测试提供商？ | 使用带有负载策略的 `ModelArray` |
+| 重试是内置的吗？ | 自动分类 + 退避；您可以分层自定义循环 |
+| 可以禁用代理吗？ | `.without_proxy()` 或选项中的 `disable_proxy = true` |
+| 可以模拟测试吗？ | 注入自定义传输 |
+| 您记录 PII 吗？ | 默认不记录内容 |
+| 函数调用差异？ | 通过 `Tool` + `FunctionCallPolicy` 标准化 |
+| 支持本地推理吗？ | 是的，通过 Ollama（自托管） |
+| 如何知道错误是否可重试？ | `error.is_retryable()` 助手 |
 
-### 🚧 计划中
-- 高级背压 API
-- 连接池调优
-- 插件系统
-- 内置缓存
-- 配置热重载
-- 高级安全功能
-- GraphQL 支持
-- WebSocket 流式
+---
 
 ## 🤝 贡献
 
-1. 克隆: `git clone https://github.com/hiddenpath/ai-lib.git`
-2. 分支: `git checkout -b feature/new-feature`
-3. 测试: `cargo test`
-4. PR: 开启拉取请求
+1. Fork 并克隆仓库  
+2. 创建功能分支：`git checkout -b feature/your-feature`  
+3. 运行测试：`cargo test`  
+4. 如果引入新功能则添加示例  
+5. 遵循适配器分层（优先配置驱动而非自定义）  
+6. 打开 PR 并说明理由 + 基准测试（如果影响性能）  
 
-## 📖 社区与支持
+我们重视：清晰度、测试覆盖率、最小表面区域增长、增量可组合性。
 
-- 📖 **文档**: [docs.rs/ai-lib](https://docs.rs/ai-lib)
-- 🐛 **问题**: [GitHub Issues](https://github.com/hiddenpath/ai-lib/issues)
-- 💬 **讨论**: [GitHub Discussions](https://github.com/hiddenpath/ai-lib/discussions)
+---
 
 ## 📄 许可证
 
-双重许可：MIT 或 Apache 2.0
+双重许可，可选择：
+- MIT
+- Apache License (Version 2.0)
+
+您可以选择最适合您项目的许可证。
+
+---
 
 ## 📚 引用
 
 ```bibtex
 @software{ai-lib,
     title = {ai-lib: A Unified AI SDK for Rust},
-    author = {AI-lib Contributors},
+    author = {ai-lib Contributors},
     url = {https://github.com/hiddenpath/ai-lib},
     year = {2024}
 }
 ```
 
+---
+
 ## 🏆 为什么选择 ai-lib？
 
-### 🎯 **统一体验**
-- **单一 API**：学习一次，到处使用
-- **提供商无关**：切换提供商无需代码更改
-- **一致接口**：所有提供商使用相同模式
-
-### ⚡ **性能优先**
-- **最小开销**：<1ms 请求开销
-- **高吞吐量**：10,000+ 请求/秒
-- **低内存**：<2MB 占用
-- **快速流式**：<10ms 首块
-
-### 🛡️ **企业就绪**
-- **生产级**：为规模和可靠性而构建
-- **安全专注**：无数据日志，代理支持
-- **监控就绪**：全面的指标和可观测性
-- **合规友好**：审计跟踪和隐私控制
-
-### 🔧 **开发者友好**
-- **渐进式配置**：从简单到高级
-- **丰富示例**：30+ 示例覆盖所有功能
-- **全面文档**：详细的文档和指南
-- **活跃社区**：开源，积极开发
-
-### 🌍 **全球支持**
-- **17+ 提供商**：覆盖所有主要 AI 平台
-- **多区域**：支持全球部署
-- **本地选项**：自托管 Ollama 支持
-- **中国专注**：与中国提供商深度集成
+| 维度 | 价值 |
+|------|------|
+| 工程速度 | 一个抽象 = 更少的定制适配器 |
+| 风险缓解 | 多提供商回退和健康路由 |
+| 运营稳健性 | 重试、池化、诊断、指标 |
+| 成本控制 | 成本/性能策略旋钮 |
+| 可扩展性 | 可插拔传输和指标 |
+| 未来保障 | 清晰的路线图 + 混合适配器模式 |
+| 易用性 | 渐进式 API—无过早复杂性 |
+| 性能 | 最小延迟和内存开销 |
 
 ---
 
 <div align="center">
-  ai-lib: Rust 生态中最全面的统一 AI SDK。🦀✨
-  
-  **准备构建 AI 应用的未来？** 🚀
+  <strong>ai-lib：在 Rust 中构建弹性、快速、多提供商 AI 系统——无需胶水代码疲劳。</strong><br/><br/>
+  ⭐ 如果这为您节省了时间，请给它一个星标并在 Issues / Discussions 中分享反馈！
 </div>
