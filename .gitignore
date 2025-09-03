@@ -29,6 +29,18 @@ aitest/
 ## Release checklists (local only, not for GitHub)
 RELEASE_CHECKLIST_*.md
 
+## Local analysis and development notes (not for GitHub)
+*_ANALYSIS.md
+*_ANALYSIS_*.md
+*_IMPLEMENTATION_SUMMARY.md
+*_IMPROVEMENTS.md
+*_FLOW.md
+*_TEXT_*.md
+BUILDER_PATTERN.md
+
+## Upgrade documentation (keep only in docs/)
+UPGRADE_*.md
+
 ## Docs watch artifacts
 data/api_doc_snapshots.json
 changes_out.json
