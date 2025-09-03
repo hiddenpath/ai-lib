@@ -1,3 +1,4 @@
+pub mod classification;
 pub mod cohere;
 pub mod config;
 pub mod configs;
@@ -8,6 +9,7 @@ pub mod models;
 pub mod openai;
 pub mod utils;
 
+pub use classification::{AdapterType, ProviderClassification, CONFIG_DRIVEN_PROVIDERS, INDEPENDENT_PROVIDERS, ALL_PROVIDERS};
 pub use cohere::CohereAdapter;
 pub use configs::ProviderConfigs;
 pub use gemini::GeminiAdapter;

@@ -11,8 +11,8 @@ impl ProviderConfigs {
         ProviderConfig::openai_compatible(
             "https://api.groq.com/openai/v1",
             "GROQ_API_KEY",
-            "llama3-8b-8192", // Default chat model - fast and cost-effective
-            None,             // No multimodal support yet
+            "llama-3.1-8b-instant", // Default chat model - fast and cost-effective
+            Some("llama-3.2-11b-vision"), // Multimodal / vision-capable model
         )
     }
 
@@ -132,7 +132,7 @@ impl ProviderConfigs {
         ProviderConfig::openai_compatible(
             "https://api.groq.com/openai/v1",
             "GROQ_API_KEY",
-            "llama3-8b-8192", // Default chat model
+            "llama-3.1-8b-instant", // Default chat model
             None,             // No multimodal support yet
         )
     }

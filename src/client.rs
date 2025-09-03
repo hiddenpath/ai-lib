@@ -2,6 +2,7 @@ use crate::api::{ChatApi, ChatCompletionChunk};
 use crate::config::ConnectionOptions;
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::provider::{
+    classification::ProviderClassification,
     CohereAdapter, GeminiAdapter, GenericAdapter, MistralAdapter, OpenAiAdapter, ProviderConfigs,
 };
 use crate::types::{AiLibError, ChatCompletionRequest, ChatCompletionResponse};
@@ -10,10 +11,67 @@ use futures::Future;
 use std::sync::Arc;
 use tokio::sync::oneshot;
 
+/// Model configuration options for explicit model selection
+#[derive(Debug, Clone)]
+pub struct ModelOptions {
+    pub chat_model: Option<String>,
+    pub multimodal_model: Option<String>,
+    pub fallback_models: Vec<String>,
+    pub auto_discovery: bool,
+}
+
+impl ModelOptions {
+    /// Create default model options
+    pub fn default() -> Self {
+        Self {
+            chat_model: None,
+            multimodal_model: None,
+            fallback_models: Vec::new(),
+            auto_discovery: true,
+        }
+    }
+    
+    /// Set chat model
+    pub fn with_chat_model(mut self, model: &str) -> Self {
+        self.chat_model = Some(model.to_string());
+        self
+    }
+    
+    /// Set multimodal model
+    pub fn with_multimodal_model(mut self, model: &str) -> Self {
+        self.multimodal_model = Some(model.to_string());
+        self
+    }
+    
+    /// Set fallback models
+    pub fn with_fallback_models(mut self, models: Vec<&str>) -> Self {
+        self.fallback_models = models.into_iter().map(|s| s.to_string()).collect();
+        self
+    }
+    
+    /// Enable or disable auto discovery
+    pub fn with_auto_discovery(mut self, enabled: bool) -> Self {
+        self.auto_discovery = enabled;
+        self
+    }
+}
+
+/// Helper function to create GenericAdapter with optional custom transport
+fn create_generic_adapter(
+    config: crate::provider::config::ProviderConfig,
+    transport: Option<crate::transport::DynHttpTransportRef>,
+) -> Result<Box<dyn ChatApi>, AiLibError> {
+    if let Some(custom_transport) = transport {
+        Ok(Box::new(GenericAdapter::with_transport_ref(config, custom_transport)?))
+    } else {
+        Ok(Box::new(GenericAdapter::new(config)?))
+    }
+}
+
 /// Unified AI client module
 ///
 /// AI model provider enumeration
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Provider {
     // Config-driven providers
     Groq,
@@ -36,6 +94,46 @@ pub enum Provider {
     Mistral,
     Cohere,
     // Bedrock removed (deferred)
+}
+
+impl Provider {
+    /// Get the provider's preferred default chat model.
+    /// These should mirror the values used inside `ProviderConfigs`.
+    pub fn default_chat_model(&self) -> &'static str {
+        match self {
+            Provider::Groq => "llama-3.1-8b-instant",
+            Provider::XaiGrok => "grok-beta",
+            Provider::Ollama => "llama3-8b",
+            Provider::DeepSeek => "deepseek-chat",
+            Provider::Anthropic => "claude-3-5-sonnet-20241022",
+            Provider::AzureOpenAI => "gpt-35-turbo",
+            Provider::HuggingFace => "microsoft/DialoGPT-medium",
+            Provider::TogetherAI => "meta-llama/Llama-3-8b-chat-hf",
+            Provider::BaiduWenxin => "ernie-3.5",
+            Provider::TencentHunyuan => "hunyuan-standard",
+            Provider::IflytekSpark => "spark-v3.0",
+            Provider::Moonshot => "moonshot-v1-8k",
+            Provider::OpenAI => "gpt-3.5-turbo",
+            Provider::Qwen => "qwen-turbo",
+            Provider::Gemini => "gemini-pro", // widely used text/chat model
+            Provider::Mistral => "mistral-small", // generic default
+            Provider::Cohere => "command-r", // chat-capable model
+        }
+    }
+
+    /// Get the provider's preferred multimodal model (if any).
+    pub fn default_multimodal_model(&self) -> Option<&'static str> {
+        match self {
+            Provider::OpenAI => Some("gpt-4o"),
+            Provider::AzureOpenAI => Some("gpt-4o"),
+            Provider::Anthropic => Some("claude-3-5-sonnet-20241022"),
+            Provider::Groq => None, // No multimodal model currently available
+            Provider::Gemini => Some("gemini-1.5-flash"),
+            Provider::Cohere => Some("command-r-plus"),
+            // Others presently have no clearly documented multimodal endpoint or are not yet wired.
+            _ => None,
+        }
+    }
 }
 
 /// Unified AI client
@@ -86,6 +184,9 @@ pub struct AiClient {
     adapter: Box<dyn ChatApi>,
     metrics: Arc<dyn Metrics>,
     connection_options: Option<ConnectionOptions>,
+    // Custom default models (override provider defaults)
+    custom_default_chat_model: Option<String>,
+    custom_default_multimodal_model: Option<String>,
 }
 
 impl AiClient {
@@ -114,22 +215,7 @@ impl AiClient {
     /// Create client with minimal explicit options (base_url/proxy/timeout). Not all providers
     /// support overrides; unsupported providers ignore unspecified fields gracefully.
     pub fn with_options(provider: Provider, opts: ConnectionOptions) -> Result<Self, AiLibError> {
-        let config_driven = matches!(
-            provider,
-            Provider::Groq
-                | Provider::XaiGrok
-                | Provider::Ollama
-                | Provider::DeepSeek
-                | Provider::Qwen
-                | Provider::BaiduWenxin
-                | Provider::TencentHunyuan
-                | Provider::IflytekSpark
-                | Provider::Moonshot
-                | Provider::Anthropic
-                | Provider::AzureOpenAI
-                | Provider::HuggingFace
-                | Provider::TogetherAI
-        );
+        let config_driven = provider.is_config_driven();
         let need_builder = config_driven
             && (opts.base_url.is_some()
                 || opts.proxy.is_some()
@@ -220,10 +306,7 @@ impl AiClient {
         }
 
         // Independent adapters: OpenAI / Gemini / Mistral / Cohere
-        if matches!(
-            provider,
-            Provider::OpenAI | Provider::Gemini | Provider::Mistral | Provider::Cohere
-        ) {
+        if provider.is_independent() {
             let adapter: Box<dyn ChatApi> = match provider {
                 Provider::OpenAI => {
                     if let Some(ref k) = opts.api_key {
@@ -274,6 +357,8 @@ impl AiClient {
                 adapter,
                 metrics: Arc::new(NoopMetrics::new()),
                 connection_options: Some(opts),
+                custom_default_chat_model: None,
+                custom_default_multimodal_model: None,
             });
         }
 
@@ -416,6 +501,8 @@ impl AiClient {
             adapter,
             metrics,
             connection_options: None,
+            custom_default_chat_model: None,
+            custom_default_multimodal_model: None,
         })
     }
 
@@ -677,6 +764,153 @@ impl AiClient {
     pub fn current_provider(&self) -> Provider {
         self.provider
     }
+
+    /// Convenience helper: construct a request with the provider's default chat model.
+    /// This does NOT send the request.
+    /// Uses custom default model if set via AiClientBuilder, otherwise uses provider default.
+    pub fn build_simple_request<S: Into<String>>(&self, prompt: S) -> ChatCompletionRequest {
+        let model = self.custom_default_chat_model
+            .clone()
+            .unwrap_or_else(|| self.provider.default_chat_model().to_string());
+            
+        ChatCompletionRequest::new(
+            model,
+            vec![crate::types::Message {
+                role: crate::types::Role::User,
+                content: crate::types::common::Content::Text(prompt.into()),
+                function_call: None,
+            }],
+        )
+    }
+    
+    /// Convenience helper: construct a request with an explicitly specified chat model.
+    /// This does NOT send the request.
+    pub fn build_simple_request_with_model<S: Into<String>>(
+        &self, 
+        prompt: S, 
+        model: S
+    ) -> ChatCompletionRequest {
+        ChatCompletionRequest::new(
+            model.into(),
+            vec![crate::types::Message {
+                role: crate::types::Role::User,
+                content: crate::types::common::Content::Text(prompt.into()),
+                function_call: None,
+            }],
+        )
+    }
+    
+    /// Convenience helper: construct a request with the provider's default multimodal model.
+    /// This does NOT send the request.
+    /// Uses custom default model if set via AiClientBuilder, otherwise uses provider default.
+    pub fn build_multimodal_request<S: Into<String>>(
+        &self, 
+        prompt: S
+    ) -> Result<ChatCompletionRequest, AiLibError> {
+        let model = self.custom_default_multimodal_model
+            .clone()
+            .or_else(|| self.provider.default_multimodal_model().map(|s| s.to_string()))
+            .ok_or_else(|| AiLibError::ConfigurationError(
+                format!("No multimodal model available for provider {:?}", self.provider)
+            ))?;
+            
+        Ok(ChatCompletionRequest::new(
+            model,
+            vec![crate::types::Message {
+                role: crate::types::Role::User,
+                content: crate::types::common::Content::Text(prompt.into()),
+                function_call: None,
+            }],
+        ))
+    }
+    
+    /// Convenience helper: construct a request with an explicitly specified multimodal model.
+    /// This does NOT send the request.
+    pub fn build_multimodal_request_with_model<S: Into<String>>(
+        &self, 
+        prompt: S, 
+        model: S
+    ) -> ChatCompletionRequest {
+        ChatCompletionRequest::new(
+            model.into(),
+            vec![crate::types::Message {
+                role: crate::types::Role::User,
+                content: crate::types::common::Content::Text(prompt.into()),
+                function_call: None,
+            }],
+        )
+    }
+
+    /// One-shot helper: create a client for `provider`, send a single user prompt using the
+    /// default chat model, and return plain text content (first choice).
+    pub async fn quick_chat_text<P: Into<String>>(
+        provider: Provider,
+        prompt: P,
+    ) -> Result<String, AiLibError> {
+        let client = AiClient::new(provider)?;
+        let req = client.build_simple_request(prompt.into());
+        let resp = client.chat_completion(req).await?;
+        resp.first_text().map(|s| s.to_string())
+    }
+    
+    /// One-shot helper: create a client for `provider`, send a single user prompt using an
+    /// explicitly specified chat model, and return plain text content (first choice).
+    pub async fn quick_chat_text_with_model<P: Into<String>, M: Into<String>>(
+        provider: Provider,
+        prompt: P,
+        model: M,
+    ) -> Result<String, AiLibError> {
+        let client = AiClient::new(provider)?;
+        let req = client.build_simple_request_with_model(prompt.into(), model.into());
+        let resp = client.chat_completion(req).await?;
+        resp.first_text().map(|s| s.to_string())
+    }
+    
+    /// One-shot helper: create a client for `provider`, send a single user prompt using the
+    /// default multimodal model, and return plain text content (first choice).
+    pub async fn quick_multimodal_text<P: Into<String>>(
+        provider: Provider,
+        prompt: P,
+    ) -> Result<String, AiLibError> {
+        let client = AiClient::new(provider)?;
+        let req = client.build_multimodal_request(prompt.into())?;
+        let resp = client.chat_completion(req).await?;
+        resp.first_text().map(|s| s.to_string())
+    }
+    
+    /// One-shot helper: create a client for `provider`, send a single user prompt using an
+    /// explicitly specified multimodal model, and return plain text content (first choice).
+    pub async fn quick_multimodal_text_with_model<P: Into<String>, M: Into<String>>(
+        provider: Provider,
+        prompt: P,
+        model: M,
+    ) -> Result<String, AiLibError> {
+        let client = AiClient::new(provider)?;
+        let req = client.build_multimodal_request_with_model(prompt.into(), model.into());
+        let resp = client.chat_completion(req).await?;
+        resp.first_text().map(|s| s.to_string())
+    }
+    
+    /// One-shot helper with model options: create a client for `provider`, send a single user prompt
+    /// using specified model options, and return plain text content (first choice).
+    pub async fn quick_chat_text_with_options<P: Into<String>>(
+        provider: Provider,
+        prompt: P,
+        options: ModelOptions,
+    ) -> Result<String, AiLibError> {
+        let client = AiClient::new(provider)?;
+        
+        // Determine which model to use based on options
+        let model = if let Some(chat_model) = options.chat_model {
+            chat_model
+        } else {
+            provider.default_chat_model().to_string()
+        };
+        
+        let req = client.build_simple_request_with_model(prompt.into(), model);
+        let resp = client.chat_completion(req).await?;
+        resp.first_text().map(|s| s.to_string())
+    }
 }
 
 /// Streaming response cancel handle
@@ -725,6 +959,9 @@ pub struct AiClientBuilder {
     pool_max_idle: Option<usize>,
     pool_idle_timeout: Option<std::time::Duration>,
     metrics: Option<Arc<dyn Metrics>>,
+    // Model configuration options
+    default_chat_model: Option<String>,
+    default_multimodal_model: Option<String>,
 }
 
 impl AiClientBuilder {
@@ -744,7 +981,14 @@ impl AiClientBuilder {
             pool_max_idle: None,
             pool_idle_timeout: None,
             metrics: None,
+            default_chat_model: None,
+            default_multimodal_model: None,
         }
+    }
+
+    /// Check if provider is config-driven (uses GenericAdapter)
+    fn is_config_driven_provider(provider: Provider) -> bool {
+        provider.is_config_driven()
     }
 
     /// Set custom base URL
@@ -845,6 +1089,50 @@ impl AiClientBuilder {
         self
     }
 
+    /// Set default chat model for the client
+    ///
+    /// # Arguments
+    /// * `model` - Default chat model name
+    ///
+    /// # Returns
+    /// * `Self` - Builder instance for method chaining
+    ///
+    /// # Example
+    /// ```rust
+    /// use ai_lib::{AiClientBuilder, Provider};
+    ///
+    /// let client = AiClientBuilder::new(Provider::Groq)
+    ///     .with_default_chat_model("llama-3.1-8b-instant")
+    ///     .build()?;
+    /// # Ok::<(), ai_lib::AiLibError>(())
+    /// ```
+    pub fn with_default_chat_model(mut self, model: &str) -> Self {
+        self.default_chat_model = Some(model.to_string());
+        self
+    }
+
+    /// Set default multimodal model for the client
+    ///
+    /// # Arguments
+    /// * `model` - Default multimodal model name
+    ///
+    /// # Returns
+    /// * `Self` - Builder instance for method chaining
+    ///
+    /// # Example
+    /// ```rust
+    /// use ai_lib::{AiClientBuilder, Provider};
+    ///
+    /// let client = AiClientBuilder::new(Provider::Groq)
+    ///     .with_default_multimodal_model("llama-3.2-11b-vision")
+    ///     .build()?;
+    /// # Ok::<(), ai_lib::AiLibError>(())
+    /// ```
+    pub fn with_default_multimodal_model(mut self, model: &str) -> Self {
+        self.default_multimodal_model = Some(model.to_string());
+        self
+    }
+
     /// Build AiClient instance
     ///
     /// The build process applies configuration in the following priority order:
@@ -873,143 +1161,18 @@ impl AiClientBuilder {
         let transport = self.create_custom_transport(proxy_url.clone(), timeout)?;
 
         // 6. Create adapter
-        let adapter: Box<dyn ChatApi> = match self.provider {
-            // Use config-driven generic adapter
-            Provider::Groq => {
-                if let Some(custom_transport) = transport {
-                    Box::new(GenericAdapter::with_transport_ref(
-                        config,
-                        custom_transport,
-                    )?)
-                } else {
-                    Box::new(GenericAdapter::new(config)?)
-                }
+        let adapter: Box<dyn ChatApi> = if Self::is_config_driven_provider(self.provider) {
+            // All config-driven providers use the same logic - much cleaner!
+            create_generic_adapter(config, transport)?
+        } else {
+            // Independent adapters - simple one-liners
+            match self.provider {
+                Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
+                Provider::Gemini => Box::new(GeminiAdapter::new()?),
+                Provider::Mistral => Box::new(MistralAdapter::new()?),
+                Provider::Cohere => Box::new(CohereAdapter::new()?),
+                _ => unreachable!("All providers should be handled by now"),
             }
-            Provider::XaiGrok => {
-                if let Some(custom_transport) = transport {
-                    Box::new(GenericAdapter::with_transport_ref(
-                        config,
-                        custom_transport,
-                    )?)
-                } else {
-                    Box::new(GenericAdapter::new(config)?)
-                }
-            }
-            Provider::Ollama => {
-                if let Some(custom_transport) = transport {
-                    Box::new(GenericAdapter::with_transport_ref(
-                        config,
-                        custom_transport,
-                    )?)
-                } else {
-                    Box::new(GenericAdapter::new(config)?)
-                }
-            }
-            Provider::DeepSeek => {
-                if let Some(custom_transport) = transport {
-                    Box::new(GenericAdapter::with_transport_ref(
-                        config,
-                        custom_transport,
-                    )?)
-                } else {
-                    Box::new(GenericAdapter::new(config)?)
-                }
-            }
-            Provider::Qwen => {
-                if let Some(custom_transport) = transport {
-                    Box::new(GenericAdapter::with_transport_ref(
-                        config,
-                        custom_transport,
-                    )?)
-                } else {
-                    Box::new(GenericAdapter::new(config)?)
-                }
-            }
-            Provider::BaiduWenxin => {
-                if let Some(custom_transport) = transport {
-                    Box::new(GenericAdapter::with_transport_ref(
-                        config,
-                        custom_transport,
-                    )?)
-                } else {
-                    Box::new(GenericAdapter::new(config)?)
-                }
-            }
-            Provider::TencentHunyuan => {
-                if let Some(custom_transport) = transport {
-                    Box::new(GenericAdapter::with_transport_ref(
-                        config,
-                        custom_transport,
-                    )?)
-                } else {
-                    Box::new(GenericAdapter::new(config)?)
-                }
-            }
-            Provider::IflytekSpark => {
-                if let Some(custom_transport) = transport {
-                    Box::new(GenericAdapter::with_transport_ref(
-                        config,
-                        custom_transport,
-                    )?)
-                } else {
-                    Box::new(GenericAdapter::new(config)?)
-                }
-            }
-            Provider::Moonshot => {
-                if let Some(custom_transport) = transport {
-                    Box::new(GenericAdapter::with_transport_ref(
-                        config,
-                        custom_transport,
-                    )?)
-                } else {
-                    Box::new(GenericAdapter::new(config)?)
-                }
-            }
-            Provider::Anthropic => {
-                if let Some(custom_transport) = transport {
-                    Box::new(GenericAdapter::with_transport_ref(
-                        config,
-                        custom_transport,
-                    )?)
-                } else {
-                    Box::new(GenericAdapter::new(config)?)
-                }
-            }
-            Provider::AzureOpenAI => {
-                if let Some(custom_transport) = transport {
-                    Box::new(GenericAdapter::with_transport_ref(
-                        config,
-                        custom_transport,
-                    )?)
-                } else {
-                    Box::new(GenericAdapter::new(config)?)
-                }
-            }
-            Provider::HuggingFace => {
-                if let Some(custom_transport) = transport {
-                    Box::new(GenericAdapter::with_transport_ref(
-                        config,
-                        custom_transport,
-                    )?)
-                } else {
-                    Box::new(GenericAdapter::new(config)?)
-                }
-            }
-            Provider::TogetherAI => {
-                if let Some(custom_transport) = transport {
-                    Box::new(GenericAdapter::with_transport_ref(
-                        config,
-                        custom_transport,
-                    )?)
-                } else {
-                    Box::new(GenericAdapter::new(config)?)
-                }
-            }
-            // Use independent adapters (these don't support custom configuration)
-            Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
-            Provider::Gemini => Box::new(GeminiAdapter::new()?),
-            Provider::Mistral => Box::new(MistralAdapter::new()?),
-            Provider::Cohere => Box::new(CohereAdapter::new()?),
         };
 
         // 7. Create AiClient
@@ -1018,6 +1181,8 @@ impl AiClientBuilder {
             adapter,
             metrics: self.metrics.unwrap_or_else(|| Arc::new(NoopMetrics::new())),
             connection_options: None,
+            custom_default_chat_model: self.default_chat_model,
+            custom_default_multimodal_model: self.default_multimodal_model,
         };
 
         Ok(client)
@@ -1083,27 +1248,7 @@ impl AiClientBuilder {
     fn get_default_provider_config(
         &self,
     ) -> Result<crate::provider::config::ProviderConfig, AiLibError> {
-        match self.provider {
-            Provider::Groq => Ok(ProviderConfigs::groq()),
-            Provider::XaiGrok => Ok(ProviderConfigs::xai_grok()),
-            Provider::Ollama => Ok(ProviderConfigs::ollama()),
-            Provider::DeepSeek => Ok(ProviderConfigs::deepseek()),
-            Provider::Qwen => Ok(ProviderConfigs::qwen()),
-            Provider::BaiduWenxin => Ok(ProviderConfigs::baidu_wenxin()),
-            Provider::TencentHunyuan => Ok(ProviderConfigs::tencent_hunyuan()),
-            Provider::IflytekSpark => Ok(ProviderConfigs::iflytek_spark()),
-            Provider::Moonshot => Ok(ProviderConfigs::moonshot()),
-            Provider::Anthropic => Ok(ProviderConfigs::anthropic()),
-            Provider::AzureOpenAI => Ok(ProviderConfigs::azure_openai()),
-            Provider::HuggingFace => Ok(ProviderConfigs::huggingface()),
-            Provider::TogetherAI => Ok(ProviderConfigs::together_ai()),
-            // These providers don't support custom configuration
-            Provider::OpenAI | Provider::Gemini | Provider::Mistral | Provider::Cohere => {
-                Err(AiLibError::ConfigurationError(
-                    "This provider does not support custom configuration".to_string(),
-                ))
-            }
-        }
+        self.provider.get_default_config()
     }
 
     /// Create custom ProviderConfig

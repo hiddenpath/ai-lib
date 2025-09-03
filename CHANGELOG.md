@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [TBD] - Provider Classification System
+
+### Added
+- **System-Level Provider Classification**: New `ProviderClassification` trait for unified provider behavior management
+- **Provider Classification Constants**: System-level constants (`CONFIG_DRIVEN_PROVIDERS`, `INDEPENDENT_PROVIDERS`, `ALL_PROVIDERS`) for single source of truth
+- **Unified Configuration Management**: Centralized provider configuration mapping through trait methods
+- **Provider Classification Module**: New `src/provider/classification.rs` module with comprehensive provider behavior definitions
+
+### Enhanced
+- **Provider Enum**: Added `PartialEq` trait to `Provider` enum for classification support
+- **Code Organization**: Eliminated duplicate provider classification logic across multiple modules
+- **Type Safety**: Compile-time provider classification with automatic adapter type detection
+
+### Changed
+- **Provider Classification Logic**: Replaced hardcoded `matches!` statements with trait-based classification
+- **Configuration Retrieval**: Simplified provider configuration access through unified trait methods
+- **Adapter Creation**: Streamlined adapter creation logic using provider classification
+
+### Developer Experience
+- **Simplified Provider Management**: Single location for adding new providers and their classifications
+- **Reduced Code Duplication**: Eliminated ~50 lines of repetitive provider classification code
+- **Better Maintainability**: Centralized provider behavior definitions reduce maintenance overhead
+
+### How to Add New Providers
+
+#### For Config-Driven Providers (using GenericAdapter):
+1. Add provider to `Provider` enum in `src/client.rs`
+2. Add provider to `CONFIG_DRIVEN_PROVIDERS` array in `src/provider/classification.rs`
+3. Add configuration method to `ProviderConfigs` in `src/provider/configs.rs`
+4. Add configuration mapping in `ProviderClassification::get_default_config()` implementation
+
+#### For Independent Providers (using dedicated adapters):
+1. Add provider to `Provider` enum in `src/client.rs`
+2. Add provider to `INDEPENDENT_PROVIDERS` array in `src/provider/classification.rs`
+3. Create dedicated adapter implementation
+4. Add adapter creation logic in `AiClientBuilder::build()` method
+
+#### Example - Adding a New Config-Driven Provider:
+```rust
+// 1. Add to Provider enum
+pub enum Provider {
+    // ... existing providers
+    NewProvider,  // Add here
+}
+
+// 2. Add to CONFIG_DRIVEN_PROVIDERS array
+pub const CONFIG_DRIVEN_PROVIDERS: &[Provider] = &[
+    // ... existing providers
+    Provider::NewProvider,  // Add here
+];
+
+// 3. Add configuration method
+impl ProviderConfigs {
+    pub fn new_provider() -> ProviderConfig {
+        ProviderConfig::openai_compatible(
+            "https://api.newprovider.com/v1",
+            "NEW_PROVIDER_API_KEY",
+            "new-model",
+            None,
+        )
+    }
+}
+
+// 4. Add to trait implementation
+fn get_default_config(&self) -> Result<ProviderConfig, AiLibError> {
+    match self {
+        // ... existing mappings
+        Provider::NewProvider => Ok(ProviderConfigs::new_provider()),
+        // ...
+    }
+}
+```
+
+### Benefits
+- **Single Source of Truth**: All provider classifications defined in one place
+- **Type Safety**: Compile-time validation of provider behavior
+- **Extensibility**: Easy addition of new providers with automatic classification
+- **Maintainability**: Reduced code duplication and centralized management
+
 ## [0.2.12] 
 
 ### Added

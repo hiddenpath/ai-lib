@@ -63,6 +63,29 @@ let gemini_client = AiClient::new(Provider::Gemini)?;
 let claude_client = AiClient::new(Provider::Anthropic)?;
 ```
 
+### 🧪 **Ultra-Simple One-Liner Usage**
+When you just want a reply fast:
+
+```rust
+let text = AiClient::quick_chat_text(Provider::Groq, "Hello!").await?;
+println!("Groq says: {}", text);
+```
+
+Or build a request with the default model automatically:
+
+```rust
+let client = AiClient::new(Provider::OpenAI)?;
+let req = client.build_simple_request("Explain Rust ownership in one sentence.");
+let resp = client.chat_completion(req).await?;
+println!("Answer: {}", resp.first_text()?);
+```
+
+New helpers:
+- `Provider::default_chat_model()` / `default_multimodal_model()`
+- `AiClient::build_simple_request(prompt)`
+- `AiClient::quick_chat_text(provider, prompt)`
+- `ChatCompletionResponse::first_text()`
+
 ### 🌊 **Universal Streaming Support**
 Real-time streaming responses for all providers with SSE parsing and fallback emulation:
 
@@ -363,6 +386,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let response = client.chat_completion(request).await?;
     println!("Response: {}", response.choices[0].message.content.as_text());
     
+    Ok(())
+}
+```
+
+### Simplest Possible
+```rust
+use ai_lib::Provider;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let reply = ai_lib::AiClient::quick_chat_text(Provider::Groq, "Ping?").await?;
+    println!("Reply: {}", reply);
     Ok(())
 }
 ```

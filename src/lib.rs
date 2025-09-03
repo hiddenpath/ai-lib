@@ -57,7 +57,7 @@ pub mod utils; // minimal explicit configuration entrypoint
 
 // Re-export main types for user convenience
 pub use api::ChatApi;
-pub use client::{AiClient, AiClientBuilder, Provider};
+pub use client::{AiClient, AiClientBuilder, ModelOptions, Provider};
 pub use types::{
     AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
 };
