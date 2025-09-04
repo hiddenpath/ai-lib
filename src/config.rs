@@ -1,4 +1,7 @@
 use std::time::Duration;
+use crate::circuit_breaker::CircuitBreakerConfig;
+use crate::rate_limiter::RateLimiterConfig;
+use crate::error_handling::ErrorThresholds;
 
 /// Minimal explicit connection/configuration options.
 ///
@@ -59,5 +62,105 @@ impl ConnectionOptions {
             }
         }
         self
+    }
+}
+
+/// Resilience configuration for advanced error handling and rate limiting
+#[derive(Debug, Clone)]
+pub struct ResilienceConfig {
+    pub circuit_breaker: Option<CircuitBreakerConfig>,
+    pub rate_limiter: Option<RateLimiterConfig>,
+    pub backpressure: Option<BackpressureConfig>,
+    pub error_handling: Option<ErrorHandlingConfig>,
+}
+
+/// Backpressure configuration
+#[derive(Debug, Clone)]
+pub struct BackpressureConfig {
+    pub max_concurrent_requests: usize,
+}
+
+/// Error handling configuration
+#[derive(Debug, Clone)]
+pub struct ErrorHandlingConfig {
+    pub enable_recovery: bool,
+    pub enable_monitoring: bool,
+    pub error_thresholds: ErrorThresholds,
+}
+
+impl Default for ResilienceConfig {
+    fn default() -> Self {
+        Self {
+            circuit_breaker: None,
+            rate_limiter: None,
+            backpressure: None,
+            error_handling: None,
+        }
+    }
+}
+
+impl Default for BackpressureConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrent_requests: 100,
+        }
+    }
+}
+
+impl Default for ErrorHandlingConfig {
+    fn default() -> Self {
+        Self {
+            enable_recovery: true,
+            enable_monitoring: true,
+            error_thresholds: ErrorThresholds::default(),
+        }
+    }
+}
+
+impl ResilienceConfig {
+    /// Create smart defaults for production use
+    pub fn smart_defaults() -> Self {
+        Self {
+            circuit_breaker: Some(CircuitBreakerConfig::default()),
+            rate_limiter: Some(RateLimiterConfig::default()),
+            backpressure: Some(BackpressureConfig::default()),
+            error_handling: Some(ErrorHandlingConfig::default()),
+        }
+    }
+
+    /// Create production-ready configuration
+    pub fn production() -> Self {
+        Self {
+            circuit_breaker: Some(CircuitBreakerConfig::production()),
+            rate_limiter: Some(RateLimiterConfig::production()),
+            backpressure: Some(BackpressureConfig {
+                max_concurrent_requests: 50,
+            }),
+            error_handling: Some(ErrorHandlingConfig {
+                enable_recovery: true,
+                enable_monitoring: true,
+                error_thresholds: ErrorThresholds {
+                    error_rate_threshold: 0.05, // 5% error rate
+                    consecutive_errors: 3,
+                    time_window: Duration::from_secs(30),
+                },
+            }),
+        }
+    }
+
+    /// Create development configuration
+    pub fn development() -> Self {
+        Self {
+            circuit_breaker: Some(CircuitBreakerConfig::development()),
+            rate_limiter: Some(RateLimiterConfig::development()),
+            backpressure: Some(BackpressureConfig {
+                max_concurrent_requests: 200,
+            }),
+            error_handling: Some(ErrorHandlingConfig {
+                enable_recovery: false,
+                enable_monitoring: false,
+                error_thresholds: ErrorThresholds::default(),
+            }),
+        }
     }
 }

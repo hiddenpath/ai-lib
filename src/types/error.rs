@@ -1,7 +1,7 @@
 use crate::transport::TransportError;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum AiLibError {
     #[error("Provider error: {0}")]
     ProviderError(String),

@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.20] - 2024-12-19 - Resilience & Error Handling Enhancement
+
+### Added
+- **Circuit Breaker Implementation**: Complete circuit breaker pattern with state management (Closed, Open, HalfOpen)
+- **Rate Limiting with Token Bucket**: Advanced rate limiting with adaptive capabilities and burst handling
+- **Enhanced Error Handling**: Intelligent error classification, pattern analysis, and recovery suggestions
+- **Resilience Configuration**: Comprehensive configuration system with production, development, and conservative presets
+- **Metrics Integration**: Full metrics collection for circuit breaker, rate limiter, and error handling
+- **Backpressure Control**: Semaphore-based backpressure management for concurrent request control
+- **Error Pattern Analysis**: Automatic error pattern detection and frequency analysis
+- **Smart Recovery Strategies**: Context-aware error recovery with suggested actions
+- **Builder Pattern Enhancements**: New builder methods for resilience configuration (`with_smart_defaults`, `for_production`, `for_development`)
+
+### Enhanced
+- **AiClientBuilder**: Added resilience configuration support with progressive complexity API
+- **Error Classification**: Extended error types with detailed categorization (RateLimit, Network, Authentication, Provider, Timeout, Configuration, Validation, Serialization, Deserialization, FileOperation, ModelNotFound, ContextLengthExceeded, UnsupportedFeature)
+- **Transport Error Handling**: Improved error serialization and Clone trait support
+- **Configuration Management**: Added `ResilienceConfig`, `BackpressureConfig`, and `ErrorHandlingConfig` structures
+
+### Technical Details
+- **Circuit Breaker**: Configurable failure thresholds, recovery timeouts, and success thresholds
+- **Rate Limiter**: Token bucket algorithm with adaptive rate adjustment and burst capacity
+- **Error Recovery**: Pattern-based error analysis with intelligent suggestion generation
+- **Metrics**: Comprehensive monitoring with success rates, failure rates, and operational metrics
+- **Thread Safety**: All components use atomic operations and proper synchronization
+- **Async Support**: Full async/await support throughout all resilience features
+
+### API Changes
+- **New Modules**: `circuit_breaker`, `rate_limiter`, `error_handling`
+- **New Types**: `CircuitBreaker`, `TokenBucket`, `ErrorRecoveryManager`, `ErrorContext`, `SuggestedAction`
+- **New Configuration**: `ResilienceConfig`, `CircuitBreakerConfig`, `RateLimiterConfig`, `ErrorThresholds`
+- **New Builder Methods**: `with_smart_defaults()`, `for_production()`, `for_development()`, `with_resilience_config()`
+
+### Breaking Changes
+- None - All new features are additive and backward compatible
+
+### Dependencies
+- Added `chrono` with `serde` feature for timestamp serialization
+- Enhanced existing dependencies with no new external dependencies
+
 ## [TBD] - Provider Classification System
 
 ### Added

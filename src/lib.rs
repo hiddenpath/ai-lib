@@ -55,6 +55,11 @@ pub mod transport;
 pub mod types;
 pub mod utils; // minimal explicit configuration entrypoint
 
+// Resilience modules
+pub mod circuit_breaker;
+pub mod rate_limiter;
+pub mod error_handling;
+
 // Re-export main types for user convenience
 pub use api::ChatApi;
 pub use client::{AiClient, AiClientBuilder, ModelOptions, Provider};

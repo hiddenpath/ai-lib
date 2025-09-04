@@ -189,7 +189,7 @@ impl HttpTransport {
             }
         }
 
-        let client = client_builder.build().map_err(TransportError::HttpError)?;
+        let client = client_builder.build().map_err(|e| TransportError::HttpError(e.to_string()))?;
         Ok(Self {
             client,
             timeout: config.timeout,
@@ -206,7 +206,7 @@ impl HttpTransport {
             client_builder = client_builder.proxy(proxy);
         }
 
-        let client = client_builder.build().map_err(TransportError::HttpError)?;
+        let client = client_builder.build().map_err(|e| TransportError::HttpError(e.to_string()))?;
 
         Ok(Self { client, timeout })
     }
@@ -256,8 +256,8 @@ impl HttpTransport {
     /// Determine if error is retryable
     fn is_retryable_error(&self, error: &TransportError) -> bool {
         match error {
-            TransportError::HttpError(reqwest_err) => {
-                reqwest_err.is_timeout() || reqwest_err.is_connect()
+            TransportError::HttpError(err_msg) => {
+                err_msg.contains("timeout") || err_msg.contains("connection")
             }
             TransportError::ClientError { status, .. } => {
                 *status == 429 || *status == 502 || *status == 503 || *status == 504

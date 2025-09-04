@@ -5,13 +5,13 @@ use thiserror::Error;
 /// Transport layer error types with unified encapsulation of HTTP and JSON errors
 ///
 /// Unified encapsulation of all HTTP-level errors and JSON parsing errors
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum TransportError {
     #[error("HTTP request failed: {0}")]
-    HttpError(#[from] reqwest::Error),
+    HttpError(String),
 
     #[error("JSON serialization/deserialization failed: {0}")]
-    JsonError(#[from] serde_json::Error),
+    JsonError(String),
 
     #[error("Invalid URL: {0}")]
     InvalidUrl(String),
@@ -40,5 +40,17 @@ impl TransportError {
             500..=599 => Self::ServerError { status, message },
             _ => Self::InvalidUrl(format!("Unexpected status code: {}", status)),
         }
+    }
+}
+
+impl From<reqwest::Error> for TransportError {
+    fn from(err: reqwest::Error) -> Self {
+        Self::HttpError(err.to_string())
+    }
+}
+
+impl From<serde_json::Error> for TransportError {
+    fn from(err: serde_json::Error) -> Self {
+        Self::JsonError(err.to_string())
     }
 }

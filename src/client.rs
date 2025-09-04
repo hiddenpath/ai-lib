@@ -1,5 +1,5 @@
 use crate::api::{ChatApi, ChatCompletionChunk};
-use crate::config::ConnectionOptions;
+use crate::config::{ConnectionOptions, ResilienceConfig};
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::provider::{
     classification::ProviderClassification,
@@ -962,6 +962,8 @@ pub struct AiClientBuilder {
     // Model configuration options
     default_chat_model: Option<String>,
     default_multimodal_model: Option<String>,
+    // Resilience configuration
+    resilience_config: ResilienceConfig,
 }
 
 impl AiClientBuilder {
@@ -983,6 +985,7 @@ impl AiClientBuilder {
             metrics: None,
             default_chat_model: None,
             default_multimodal_model: None,
+            resilience_config: ResilienceConfig::default(),
         }
     }
 
@@ -1130,6 +1133,84 @@ impl AiClientBuilder {
     /// ```
     pub fn with_default_multimodal_model(mut self, model: &str) -> Self {
         self.default_multimodal_model = Some(model.to_string());
+        self
+    }
+
+    /// Enable smart defaults for resilience features
+    ///
+    /// This method enables reasonable default configurations for circuit breaker,
+    /// rate limiting, and error handling without requiring detailed configuration.
+    ///
+    /// # Returns
+    /// * `Self` - Builder instance for method chaining
+    ///
+    /// # Example
+    /// ```rust
+    /// use ai_lib::{AiClientBuilder, Provider};
+    ///
+    /// let client = AiClientBuilder::new(Provider::Groq)
+    ///     .with_smart_defaults()
+    ///     .build()?;
+    /// # Ok::<(), ai_lib::AiLibError>(())
+    /// ```
+    pub fn with_smart_defaults(mut self) -> Self {
+        self.resilience_config = ResilienceConfig::smart_defaults();
+        self
+    }
+
+    /// Configure for production environment
+    ///
+    /// This method applies production-ready configurations for all resilience
+    /// features with conservative settings for maximum reliability.
+    ///
+    /// # Returns
+    /// * `Self` - Builder instance for method chaining
+    ///
+    /// # Example
+    /// ```rust
+    /// use ai_lib::{AiClientBuilder, Provider};
+    ///
+    /// let client = AiClientBuilder::new(Provider::Groq)
+    ///     .for_production()
+    ///     .build()?;
+    /// # Ok::<(), ai_lib::AiLibError>(())
+    /// ```
+    pub fn for_production(mut self) -> Self {
+        self.resilience_config = ResilienceConfig::production();
+        self
+    }
+
+    /// Configure for development environment
+    ///
+    /// This method applies development-friendly configurations with more
+    /// lenient settings for easier debugging and testing.
+    ///
+    /// # Returns
+    /// * `Self` - Builder instance for method chaining
+    ///
+    /// # Example
+    /// ```rust
+    /// use ai_lib::{AiClientBuilder, Provider};
+    ///
+    /// let client = AiClientBuilder::new(Provider::Groq)
+    ///     .for_development()
+    ///     .build()?;
+    /// # Ok::<(), ai_lib::AiLibError>(())
+    /// ```
+    pub fn for_development(mut self) -> Self {
+        self.resilience_config = ResilienceConfig::development();
+        self
+    }
+
+    /// Set custom resilience configuration
+    ///
+    /// # Arguments
+    /// * `config` - Custom resilience configuration
+    ///
+    /// # Returns
+    /// * `Self` - Builder instance for method chaining
+    pub fn with_resilience_config(mut self, config: ResilienceConfig) -> Self {
+        self.resilience_config = config;
         self
     }
 
