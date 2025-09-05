@@ -47,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `chrono` with `serde` feature for timestamp serialization
 - Enhanced existing dependencies with no new external dependencies
 
-## [TBD] - Provider Classification System
+## [0.2.20] - Provider Classification System
 
 ### Added
 - **System-Level Provider Classification**: New `ProviderClassification` trait for unified provider behavior management
