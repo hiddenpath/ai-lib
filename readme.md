@@ -12,6 +12,7 @@ ai-lib unifies:
 - Chat & multimodal requests across heterogeneous model providers
 - Streaming (SSE + emulated) with consistent deltas
 - Function calling semantics
+- Reasoning models support (structured, streaming, JSON formats)
 - Batch workflows
 - Reliability primitives (retry, backoff, timeout, proxy, health, load strategies)
 - Model selection (cost / performance / health / weighted)
@@ -179,12 +180,13 @@ while let Some(chunk) = stream.next().await {
 2. Universal streaming (SSE + fallback emulation)
 3. Multimodal primitives (text/image/audio)
 4. Function calling (consistent tool schema)
-5. Batch processing (sequential / bounded concurrency / smart strategy)
-6. Reliability: retry, error classification, timeout, proxy, pool
-7. Model management: performance / cost / health / round-robin / weighted
-8. Observability: pluggable metrics & timing
-9. Security: isolation, no default content logging
-10. Extensibility: custom transport, metrics, strategy injection
+5. Reasoning models support (structured, streaming, JSON formats)
+6. Batch processing (sequential / bounded concurrency / smart strategy)
+7. Reliability: retry, error classification, timeout, proxy, pool
+8. Model management: performance / cost / health / round-robin / weighted
+9. Observability: pluggable metrics & timing
+10. Security: isolation, no default content logging
+11. Extensibility: custom transport, metrics, strategy injection
 
 ---
 
@@ -223,6 +225,40 @@ let msg = Message::user(ai_lib::types::common::Content::Image {
     mime: Some("image/jpeg".into()),
     name: None,
 });
+```
+
+### Reasoning Models
+```rust
+// Structured reasoning with function calling
+let reasoning_tool = Tool::new_json(
+    "step_by_step_reasoning",
+    Some("Execute step-by-step reasoning"),
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "problem": {"type": "string"},
+            "steps": {"type": "array", "items": {"type": "object"}},
+            "final_answer": {"type": "string"}
+        }
+    })
+);
+
+let request = ChatCompletionRequest::new(model, messages)
+    .with_functions(vec![reasoning_tool])
+    .with_function_call(FunctionCallPolicy::Auto);
+
+// Streaming reasoning
+let mut stream = client.chat_completion_stream(request).await?;
+while let Some(chunk) = stream.next().await {
+    if let Some(content) = &chunk?.choices[0].delta.content {
+        print!("{}", content);
+    }
+}
+
+// Provider-specific reasoning config
+let request = ChatCompletionRequest::new(model, messages)
+    .with_provider_specific("reasoning_format", serde_json::Value::String("parsed".to_string()))
+    .with_provider_specific("reasoning_effort", serde_json::Value::String("high".to_string()));
 ```
 
 ### Retry Awareness

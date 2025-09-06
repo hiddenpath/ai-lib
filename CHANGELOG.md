@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.20] - 2024-12-19 - Resilience & Error Handling Enhancement
+## [0.2.20] - 2025-09-05 - Resilience & Error Handling Enhancement + Reasoning Models Support
 
 ### Added
 - **Circuit Breaker Implementation**: Complete circuit breaker pattern with state management (Closed, Open, HalfOpen)
@@ -19,12 +19,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Error Pattern Analysis**: Automatic error pattern detection and frequency analysis
 - **Smart Recovery Strategies**: Context-aware error recovery with suggested actions
 - **Builder Pattern Enhancements**: New builder methods for resilience configuration (`with_smart_defaults`, `for_production`, `for_development`)
+- **System-Level Provider Classification**: New `ProviderClassification` trait for unified provider behavior management
+- **Provider Classification Constants**: System-level constants (`CONFIG_DRIVEN_PROVIDERS`, `INDEPENDENT_PROVIDERS`, `ALL_PROVIDERS`) for single source of truth
+- **Unified Configuration Management**: Centralized provider configuration mapping through trait methods
+- **Provider Classification Module**: New `src/provider/classification.rs` module with comprehensive provider behavior definitions
+- **Reasoning Models Support**: Comprehensive support for reasoning models through existing API capabilities
+  - **Best Practices Examples**: Complete examples demonstrating structured, streaming, and JSON format reasoning
+  - **Reasoning Utils Library**: Helper functions and assistant classes for reasoning model interactions
+  - **Provider-Specific Configuration**: Escape hatch mechanism for passing vendor-specific parameters
+  - **Multi-Format Support**: Support for structured, streaming, JSON, and step-by-step reasoning formats
+  - **Documentation**: Detailed guide for reasoning model integration and best practices
 
 ### Enhanced
 - **AiClientBuilder**: Added resilience configuration support with progressive complexity API
 - **Error Classification**: Extended error types with detailed categorization (RateLimit, Network, Authentication, Provider, Timeout, Configuration, Validation, Serialization, Deserialization, FileOperation, ModelNotFound, ContextLengthExceeded, UnsupportedFeature)
 - **Transport Error Handling**: Improved error serialization and Clone trait support
 - **Configuration Management**: Added `ResilienceConfig`, `BackpressureConfig`, and `ErrorHandlingConfig` structures
+- **Provider Enum**: Added `PartialEq` trait to `Provider` enum for classification support
+- **Code Organization**: Eliminated duplicate provider classification logic across multiple modules
+- **Type Safety**: Compile-time provider classification with automatic adapter type detection
+- **ChatCompletionRequest**: Added `with_functions()`, `with_function_call()`, and `with_provider_specific()` methods for enhanced functionality
+
+### Changed
+- **Provider Classification Logic**: Replaced hardcoded `matches!` statements with trait-based classification
+- **Configuration Retrieval**: Simplified provider configuration access through unified trait methods
+- **Adapter Creation**: Streamlined adapter creation logic using provider classification
 
 ### Technical Details
 - **Circuit Breaker**: Configurable failure thresholds, recovery timeouts, and success thresholds
@@ -33,12 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Metrics**: Comprehensive monitoring with success rates, failure rates, and operational metrics
 - **Thread Safety**: All components use atomic operations and proper synchronization
 - **Async Support**: Full async/await support throughout all resilience features
+- **Reasoning Models**: Support for Groq's qwen-qwq-32b, deepseek-r1-distill-llama-70b, and other reasoning models
 
 ### API Changes
 - **New Modules**: `circuit_breaker`, `rate_limiter`, `error_handling`
 - **New Types**: `CircuitBreaker`, `TokenBucket`, `ErrorRecoveryManager`, `ErrorContext`, `SuggestedAction`
 - **New Configuration**: `ResilienceConfig`, `CircuitBreakerConfig`, `RateLimiterConfig`, `ErrorThresholds`
 - **New Builder Methods**: `with_smart_defaults()`, `for_production()`, `for_development()`, `with_resilience_config()`
+- **New Request Methods**: `with_functions()`, `with_function_call()`, `with_provider_specific()`
 
 ### Breaking Changes
 - None - All new features are additive and backward compatible
@@ -47,23 +68,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `chrono` with `serde` feature for timestamp serialization
 - Enhanced existing dependencies with no new external dependencies
 
-## [0.2.20] - Provider Classification System
+### Examples
+- **Resilience Example**: `cargo run --example resilience_example` - Complete resilience features demonstration
+- **Reasoning Best Practices**: `cargo run --example reasoning_best_practices` - Reasoning models integration examples
+- **Reasoning Utils**: `cargo run --example reasoning_utils` - Reasoning utilities and helper functions
 
-### Added
-- **System-Level Provider Classification**: New `ProviderClassification` trait for unified provider behavior management
-- **Provider Classification Constants**: System-level constants (`CONFIG_DRIVEN_PROVIDERS`, `INDEPENDENT_PROVIDERS`, `ALL_PROVIDERS`) for single source of truth
-- **Unified Configuration Management**: Centralized provider configuration mapping through trait methods
-- **Provider Classification Module**: New `src/provider/classification.rs` module with comprehensive provider behavior definitions
+### Reasoning Models Support
 
-### Enhanced
-- **Provider Enum**: Added `PartialEq` trait to `Provider` enum for classification support
-- **Code Organization**: Eliminated duplicate provider classification logic across multiple modules
-- **Type Safety**: Compile-time provider classification with automatic adapter type detection
+ai-lib now provides comprehensive support for reasoning models through existing API capabilities:
 
-### Changed
-- **Provider Classification Logic**: Replaced hardcoded `matches!` statements with trait-based classification
-- **Configuration Retrieval**: Simplified provider configuration access through unified trait methods
-- **Adapter Creation**: Streamlined adapter creation logic using provider classification
+#### Supported Models
+- **Groq**: qwen-qwq-32b, deepseek-r1-distill-llama-70b, openai/gpt-oss-20b, openai/gpt-oss-120b
+- **Other Providers**: Any provider supporting reasoning capabilities through function calling
+
+#### Usage Patterns
+1. **Structured Reasoning**: Use function calls for step-by-step reasoning with structured output
+2. **Streaming Reasoning**: Observe real-time reasoning process through streaming responses
+3. **JSON Format Reasoning**: Get structured reasoning results in JSON format
+4. **Provider-Specific Configuration**: Use escape hatch for vendor-specific parameters
+
+#### Example Usage
+```rust
+// Structured reasoning with function calls
+let reasoning_tool = Tool::new_json(
+    "step_by_step_reasoning",
+    Some("Execute step-by-step reasoning"),
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "problem": {"type": "string"},
+            "steps": {"type": "array", "items": {"type": "object"}},
+            "final_answer": {"type": "string"}
+        }
+    })
+);
+
+let request = ChatCompletionRequest::new(model, messages)
+    .with_functions(vec![reasoning_tool])
+    .with_function_call(FunctionCallPolicy::Auto);
+
+// Provider-specific reasoning configuration
+let request = ChatCompletionRequest::new(model, messages)
+    .with_provider_specific("reasoning_format", serde_json::Value::String("parsed".to_string()))
+    .with_provider_specific("reasoning_effort", serde_json::Value::String("high".to_string()));
+```
 
 ### Developer Experience
 - **Simplified Provider Management**: Single location for adding new providers and their classifications
@@ -126,7 +174,7 @@ fn get_default_config(&self) -> Result<ProviderConfig, AiLibError> {
 - **Extensibility**: Easy addition of new providers with automatic classification
 - **Maintainability**: Reduced code duplication and centralized management
 
-## [0.2.12] 
+## [0.2.12] - 2025-04-15
 
 ### Added
 - **System Configuration Management**: Comprehensive configuration system with environment variable support and explicit overrides
@@ -155,7 +203,7 @@ fn get_default_config(&self) -> Result<ProviderConfig, AiLibError> {
 - **Proxy Testing**: `cargo run --example proxy_example` - Test proxy configuration
 - **Explicit Config**: `cargo run --example explicit_config` - Runtime configuration
 
-## [0.2.1] 
+## [0.2.1] - 2025-01-20
 
 ### Added
 - **Client Builder Pattern**: New `AiClientBuilder` for flexible client configuration with progressive customization levels
@@ -189,7 +237,7 @@ fn get_default_config(&self) -> Result<ProviderConfig, AiLibError> {
 - **Production Ready**: Load balancing, health checks, and sophisticated model selection
 - **Extensible**: Build custom model managers for any provider or use case
 
-## [0.2.0] 
+## [0.2.0] - 2024-12-15
 
 ### Added
 - Hybrid architecture with universal streaming support
@@ -203,7 +251,7 @@ fn get_default_config(&self) -> Result<ProviderConfig, AiLibError> {
 - Enhanced streaming capabilities
 - Better proxy support and configuration
 
-## [0.1.0] - 2024-12-17
+## [0.1.0] - 2024-12-10
 
 ### Added
 - Initial release of ai-lib

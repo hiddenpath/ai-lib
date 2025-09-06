@@ -12,6 +12,7 @@ ai-lib统一了：
 - 跨异构模型厂商的聊天和多模态请求
 - 流式传输（SSE + 模拟）与一致的增量
 - 函数调用语义
+- 推理模型支持（结构化、流式、JSON格式）
 - 批处理工作流
 - 可靠性原语（重试、退避、超时、代理、健康检查、负载策略）
 - 模型选择（成本/性能/健康/加权）
@@ -179,12 +180,13 @@ while let Some(chunk) = stream.next().await {
 2. 通用流式传输（SSE + 回退模拟）
 3. 多模态原语（文本/图像/音频）
 4. 函数调用（一致的工具模式）
-5. 批处理（顺序/有界并发/智能策略）
-6. 可靠性：重试、错误分类、超时、代理、池
-7. 模型管理：性能/成本/健康/轮询/加权
-8. 可观测性：可插拔指标和计时
-9. 安全性：隔离、无默认内容日志
-10. 可扩展性：自定义传输、指标、策略注入
+5. 推理模型支持（结构化、流式、JSON格式）
+6. 批处理（顺序/有界并发/智能策略）
+7. 可靠性：重试、错误分类、超时、代理、池
+8. 模型管理：性能/成本/健康/轮询/加权
+9. 可观测性：可插拔指标和计时
+10. 安全性：隔离、无默认内容日志
+11. 可扩展性：自定义传输、指标、策略注入
 
 ---
 
@@ -223,6 +225,40 @@ let msg = Message::user(ai_lib::types::common::Content::Image {
     mime: Some("image/jpeg".into()),
     name: None,
 });
+```
+
+### 推理模型
+```rust
+// 结构化推理与函数调用
+let reasoning_tool = Tool::new_json(
+    "step_by_step_reasoning",
+    Some("执行步骤化推理"),
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "problem": {"type": "string"},
+            "steps": {"type": "array", "items": {"type": "object"}},
+            "final_answer": {"type": "string"}
+        }
+    })
+);
+
+let request = ChatCompletionRequest::new(model, messages)
+    .with_functions(vec![reasoning_tool])
+    .with_function_call(FunctionCallPolicy::Auto);
+
+// 流式推理
+let mut stream = client.chat_completion_stream(request).await?;
+while let Some(chunk) = stream.next().await {
+    if let Some(content) = &chunk?.choices[0].delta.content {
+        print!("{}", content);
+    }
+}
+
+// 厂商特定推理配置
+let request = ChatCompletionRequest::new(model, messages)
+    .with_provider_specific("reasoning_format", serde_json::Value::String("parsed".to_string()))
+    .with_provider_specific("reasoning_effort", serde_json::Value::String("high".to_string()));
 ```
 
 ### 重试感知

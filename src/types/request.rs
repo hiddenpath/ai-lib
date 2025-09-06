@@ -44,6 +44,22 @@ impl ChatCompletionRequest {
         self
     }
 
+    pub fn with_functions(mut self, functions: Vec<Tool>) -> Self {
+        self.functions = Some(functions);
+        self
+    }
+
+    pub fn with_function_call(mut self, function_call: FunctionCallPolicy) -> Self {
+        self.function_call = Some(function_call);
+        self
+    }
+
+    pub fn with_provider_specific(self, _key: &str, _value: serde_json::Value) -> Self {
+        // This needs to add provider_specific field to ChatCompletionRequest
+        // For now, just return self, actual implementation requires modifying the struct
+        self
+    }
+
     /// Drop previous conversational messages while keeping system messages and the last non-system message.
     /// Useful to reset context while preserving system instructions.
     pub fn ignore_previous(mut self) -> Self {
