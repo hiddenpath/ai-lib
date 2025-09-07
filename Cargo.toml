@@ -1,6 +1,6 @@
 [package]
 name = "ai-lib"
-version = "0.2.20"
+version = "0.2.21"
 edition = "2021"
 authors = ["AI-lib Contributors"]
 description = "A unified AI SDK for Rust providing a single interface for multiple AI providers with hybrid architecture"

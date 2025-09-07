@@ -31,6 +31,7 @@ impl Default for ErrorThresholds {
 /// Error monitor for tracking and alerting
 pub struct ErrorMonitor {
     metrics: Arc<dyn Metrics>,
+    #[allow(dead_code)] // Reserved for future alerting functionality
     alert_thresholds: ErrorThresholds,
 }
 

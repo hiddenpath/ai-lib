@@ -118,6 +118,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 pub struct CohereAdapter {
+    #[allow(dead_code)] // Kept for backward compatibility, now using direct reqwest
     transport: DynHttpTransportRef,
     api_key: String,
     base_url: String,
@@ -198,7 +199,7 @@ impl CohereAdapter {
     }
 
     fn convert_request(&self, request: &ChatCompletionRequest) -> serde_json::Value {
-        // Build a chat-style body (messages) which maps well to /v1/chat
+        // Build v2/chat format according to Cohere documentation
         let msgs: Vec<serde_json::Value> = request
             .messages
             .iter()
@@ -213,11 +214,13 @@ impl CohereAdapter {
                 })
             })
             .collect();
+        
         let mut chat_body = serde_json::json!({
             "model": request.model,
             "messages": msgs,
         });
 
+        // Add optional parameters
         if let Some(temp) = request.temperature {
             chat_body["temperature"] =
                 serde_json::Value::Number(serde_json::Number::from_f64(temp.into()).unwrap());
@@ -234,13 +237,30 @@ impl CohereAdapter {
         &self,
         response: serde_json::Value,
     ) -> Result<ChatCompletionResponse, AiLibError> {
-        // Try common shapes: OpenAI-like choices, or Cohere generations
+        // Try different response formats: OpenAI-like choices, Cohere v2/chat message, or Cohere v1 generations
         let content = if let Some(c) = response.get("choices") {
+            // OpenAI format
             c[0]["message"]["content"]
                 .as_str()
                 .map(|s| s.to_string())
                 .or_else(|| c[0]["text"].as_str().map(|s| s.to_string()))
+        } else if let Some(msg) = response.get("message") {
+            // Cohere v2/chat format
+            if let Some(content_array) = msg.get("content") {
+                if let Some(content_obj) = content_array.as_array().and_then(|arr| arr.first()) {
+                    if let Some(text) = content_obj.get("text").and_then(|t| t.as_str()) {
+                        Some(text.to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
         } else if let Some(gens) = response.get("generations") {
+            // Cohere v1 format
             gens[0]["text"].as_str().map(|s| s.to_string())
         } else {
             None
@@ -309,10 +329,9 @@ impl ChatApi for CohereAdapter {
         self.metrics.incr_counter("cohere.requests", 1).await;
         let timer = self.metrics.start_timer("cohere.request_duration_ms").await;
 
-        let body = self.convert_request(&request);
+        let _body = self.convert_request(&request);
 
-        // Prefer chat endpoint; fallback to generate
-        let url_chat = format!("{}/v1/chat", self.base_url);
+        // Use v1/generate endpoint (fallback for older API keys)
         let url_generate = format!("{}/v1/generate", self.base_url);
 
         let mut headers = HashMap::new();
@@ -321,78 +340,78 @@ impl ChatApi for CohereAdapter {
             format!("Bearer {}", self.api_key),
         );
         headers.insert("Content-Type".to_string(), "application/json".to_string());
+        headers.insert("Accept".to_string(), "application/json".to_string());
 
-        // Try chat endpoint first (send messages as-is)
-        let chat_body = body;
-        let resp_chat = self
-            .transport
-            .post_json(&url_chat, Some(headers.clone()), chat_body.clone())
-            .await;
-
-        let response_json = match resp_chat {
-            Ok(v) => {
-                if let Some(t) = timer {
-                    t.stop();
+        // Convert messages to prompt string for v1/generate endpoint
+        let prompt = request
+            .messages
+            .iter()
+            .map(|msg| {
+                match msg.role {
+                    Role::System => format!("System: {}", msg.content.as_text()),
+                    Role::User => format!("Human: {}", msg.content.as_text()),
+                    Role::Assistant => format!("Assistant: {}", msg.content.as_text()),
                 }
-                v
-            }
-            Err(_) => {
-                // Fallback to generate endpoint: convert messages into a prompt
-                let prompt = if !request.messages.is_empty() {
-                    request
-                        .messages
-                        .iter()
-                        .map(|m| {
-                            format!(
-                                "{}: {}",
-                                match m.role {
-                                    Role::System => "System",
-                                    Role::User => "User",
-                                    Role::Assistant => "Assistant",
-                                },
-                                m.content.as_text()
-                            )
                         })
                         .collect::<Vec<_>>()
-                        .join("\n")
-                } else {
-                    String::new()
-                };
+            .join("\n");
 
-                let mut gen_body = serde_json::json!({
+        let mut generate_body = serde_json::json!({
                     "model": request.model,
                     "prompt": prompt,
                 });
+
                 if let Some(temp) = request.temperature {
-                    gen_body["temperature"] = serde_json::Value::Number(
-                        serde_json::Number::from_f64(temp.into()).unwrap(),
-                    );
+            generate_body["temperature"] =
+                serde_json::Value::Number(serde_json::Number::from_f64(temp.into()).unwrap());
                 }
                 if let Some(max_tokens) = request.max_tokens {
-                    gen_body["max_tokens"] =
+            generate_body["max_tokens"] =
                         serde_json::Value::Number(serde_json::Number::from(max_tokens));
                 }
 
-                let gen_resp = self
-                    .transport
-                    .post_json(&url_generate, Some(headers.clone()), gen_body.clone())
-                    .await;
-                match gen_resp {
-                    Ok(v) => {
-                        if let Some(t) = timer {
-                            t.stop();
-                        }
-                        v
-                    }
-                    Err(e) => {
-                        if let Some(t) = timer {
-                            t.stop();
-                        }
-                        return Err(e);
-                    }
-                }
+
+        // Use direct reqwest approach like groqai for better reliability
+        let mut client_builder = reqwest::Client::builder();
+        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
+            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+                client_builder = client_builder.proxy(proxy);
             }
-        };
+        }
+        let client = client_builder.build()
+            .map_err(|e| AiLibError::ProviderError(format!("Failed to create HTTP client: {}", e)))?;
+
+        let mut request_builder = client.post(&url_generate);
+        
+        // Add headers
+        for (key, value) in headers {
+            request_builder = request_builder.header(key, value);
+        }
+        
+        let response = request_builder
+            .json(&generate_body)  // Use reqwest's json() method like groqai
+            .send()
+            .await
+            .map_err(|e| AiLibError::ProviderError(format!("HTTP request failed: {}", e)))?;
+
+        // Stop timer
+                        if let Some(t) = timer {
+                            t.stop();
+                        }
+
+        // Handle response
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(AiLibError::ProviderError(format!(
+                "HTTP request failed: {} - {}",
+                status, error_text
+            )));
+        }
+
+        let response_json: serde_json::Value = response.json().await
+            .map_err(|e| AiLibError::ProviderError(format!("Failed to parse response: {}", e)))?;
 
         self.parse_response(response_json)
     }
@@ -538,7 +557,7 @@ impl ChatApi for CohereAdapter {
     }
 
     async fn list_models(&self) -> Result<Vec<String>, AiLibError> {
-        // Cohere may expose a models endpoint; try /v1/models
+        // Use v1/models endpoint for listing models
         let url = format!("{}/v1/models", self.base_url);
         let mut headers = HashMap::new();
         headers.insert(
@@ -546,7 +565,40 @@ impl ChatApi for CohereAdapter {
             format!("Bearer {}", self.api_key),
         );
 
-        let response: serde_json::Value = self.transport.get_json(&url, Some(headers)).await?;
+        // Use direct reqwest approach for better reliability
+        let mut client_builder = reqwest::Client::builder();
+        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
+            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+                client_builder = client_builder.proxy(proxy);
+            }
+        }
+        let client = client_builder.build()
+            .map_err(|e| AiLibError::ProviderError(format!("Failed to create HTTP client: {}", e)))?;
+
+        let mut request_builder = client.get(&url);
+        
+        // Add headers
+        for (key, value) in headers {
+            request_builder = request_builder.header(key, value);
+        }
+        
+        let response = request_builder
+            .send()
+            .await
+            .map_err(|e| AiLibError::ProviderError(format!("HTTP request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(AiLibError::ProviderError(format!(
+                "HTTP request failed: {} - {}",
+                status, error_text
+            )));
+        }
+
+        let response: serde_json::Value = response.json().await
+            .map_err(|e| AiLibError::ProviderError(format!("Failed to parse response: {}", e)))?;
 
         Ok(response["models"]
             .as_array()

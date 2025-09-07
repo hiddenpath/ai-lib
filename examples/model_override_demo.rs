@@ -1,5 +1,5 @@
 //! Model override feature demonstration
-//! 模型覆盖功能演示
+//! Model Override Feature Demo
 
 use ai_lib::{AiClient, Provider, Content};
 

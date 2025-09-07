@@ -1,4 +1,4 @@
-//! 推理模型最佳实践示例 - Reasoning Models Best Practices Example
+//! Reasoning Models Best Practices Example
 //!
 //! This example demonstrates how to interact with reasoning models using ai-lib, including:
 //! 1. Structured reasoning - using function calls for step-by-step reasoning

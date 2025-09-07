@@ -1,4 +1,4 @@
-/// AI-lib 批处理示例 - AI-lib batch processing example
+/// AI-lib batch processing example
 use ai_lib::types::common::Content;
 use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 

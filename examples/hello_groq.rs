@@ -3,7 +3,7 @@ use ai_lib::types::common::Content;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 检查环境变量
+    // Check environment variables
     if std::env::var("GROQ_API_KEY").is_err() {
         println!("❌ Please set GROQ_API_KEY environment variable");
         println!("   Example: export GROQ_API_KEY=your_api_key_here");
@@ -16,7 +16,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create Groq client - using new provider classification system
     let client = AiClient::new(Provider::Groq)?;
     
-    // Create chat request
+    // fetch available models before have a konwn model
+    let models = client.list_models().await?;
+    
+    // print models list
+    println!("📝 Available models: {:?}", models);
+
+    // Create chat request to a model from the list
     let request = ChatCompletionRequest::new(
         "llama-3.1-8b-instant".to_string(), // Available Groq model
         vec![Message {
@@ -30,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📝 Request: Hello! Please respond with a simple greeting.");
     println!();
     
-    // 发送请求并获取响应
+    // Send request and get response
     let response = client.chat_completion(request).await?;
     
     println!("✅ Groq Response:");

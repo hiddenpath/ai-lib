@@ -1,4 +1,4 @@
-/// AI-lib 快速开始示例 - AI-lib quickstart example
+/// AI-lib quickstart example
 use ai_lib::types::common::Content;
 use ai_lib::{AiClient, AiClientBuilder, ChatCompletionRequest, Message, Provider, Role};
 

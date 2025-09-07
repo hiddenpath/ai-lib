@@ -1,4 +1,4 @@
-/// AI-lib 架构进展报告示例 - AI-lib architecture progress report example
+/// AI-lib architecture progress report example
 use ai_lib::{AiClient, Provider};
 
 fn main() {

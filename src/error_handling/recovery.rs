@@ -15,6 +15,7 @@ pub struct ErrorRecoveryManager {
     recovery_strategies: HashMap<ErrorType, Box<dyn RecoveryStrategy>>,
     // Metrics and monitoring
     metrics: Option<Arc<dyn Metrics>>,
+    #[allow(dead_code)] // Reserved for future use
     start_time: Instant,
     // Error pattern analysis
     error_patterns: Arc<Mutex<HashMap<ErrorType, ErrorPattern>>>,

@@ -1,4 +1,4 @@
-/// 配置驱动的AI-lib示例 - Config-driven AI-lib example
+/// Config-driven AI-lib example
 use ai_lib::types::common::Content;
 use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 

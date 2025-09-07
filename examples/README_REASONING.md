@@ -1,60 +1,60 @@
-# 推理模型示例说明
+# Reasoning Models Examples
 
-本目录包含ai-lib推理模型支持的示例代码和工具库。
+This directory contains example code and utility libraries for ai-lib's reasoning model support.
 
-## 文件说明
+## Files
 
-- `reasoning_best_practices.rs` - 推理模型最佳实践示例
-- `reasoning_utils.rs` - 推理工具库和助手类
+- `reasoning_best_practices.rs` - Reasoning models best practices example
+- `reasoning_utils.rs` - Reasoning utility library and helper classes
 
-## 运行示例
+## Running Examples
 
-### 1. 设置环境变量
+### 1. Set Environment Variables
 
 ```bash
 export GROQ_API_KEY=your_groq_api_key_here
 ```
 
-### 2. 运行最佳实践示例
+### 2. Run Best Practices Example
 
 ```bash
 cargo run --example reasoning_best_practices
 ```
 
-这个示例展示了：
-- 结构化推理（使用函数调用）
-- 流式推理（观察推理过程）
-- JSON格式推理（获取结构化结果）
-- 推理配置（使用厂商特定参数）
-- 数学问题推理
-- 逻辑推理
+This example demonstrates:
+- Structured reasoning (using function calls)
+- Streaming reasoning (observing reasoning process)
+- JSON format reasoning (getting structured results)
+- Reasoning configuration (using provider-specific parameters)
+- Mathematical problem reasoning
+- Logical reasoning
 
-### 3. 运行推理工具库示例
+### 3. Run Reasoning Utils Example
 
 ```bash
 cargo run --example reasoning_utils
 ```
 
-这个示例展示了：
-- 数学推理助手
-- 逻辑推理助手
-- 科学推理助手
-- 推理结果解析和验证
+This example demonstrates:
+- Mathematical reasoning assistant
+- Logical reasoning assistant
+- Scientific reasoning assistant
+- Reasoning result parsing and validation
 
-## 支持的推理模型
+## Supported Reasoning Models
 
-- **qwen-qwq-32b**: Qwen推理模型
-- **deepseek-r1-distill-llama-70b**: DeepSeek R1推理模型
-- **openai/gpt-oss-20b**: OpenAI OSS推理模型
-- **openai/gpt-oss-120b**: OpenAI OSS大型推理模型
+- **qwen-qwq-32b**: Qwen reasoning model
+- **deepseek-r1-distill-llama-70b**: DeepSeek R1 reasoning model
+- **openai/gpt-oss-20b**: OpenAI OSS reasoning model
+- **openai/gpt-oss-120b**: OpenAI OSS large reasoning model
 
-## 推理模式
+## Reasoning Modes
 
-1. **结构化推理**: 使用函数调用进行步骤化推理
-2. **流式推理**: 观察推理过程的实时输出
-3. **JSON格式推理**: 获取结构化的推理结果
-4. **配置推理**: 使用逃生通道传递厂商特定参数
+1. **Structured Reasoning**: Step-by-step reasoning using function calls
+2. **Streaming Reasoning**: Real-time output observation of reasoning process
+3. **JSON Format Reasoning**: Getting structured reasoning results
+4. **Configuration Reasoning**: Using escape hatches to pass provider-specific parameters
 
-## 更多信息
+## More Information
 
-详细的推理模型支持指南请参考：`docs/REASONING_MODELS.md`
+For detailed reasoning model support guide, please refer to: `docs/REASONING_MODELS.md`

@@ -1,4 +1,4 @@
-/// AI-lib 代理服务器支持示例 - AI-lib proxy server support example
+/// AI-lib proxy server support example
 use ai_lib::types::common::Content;
 use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 

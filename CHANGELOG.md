@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.21] - 2025-09-07 - Major Architecture Improvements & Performance Enhancement
+
+### 🚀 Major Changes
+- **Direct HTTP Client Implementation**: All adapters now use direct `reqwest::Client` instead of intermediate abstraction layers
+- **Performance Boost**: Eliminated double serialization overhead and simplified HTTP call paths
+- **Enhanced Reliability**: Unified error handling and better HTTP status code processing across all adapters
+
+### ✅ Improved Adapters
+- **Independent Adapters**: OpenAI, Mistral, Cohere, Gemini - all refactored to direct reqwest implementation
+- **Config-driven Adapters**: GenericAdapter improved, benefiting Groq, DeepSeek, and all OpenAI-compatible providers
+- **Unified Proxy Support**: Consistent `AI_PROXY_URL` environment variable support across all adapters
+
+### 🔧 Technical Improvements
+- **Architecture Simplification**: `Adapter → HttpTransport → execute_request → reqwest` → `Adapter → reqwest`
+- **Better Serialization**: Using `reqwest::Client::json()` method for reliable JSON serialization
+- **Enterprise Features Preserved**: All metrics, monitoring, auditing, and traffic management features maintained
+- **Backward Compatibility**: No breaking changes to public APIs
+
+### 🧹 Code Quality
+- **Warning Cleanup**: Resolved all compiler warnings with proper `#[allow(dead_code)]` annotations
+- **Documentation**: Updated all Chinese comments and rustdoc to English
+- **Testing**: Core functionality verified across all major providers
+
+### 📊 Impact
+- **Performance**: Faster HTTP request processing through reduced abstraction layers
+- **Reliability**: More robust error handling and HTTP response processing
+- **Maintainability**: Cleaner codebase with simplified architecture
+- **Compatibility**: Drop-in replacement with no migration required
+
 ## [0.2.20] - 2025-09-05 - Resilience & Error Handling Enhancement + Reasoning Models Support
 
 ### Added

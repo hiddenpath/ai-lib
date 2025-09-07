@@ -124,7 +124,7 @@ impl HttpTransport {
     ///
     /// Automatically detects AI_PROXY_URL environment variable for proxy configuration
     pub fn with_timeout(timeout: Duration) -> Self {
-        let mut client_builder = Client::builder().timeout(timeout).http1_only();
+        let mut client_builder = Client::builder().timeout(timeout);
 
         // Check proxy configuration
         if let Ok(proxy_url) = env::var("AI_PROXY_URL") {
@@ -149,7 +149,7 @@ impl HttpTransport {
     ///
     /// This method creates a transport instance with timeout but without checking AI_PROXY_URL environment variable.
     pub fn with_timeout_without_proxy(timeout: Duration) -> Self {
-        let client_builder = Client::builder().timeout(timeout).http1_only();
+        let client_builder = Client::builder().timeout(timeout);
 
         let client = client_builder
             .build()

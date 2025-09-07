@@ -1,4 +1,4 @@
-//! 推理工具库 - Reasoning Utils Library
+//! Reasoning Utils Library
 //!
 //! Provides convenient tools and helper functions for interacting with reasoning models
 
@@ -163,7 +163,7 @@ impl ReasoningUtils {
         
         for (i, line) in lines.iter().enumerate() {
             let line = line.trim();
-            if line.starts_with("步骤") || line.starts_with("Step") || 
+            if line.starts_with("Step") || 
                line.starts_with(char::is_numeric) && line.contains('.') {
                 steps.push(ReasoningStep {
                     step_number: i + 1,
@@ -188,7 +188,7 @@ impl ReasoningUtils {
                 }
             },
             ReasoningResult::Text(text) => {
-                if text.len() > 50 && (text.contains("答案") || text.contains("answer")) {
+                if text.len() > 50 && text.contains("answer") {
                     ValidationResult::Valid
                 } else {
                     ValidationResult::Invalid("Incomplete reasoning result".to_string())

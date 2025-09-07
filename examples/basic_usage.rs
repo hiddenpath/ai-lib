@@ -1,4 +1,4 @@
-/// AI-lib 基础用法示例 - AI-lib basic usage example
+/// AI-lib basic usage example
 use ai_lib::types::common::Content;
 use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 
@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create chat request
     let request = ChatCompletionRequest::new(
-        "llama3-8b-8192".to_string(),
+        "llama-3.1-8b-instant".to_string(),
         vec![Message {
             role: Role::User,
             content: Content::Text("Hello! Please introduce yourself briefly.".to_string()),

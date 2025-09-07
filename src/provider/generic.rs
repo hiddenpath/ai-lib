@@ -471,31 +471,64 @@ impl ChatApi for GenericAdapter {
             .start_timer("generic.request_duration_ms")
             .await;
 
-        let provider_request = self.convert_request(&request).await?;
+        // Use direct reqwest approach like groqai for better reliability
         let url = self.config.chat_url();
+        
+        // Create reqwest client with proxy support (like groqai does)
+        let mut client_builder = reqwest::Client::builder();
+        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
+            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+                client_builder = client_builder.proxy(proxy);
+            }
+        }
+        let client = client_builder.build()
+            .map_err(|e| AiLibError::ProviderError(format!("Failed to create HTTP client: {}", e)))?;
 
-        let mut headers = self.config.headers.clone();
-
+        // Build request directly with proper serialization
+        let provider_request = self.convert_request(&request).await?;
+        
+        let mut request_builder = client.post(&url);
+        
+        // Add headers from config
+        for (key, value) in &self.config.headers {
+            request_builder = request_builder.header(key, value);
+        }
+        
         // Set different authentication methods based on provider when an API key is present
         if let Some(key) = &self.api_key {
             if self.config.base_url.contains("anthropic.com") {
-                headers.insert("x-api-key".to_string(), key.clone());
+                request_builder = request_builder.header("x-api-key", key);
             } else {
-                headers.insert("Authorization".to_string(), format!("Bearer {}", key));
+                request_builder = request_builder.header("Authorization", format!("Bearer {}", key));
             }
         }
+        
+        let response = request_builder
+            .json(&provider_request)  // Use reqwest's json() method like groqai
+            .send()
+            .await
+            .map_err(|e| AiLibError::ProviderError(format!("HTTP request failed: {}", e)))?;
 
-        let response = self
-            .transport
-            .post_json(&url, Some(headers.clone()), provider_request.clone())
-            .await?;
-
-        // Stop timer and record success
+        // Stop timer
         if let Some(t) = timer {
             t.stop();
         }
 
-        self.parse_response(response)
+        // Handle response
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(AiLibError::ProviderError(format!(
+                "HTTP request failed: {} - {}",
+                status, error_text
+            )));
+        }
+
+        let response_json: serde_json::Value = response.json().await
+            .map_err(|e| AiLibError::ProviderError(format!("Failed to parse response: {}", e)))?;
+
+        self.parse_response(response_json)
     }
 
     async fn chat_completion_stream(
@@ -614,7 +647,40 @@ impl ChatApi for GenericAdapter {
                 }
             }
 
-            let response: serde_json::Value = self.transport.get_json(&url, Some(headers)).await?;
+            // Use direct reqwest approach for better reliability
+            let mut client_builder = reqwest::Client::builder();
+            if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
+                if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+                    client_builder = client_builder.proxy(proxy);
+                }
+            }
+            let client = client_builder.build()
+                .map_err(|e| AiLibError::ProviderError(format!("Failed to create HTTP client: {}", e)))?;
+
+            let mut request_builder = client.get(&url);
+            
+            // Add headers
+            for (key, value) in headers {
+                request_builder = request_builder.header(key, value);
+            }
+            
+            let response = request_builder
+                .send()
+                .await
+                .map_err(|e| AiLibError::ProviderError(format!("HTTP request failed: {}", e)))?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let error_text = response.text().await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                return Err(AiLibError::ProviderError(format!(
+                    "HTTP request failed: {} - {}",
+                    status, error_text
+                )));
+            }
+
+            let response: serde_json::Value = response.json().await
+                .map_err(|e| AiLibError::ProviderError(format!("Failed to parse response: {}", e)))?;
 
             Ok(response["data"]
                 .as_array()

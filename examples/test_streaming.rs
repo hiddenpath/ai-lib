@@ -4,20 +4,20 @@ use futures::StreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🌊 流式响应测试");
+    println!("🌊 Streaming Response Test");
     println!("================");
 
-    // 检查Groq API密钥
+    // Check Groq API key
     if std::env::var("GROQ_API_KEY").is_err() {
-        println!("❌ 未设置GROQ_API_KEY");
+        println!("❌ GROQ_API_KEY not set");
         return Ok(());
     }
 
-    // 创建Groq客户端
+    // Create Groq client
     let client = AiClient::new(Provider::Groq)?;
-    println!("✅ Groq客户端创建成功");
+    println!("✅ Groq client created successfully");
 
-    // 创建流式请求
+    // Create streaming request
     let request = ChatCompletionRequest::new(
         "llama3-8b-8192".to_string(),
         vec![Message {
@@ -31,14 +31,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_max_tokens(100)
     .with_temperature(0.7);
 
-    println!("\n📤 发送流式请求...");
-    println!("   模型: {}", request.model);
-    println!("   消息: {}", request.messages[0].content.as_text());
+    println!("\n📤 Sending streaming request...");
+    println!("   Model: {}", request.model);
+    println!("   Message: {}", request.messages[0].content.as_text());
 
-    // 获取流式响应
+    // Get streaming response
     match client.chat_completion_stream(request).await {
         Ok(mut stream) => {
-            println!("\n🌊 开始接收流式响应:");
+            println!("\n🌊 Starting to receive streaming response:");
             println!("{}", "─".repeat(50));
 
             let mut full_content = String::new();
@@ -54,42 +54,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 print!("{}", content);
                                 full_content.push_str(content);
 
-                                // 刷新输出
+                                // Flush output
                                 use std::io::{self, Write};
                                 io::stdout().flush().unwrap();
                             }
 
-                            // 检查是否完成
+                            // Check if completed
                             if choice.finish_reason.is_some() {
                                 println!("\n{}", "─".repeat(50));
-                                println!("✅ 流式响应完成!");
-                                println!("   完成原因: {:?}", choice.finish_reason);
+                                println!("✅ Streaming response completed!");
+                                println!("   Finish reason: {:?}", choice.finish_reason);
                                 break;
                             }
                         }
                     }
                     Err(e) => {
-                        println!("\n❌ 流式响应错误: {}", e);
+                        println!("\n❌ Streaming response error: {}", e);
                         break;
                     }
                 }
             }
 
-            println!("\n📊 流式响应统计:");
-            println!("   数据块数量: {}", chunk_count);
-            println!("   总内容长度: {} 字符", full_content.len());
-            println!("   完整内容: \"{}\"", full_content.trim());
+            println!("\n📊 Streaming response statistics:");
+            println!("   Chunk count: {}", chunk_count);
+            println!("   Total content length: {} characters", full_content.len());
+            println!("   Complete content: \"{}\"", full_content.trim());
         }
         Err(e) => {
-            println!("❌ 流式请求失败: {}", e);
+            println!("❌ Streaming request failed: {}", e);
         }
     }
 
-    println!("\n💡 流式响应的优势:");
-    println!("   • 实时显示生成内容");
-    println!("   • 更好的用户体验");
-    println!("   • 可以提前停止生成");
-    println!("   • 适合长文本生成");
+    println!("\n💡 Advantages of streaming responses:");
+    println!("   • Real-time content generation display");
+    println!("   • Better user experience");
+    println!("   • Can stop generation early");
+    println!("   • Suitable for long text generation");
 
     Ok(())
 }

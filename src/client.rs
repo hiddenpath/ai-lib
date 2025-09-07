@@ -1235,15 +1235,13 @@ impl AiClientBuilder {
             .timeout
             .unwrap_or_else(|| std::time::Duration::from_secs(30));
 
-        // 4. Create custom ProviderConfig (if needed)
-        let config = self.create_custom_config(base_url)?;
-
-        // 5. Create custom HttpTransport (if needed)
-        let transport = self.create_custom_transport(proxy_url.clone(), timeout)?;
-
-        // 6. Create adapter
+        // 4. Create adapter
         let adapter: Box<dyn ChatApi> = if Self::is_config_driven_provider(self.provider) {
             // All config-driven providers use the same logic - much cleaner!
+            // Create custom ProviderConfig (if needed)
+            let config = self.create_custom_config(base_url)?;
+            // Create custom HttpTransport (if needed)
+            let transport = self.create_custom_transport(proxy_url.clone(), timeout)?;
             create_generic_adapter(config, transport)?
         } else {
             // Independent adapters - simple one-liners
@@ -1282,9 +1280,22 @@ impl AiClientBuilder {
             return Ok(base_url);
         }
 
-        // 3. Use default configuration
-        let default_config = self.get_default_provider_config()?;
-        Ok(default_config.base_url)
+        // 3. Use default configuration (only for config-driven providers)
+        if Self::is_config_driven_provider(self.provider) {
+            let default_config = self.get_default_provider_config()?;
+            Ok(default_config.base_url)
+        } else {
+            // For independent providers, return a default base URL
+            match self.provider {
+                Provider::OpenAI => Ok("https://api.openai.com".to_string()),
+                Provider::Gemini => Ok("https://generativelanguage.googleapis.com".to_string()),
+                Provider::Mistral => Ok("https://api.mistral.ai".to_string()),
+                Provider::Cohere => Ok("https://api.cohere.ai".to_string()),
+                _ => Err(AiLibError::ConfigurationError(
+                    "Unknown provider for base URL determination".to_string(),
+                )),
+            }
+        }
     }
 
     /// Determine proxy_url, priority: explicit setting > environment variable

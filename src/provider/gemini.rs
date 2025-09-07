@@ -19,6 +19,7 @@ use std::sync::Arc;
 /// - Response: candidates[0].content.parts[0].text
 /// - Authentication: URL parameter ?key=<API_KEY>
 pub struct GeminiAdapter {
+    #[allow(dead_code)] // Kept for backward compatibility, now using direct reqwest
     transport: DynHttpTransportRef,
     api_key: String,
     base_url: String,
@@ -248,26 +249,49 @@ impl ChatApi for GeminiAdapter {
 
         let headers = HashMap::from([("Content-Type".to_string(), "application/json".to_string())]);
 
-        let response = match self
-            .transport
-            .post_json(&url, Some(headers), gemini_request)
-            .await
-        {
-            Ok(v) => {
-                if let Some(t) = timer {
-                    t.stop();
-                }
-                v
+        // Use direct reqwest approach like groqai for better reliability
+        let mut client_builder = reqwest::Client::builder();
+        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
+            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+                client_builder = client_builder.proxy(proxy);
             }
-            Err(e) => {
-                if let Some(t) = timer {
-                    t.stop();
-                }
-                return Err(e);
-            }
-        };
+        }
+        let client = client_builder.build()
+            .map_err(|e| AiLibError::ProviderError(format!("Failed to create HTTP client: {}", e)))?;
 
-        self.parse_gemini_response(response, &request.model)
+        let mut request_builder = client.post(&url);
+        
+        // Add headers
+        for (key, value) in headers {
+            request_builder = request_builder.header(key, value);
+        }
+        
+        let response = request_builder
+            .json(&gemini_request)  // Use reqwest's json() method like groqai
+            .send()
+            .await
+            .map_err(|e| AiLibError::ProviderError(format!("HTTP request failed: {}", e)))?;
+
+        // Stop timer
+        if let Some(t) = timer {
+            t.stop();
+        }
+
+        // Handle response
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(AiLibError::ProviderError(format!(
+                "HTTP request failed: {} - {}",
+                status, error_text
+            )));
+        }
+
+        let response_json: serde_json::Value = response.json().await
+            .map_err(|e| AiLibError::ProviderError(format!("Failed to parse response: {}", e)))?;
+
+        self.parse_gemini_response(response_json, &request.model)
     }
 
     async fn chat_completion_stream(

@@ -18,6 +18,7 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 /// Note: Mistral provides an official Rust SDK (https://github.com/ivangabriele/mistralai-client-rs).
 /// We keep this implementation HTTP-based for now and can swap to the SDK later.
 pub struct MistralAdapter {
+    #[allow(dead_code)] // Kept for backward compatibility, now using direct reqwest
     transport: DynHttpTransportRef,
     api_key: Option<String>,
     base_url: String,
@@ -294,35 +295,56 @@ impl ChatApi for MistralAdapter {
             .start_timer("mistral.request_duration_ms")
             .await;
 
-        let provider_request = self.convert_request(&request);
+        // Use direct reqwest approach like groqai for better reliability
         let url = format!("{}{}", self.base_url, "/v1/chat/completions");
+        
+        // Create reqwest client with proxy support (like groqai does)
+        let mut client_builder = reqwest::Client::builder();
+        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
+            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+                client_builder = client_builder.proxy(proxy);
+            }
+        }
+        let client = client_builder.build()
+            .map_err(|e| AiLibError::ProviderError(format!("Failed to create HTTP client: {}", e)))?;
 
-        let mut headers = HashMap::new();
-        headers.insert("Content-Type".to_string(), "application/json".to_string());
+        // Build request directly with proper serialization
+        let provider_request = self.convert_request(&request);
+        
+        let mut request_builder = client
+            .post(&url)
+            .header("Content-Type", "application/json");
+            
         if let Some(key) = &self.api_key {
-            headers.insert("Authorization".to_string(), format!("Bearer {}", key));
+            request_builder = request_builder.header("Authorization", format!("Bearer {}", key));
+        }
+        
+        let response = request_builder
+            .json(&provider_request)  // Use reqwest's json() method like groqai
+            .send()
+            .await
+            .map_err(|e| AiLibError::ProviderError(format!("HTTP request failed: {}", e)))?;
+
+        // Stop timer
+        if let Some(t) = timer {
+            t.stop();
         }
 
-        let response = match self
-            .transport
-            .post_json(&url, Some(headers), provider_request)
-            .await
-        {
-            Ok(v) => {
-                if let Some(t) = timer {
-                    t.stop();
-                }
-                v
-            }
-            Err(e) => {
-                if let Some(t) = timer {
-                    t.stop();
-                }
-                return Err(e);
-            }
-        };
+        // Handle response
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(AiLibError::ProviderError(format!(
+                "HTTP request failed: {} - {}",
+                status, error_text
+            )));
+        }
 
-        self.parse_response(response)
+        let response_json: serde_json::Value = response.json().await
+            .map_err(|e| AiLibError::ProviderError(format!("Failed to parse response: {}", e)))?;
+
+        self.parse_response(response_json)
     }
 
     async fn chat_completion_stream(
@@ -453,7 +475,40 @@ impl ChatApi for MistralAdapter {
         if let Some(key) = &self.api_key {
             headers.insert("Authorization".to_string(), format!("Bearer {}", key));
         }
-        let response: serde_json::Value = self.transport.get_json(&url, Some(headers)).await?;
+        // Use direct reqwest approach for better reliability
+        let mut client_builder = reqwest::Client::builder();
+        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
+            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+                client_builder = client_builder.proxy(proxy);
+            }
+        }
+        let client = client_builder.build()
+            .map_err(|e| AiLibError::ProviderError(format!("Failed to create HTTP client: {}", e)))?;
+
+        let mut request_builder = client.get(&url);
+        
+        // Add headers
+        for (key, value) in headers {
+            request_builder = request_builder.header(key, value);
+        }
+        
+        let response = request_builder
+            .send()
+            .await
+            .map_err(|e| AiLibError::ProviderError(format!("HTTP request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(AiLibError::ProviderError(format!(
+                "HTTP request failed: {} - {}",
+                status, error_text
+            )));
+        }
+
+        let response: serde_json::Value = response.json().await
+            .map_err(|e| AiLibError::ProviderError(format!("Failed to parse response: {}", e)))?;
         Ok(response["data"]
             .as_array()
             .unwrap_or(&vec![])

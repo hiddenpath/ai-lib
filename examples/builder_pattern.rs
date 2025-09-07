@@ -1,4 +1,4 @@
-/// AI客户端构建器模式示例 - AI client builder pattern example
+/// AI client builder pattern example
 use ai_lib::types::common::Content;
 use ai_lib::{AiClient, AiClientBuilder, ChatCompletionRequest, Message, Provider, Role};
 use std::time::Duration;
