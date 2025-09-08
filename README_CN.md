@@ -109,7 +109,7 @@ ai-lib统一了：
 ### 安装
 ```toml
 [dependencies]
-ai-lib = "0.2.20"
+ai-lib = "0.2.21"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 ```
@@ -289,6 +289,10 @@ export AI_PROXY_URL=http://proxy.internal:8080
 
 # 全局超时（秒）
 export AI_TIMEOUT_SECS=30
+
+# 可选：成本指标（启用 `cost_metrics` 特性时生效）
+export COST_INPUT_PER_1K=0.5
+export COST_OUTPUT_PER_1K=1.5
 ```
 
 ### 显式覆盖
@@ -371,6 +375,16 @@ impl ai_lib::metrics::Metrics for CustomMetrics {
 }
 let client = AiClient::new_with_metrics(Provider::Groq, Arc::new(CustomMetrics))?;
 ```
+
+### 特性开关（可选）
+
+- `interceptors`：拦截器 trait 与管线（示例：interceptors_pipeline）
+- `unified_sse`：通用 SSE 解析器（`GenericAdapter` 已可接入）
+- `unified_transport`：共享 reqwest 客户端工厂
+- `cost_metrics`：基于环境变量的最小成本核算（见上方 COST_* 配置）
+- `routing_mvp`：启用 `ModelArray` 路由；将请求的 model 设为 "__route__" 触发路由
+
+企业说明：在 ai-lib PRO 中，上述成本与路由配置可通过外部配置中心统一管理并热更新。
 
 ---
 

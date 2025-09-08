@@ -390,6 +390,7 @@ impl CustomModelManager {
 ///
 /// This struct allows developers to build model arrays with multiple endpoints,
 /// supporting various load balancing strategies.
+#[derive(Clone)]
 pub struct ModelArray {
     /// Array name/identifier
     pub name: String,

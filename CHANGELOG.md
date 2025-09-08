@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ## [0.2.21] - 2025-09-07 - Major Architecture Improvements & Performance Enhancement
+- Added feature-gated modules and docs:
+  - `interceptors`: Interceptor trait + pipeline (example provided)
+  - `unified_sse`: Common SSE parser and tests; `GenericAdapter` wired under flag
+  - `unified_transport`: Shared reqwest client factory
+  - `cost_metrics`: Env-driven minimal cost accounting (COST_INPUT_PER_1K, COST_OUTPUT_PER_1K)
+  - `routing_mvp`: Basic `ModelArray` routing via special model "__route__"
+  - `observability`: Tracer/AuditSink traits (Noop implementations)
+  - `config_hot_reload`: ConfigProvider/Watcher traits (Noop implementations)
+- Standardized metric keys via `metrics::keys`
+- Function calling mapping extended in `GenericAdapter` and `MistralAdapter`
+- Docs updated (README/README_CN/rustdoc) with env vars, features, and PRO notes
+  - Added Feature Flags section; noted deprecation path for adapter-local SSE helpers in favor of unified parser
 
 ### 🚀 Major Changes
 - **Direct HTTP Client Implementation**: All adapters now use direct `reqwest::Client` instead of intermediate abstraction layers

@@ -268,6 +268,36 @@ impl GenericAdapter {
             );
         }
 
+        // Function calling (OpenAI-compatible). Many config-driven providers accept this schema.
+        if let Some(funcs) = &request.functions {
+            let mapped: Vec<serde_json::Value> = funcs
+                .iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters.clone().unwrap_or(serde_json::json!({}))
+                    })
+                })
+                .collect();
+            provider_request["functions"] = serde_json::Value::Array(mapped);
+        }
+
+        if let Some(policy) = &request.function_call {
+            match policy {
+                crate::types::FunctionCallPolicy::Auto(name) => {
+                    if name == "auto" {
+                        provider_request["function_call"] = serde_json::Value::String("auto".to_string());
+                    } else {
+                        provider_request["function_call"] = serde_json::json!({"name": name});
+                    }
+                }
+                crate::types::FunctionCallPolicy::None => {
+                    provider_request["function_call"] = serde_json::Value::String("none".to_string());
+                }
+            }
+        }
+
         Ok(provider_request)
     }
 
@@ -464,71 +494,49 @@ impl ChatApi for GenericAdapter {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
-        // metrics: count requests (standardized key) and start timer
-        self.metrics.incr_counter("generic.requests", 1).await;
+        // metrics: standardized keys
+        let provider_key = "generic";
+        self.metrics
+            .incr_counter(&crate::metrics::keys::requests(provider_key), 1)
+            .await;
         let timer = self
             .metrics
-            .start_timer("generic.request_duration_ms")
+            .start_timer(&crate::metrics::keys::request_duration_ms(provider_key))
             .await;
 
-        // Use direct reqwest approach like groqai for better reliability
+        // Build request body & headers
         let url = self.config.chat_url();
-        
-        // Create reqwest client with proxy support (like groqai does)
-        let mut client_builder = reqwest::Client::builder();
-        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
-            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-                client_builder = client_builder.proxy(proxy);
-            }
-        }
-        let client = client_builder.build()
-            .map_err(|e| AiLibError::ProviderError(format!("Failed to create HTTP client: {}", e)))?;
-
-        // Build request directly with proper serialization
         let provider_request = self.convert_request(&request).await?;
-        
-        let mut request_builder = client.post(&url);
-        
-        // Add headers from config
-        for (key, value) in &self.config.headers {
-            request_builder = request_builder.header(key, value);
-        }
-        
-        // Set different authentication methods based on provider when an API key is present
+        let mut headers = self.config.headers.clone();
         if let Some(key) = &self.api_key {
             if self.config.base_url.contains("anthropic.com") {
-                request_builder = request_builder.header("x-api-key", key);
+                headers.insert("x-api-key".to_string(), key.clone());
             } else {
-                request_builder = request_builder.header("Authorization", format!("Bearer {}", key));
+                headers.insert("Authorization".to_string(), format!("Bearer {}", key));
             }
         }
-        
-        let response = request_builder
-            .json(&provider_request)  // Use reqwest's json() method like groqai
-            .send()
-            .await
-            .map_err(|e| AiLibError::ProviderError(format!("HTTP request failed: {}", e)))?;
+
+        // Use transport to allow mocking in tests
+        let response_json = self
+            .transport
+            .post_json(&url, Some(headers), provider_request)
+            .await?;
 
         // Stop timer
         if let Some(t) = timer {
             t.stop();
         }
 
-        // Handle response
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(AiLibError::ProviderError(format!(
-                "HTTP request failed: {} - {}",
-                status, error_text
-            )));
+        let parsed = self.parse_response(response_json)?;
+
+        // optional cost metrics
+        #[cfg(feature = "cost_metrics")]
+        {
+            let usd = crate::metrics::cost::estimate_usd(parsed.usage.prompt_tokens, parsed.usage.completion_tokens);
+            crate::metrics::cost::record_cost(self.metrics.as_ref(), provider_key, &parsed.model, usd).await;
         }
 
-        let response_json: serde_json::Value = response.json().await
-            .map_err(|e| AiLibError::ProviderError(format!("Failed to parse response: {}", e)))?;
-
-        self.parse_response(response_json)
+        Ok(parsed)
     }
 
     async fn chat_completion_stream(
@@ -597,21 +605,32 @@ impl ChatApi for GenericAdapter {
                     Ok(bytes) => {
                         buffer.extend_from_slice(&bytes);
 
-                        while let Some(event_end) = Self::find_event_boundary(&buffer) {
-                            let event_bytes = buffer.drain(..event_end).collect::<Vec<_>>();
-
-                            if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
-                                if let Some(chunk) = Self::parse_sse_event(event_text) {
-                                    match chunk {
-                                        Ok(Some(c)) => {
-                                            if tx.send(Ok(c)).is_err() {
-                                                return;
-                                            }
+                        #[cfg(feature = "unified_sse")]
+                        {
+                            while let Some(event_end) = crate::sse::parser::find_event_boundary(&buffer) {
+                                let event_bytes = buffer.drain(..event_end).collect::<Vec<_>>();
+                                if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                                    if let Some(chunk) = crate::sse::parser::parse_sse_event(event_text) {
+                                        match chunk {
+                                            Ok(Some(c)) => { if tx.send(Ok(c)).is_err() { return; } }
+                                            Ok(None) => return,
+                                            Err(e) => { let _ = tx.send(Err(e)); return; }
                                         }
-                                        Ok(None) => return,
-                                        Err(e) => {
-                                            let _ = tx.send(Err(e));
-                                            return;
+                                    }
+                                }
+                            }
+                        }
+
+                        #[cfg(not(feature = "unified_sse"))]
+                        {
+                            while let Some(event_end) = Self::find_event_boundary(&buffer) {
+                                let event_bytes = buffer.drain(..event_end).collect::<Vec<_>>();
+                                if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                                    if let Some(chunk) = Self::parse_sse_event(event_text) {
+                                        match chunk {
+                                            Ok(Some(c)) => { if tx.send(Ok(c)).is_err() { return; } }
+                                            Ok(None) => return,
+                                            Err(e) => { let _ = tx.send(Err(e)); return; }
                                         }
                                     }
                                 }

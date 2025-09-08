@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create chat request
     let request = ChatCompletionRequest::new(
-        "gpt-4o-mini".to_string(), // OpenAI free model
+        client.default_chat_model(),
         vec![Message {
             role: Role::User,
                    content: Content::Text("hello".to_string()),

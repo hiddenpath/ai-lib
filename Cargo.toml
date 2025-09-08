@@ -9,7 +9,7 @@ readme = "readme.md"
 repository = "https://github.com/hiddenpath/ai-lib"
 homepage = "https://github.com/hiddenpath/ai-lib"
 documentation = "https://docs.rs/ai-lib"
-keywords = ["ai", "llm", "openai", "groq", "gemini"]
+keywords = ["ai", "llm", "api", "agent", "unify"]
 categories = ["api-bindings", "web-programming::http-client"]
 include = [
     "src/**/*",
@@ -35,8 +35,33 @@ reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
 futures = "0.3"
 reqwest-eventsource = "0.6"
 tokio-stream = "0.1"
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4.42", features = ["serde"] }
 backoff = { version = "0.4", features = ["tokio"] }
 bytes = "1.4"
 base64 = "0.22.1"
 httpmock = "0.7.0"
+
+[features]
+# No default features to keep OSS core lean; opt-in progressive complexity
+default = []
+
+# Interceptor pipeline (retry, rate limiters, circuit breaker wiring lives behind this)
+interceptors = []
+
+# Unified reqwest client factory/shared transport settings
+unified_transport = []
+
+# Common SSE parser used by adapters (feature-gated until wiring is complete)
+unified_sse = []
+
+# Minimal cost accounting metrics (env-driven rates)
+cost_metrics = []
+
+# ModelArray-based routing MVP
+routing_mvp = []
+
+# Observability interfaces (Tracer, AuditSink)
+observability = []
+
+# Config hot-reload traits (ConfigProvider/Watcher)
+config_hot_reload = []

@@ -73,3 +73,5 @@ build/
 *.orig
 *.rej
 
+docs/RELEASE_STEPS_RC.md
+docs/RELEASE_NOTES_0.3.0-rc.1.md

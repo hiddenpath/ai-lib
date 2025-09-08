@@ -45,6 +45,14 @@
 //! ```
 //!
 //! All AI provider requests will automatically use the specified proxy server.
+//!
+//! Optional environment variables for feature-gated capabilities:
+//! - cost_metrics feature:
+//!   - `COST_INPUT_PER_1K`: USD per 1000 input tokens
+//!   - `COST_OUTPUT_PER_1K`: USD per 1000 output tokens
+//!
+//! Enterprise note: In ai-lib PRO, these can be centrally configured and hot-reloaded
+//! via external configuration providers; in OSS they are read from environment variables.
 
 pub mod api;
 pub mod client;
@@ -54,6 +62,22 @@ pub mod provider;
 pub mod transport;
 pub mod types;
 pub mod utils; // minimal explicit configuration entrypoint
+
+// Feature-gated modules (OSS progressive complexity)
+#[cfg(feature = "interceptors")]
+pub mod interceptors;
+
+#[cfg(feature = "unified_sse")]
+pub mod sse;
+
+#[cfg(feature = "unified_transport")]
+pub mod net { pub use crate::transport::client_factory; }
+
+#[cfg(feature = "observability")]
+pub mod observability;
+
+#[cfg(feature = "config_hot_reload")]
+pub mod config_hot_reload;
 
 // Resilience modules
 pub mod circuit_breaker;

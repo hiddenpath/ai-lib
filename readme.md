@@ -109,7 +109,7 @@ Design principles:
 ### Install
 ```toml
 [dependencies]
-ai-lib = "0.2.12"
+ai-lib = "0.2.21"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 ```
@@ -289,6 +289,10 @@ export AI_PROXY_URL=http://proxy.internal:8080
 
 # Global timeout (seconds)
 export AI_TIMEOUT_SECS=30
+
+# Optional: cost metrics (feature `cost_metrics`)
+export COST_INPUT_PER_1K=0.5
+export COST_OUTPUT_PER_1K=1.5
 ```
 
 ### Explicit Overrides
@@ -371,6 +375,28 @@ impl ai_lib::metrics::Metrics for CustomMetrics {
 }
 let client = AiClient::new_with_metrics(Provider::Groq, Arc::new(CustomMetrics))?;
 ```
+
+### Feature Flags (Progressive & Optional)
+
+- `interceptors`: Interceptor trait + pipeline, example: `interceptors_pipeline`
+- `unified_sse`: Common SSE parser wired in `GenericAdapter`
+- `unified_transport`: Shared reqwest client factory
+- `cost_metrics`: Minimal cost accounting via env vars above
+- `routing_mvp`: Enable `ModelArray` routing; set request.model to "__route__" to route
+- `observability`: Tracer/AuditSink traits (Noop by default), decoupled from OTel
+- `config_hot_reload`: ConfigProvider/ConfigWatcher traits (Noop by default)
+
+#### Quick Test Matrix (pre‑release)
+```bash
+# Unified SSE parser tests
+cargo test --features unified_sse -- tests::sse_parser_tests sse_regression
+
+# Cost & routing (non-network sanity)
+cargo test --features "cost_metrics routing_mvp" -- tests::cost_and_routing
+```
+
+Enterprise note: In ai-lib PRO, cost and routing configuration can be centrally managed
+and hot-reloaded via external config providers.
 
 ---
 

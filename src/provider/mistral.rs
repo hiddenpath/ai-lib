@@ -101,6 +101,36 @@ impl MistralAdapter {
         if let Some(max_tokens) = request.max_tokens {
             body["max_tokens"] = serde_json::Value::Number(serde_json::Number::from(max_tokens));
         }
+
+        // Function calling (OpenAI-compatible schema supported by Mistral chat/completions)
+        if let Some(funcs) = &request.functions {
+            let mapped: Vec<serde_json::Value> = funcs
+                .iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters.clone().unwrap_or(serde_json::json!({}))
+                    })
+                })
+                .collect();
+            body["functions"] = serde_json::Value::Array(mapped);
+        }
+        if let Some(policy) = &request.function_call {
+            match policy {
+                crate::types::FunctionCallPolicy::Auto(name) => {
+                    if name == "auto" {
+                        body["function_call"] = serde_json::Value::String("auto".to_string());
+                    } else {
+                        body["function_call"] = serde_json::json!({"name": name});
+                    }
+                }
+                crate::types::FunctionCallPolicy::None => {
+                    body["function_call"] = serde_json::Value::String("none".to_string());
+                }
+            }
+        }
+
         body
     }
 
@@ -396,21 +426,32 @@ impl ChatApi for MistralAdapter {
                             Ok(bytes) => {
                                 buffer.extend_from_slice(&bytes);
 
-                                // process complete events separated by double newlines
-                                while let Some(boundary) = find_event_boundary(&buffer) {
-                                    let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
-                                    if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
-                                        if let Some(parsed) = parse_sse_event(event_text) {
-                                            match parsed {
-                                                Ok(Some(chunk)) => {
-                                                    if tx.send(Ok(chunk)).is_err() {
-                                                        return;
-                                                    }
+                                // process complete events separated by boundaries
+                                #[cfg(feature = "unified_sse")]
+                                {
+                                    while let Some(boundary) = crate::sse::parser::find_event_boundary(&buffer) {
+                                        let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
+                                        if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                                            if let Some(parsed) = crate::sse::parser::parse_sse_event(event_text) {
+                                                match parsed {
+                                                    Ok(Some(chunk)) => { if tx.send(Ok(chunk)).is_err() { return; } }
+                                                    Ok(None) => return,
+                                                    Err(e) => { let _ = tx.send(Err(e)); return; }
                                                 }
-                                                Ok(None) => return, // [DONE]
-                                                Err(e) => {
-                                                    let _ = tx.send(Err(e));
-                                                    return;
+                                            }
+                                        }
+                                    }
+                                }
+                                #[cfg(not(feature = "unified_sse"))]
+                                {
+                                    while let Some(boundary) = find_event_boundary(&buffer) {
+                                        let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
+                                        if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                                            if let Some(parsed) = parse_sse_event(event_text) {
+                                                match parsed {
+                                                    Ok(Some(chunk)) => { if tx.send(Ok(chunk)).is_err() { return; } }
+                                                    Ok(None) => return,
+                                                    Err(e) => { let _ = tx.send(Err(e)); return; }
                                                 }
                                             }
                                         }

@@ -187,9 +187,18 @@ pub struct AiClient {
     // Custom default models (override provider defaults)
     custom_default_chat_model: Option<String>,
     custom_default_multimodal_model: Option<String>,
+    #[cfg(feature = "routing_mvp")]
+    routing_array: Option<crate::provider::models::ModelArray>,
 }
 
 impl AiClient {
+    /// Get the effective default chat model for this client (honors custom override)
+    pub fn default_chat_model(&self) -> String {
+        self
+            .custom_default_chat_model
+            .clone()
+            .unwrap_or_else(|| self.provider.default_chat_model().to_string())
+    }
     /// Create a new AI client
     ///
     /// # Arguments
@@ -211,6 +220,23 @@ impl AiClient {
         c.connection_options = None;
         Ok(c)
     }
+
+    #[cfg(feature = "routing_mvp")]
+    /// Set a routing model array to enable basic endpoint selection before requests.
+    pub fn with_routing_array(mut self, array: crate::provider::models::ModelArray) -> Self {
+        self.routing_array = Some(array);
+        self
+    }
+
+    // #[cfg(feature = "routing_mvp")]
+    // fn select_routed_model(&mut self, fallback: &str) -> String {
+    //     if let Some(arr) = self.routing_array.as_mut() {
+    //         if let Some(ep) = arr.select_endpoint() {
+    //             return ep.model_name.clone();
+    //         }
+    //     }
+    //     fallback.to_string()
+    // }
 
     /// Create client with minimal explicit options (base_url/proxy/timeout). Not all providers
     /// support overrides; unsupported providers ignore unspecified fields gracefully.
@@ -359,6 +385,8 @@ impl AiClient {
                 connection_options: Some(opts),
                 custom_default_chat_model: None,
                 custom_default_multimodal_model: None,
+                #[cfg(feature = "routing_mvp")]
+                routing_array: None,
             });
         }
 
@@ -503,6 +531,8 @@ impl AiClient {
             connection_options: None,
             custom_default_chat_model: None,
             custom_default_multimodal_model: None,
+            #[cfg(feature = "routing_mvp")]
+            routing_array: None,
         })
     }
 
@@ -523,6 +553,22 @@ impl AiClient {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
+        #[cfg(feature = "routing_mvp")]
+        {
+            // If request.model equals a sentinel like "__route__", pick from routing array
+            if request.model == "__route__" {
+                let mut chosen = self.provider.default_chat_model().to_string();
+                if let Some(arr) = &self.routing_array {
+                    let mut arr_clone = arr.clone();
+                    if let Some(ep) = arr_clone.select_endpoint() {
+                        chosen = ep.model_name.clone();
+                    }
+                }
+                let mut req2 = request;
+                req2.model = chosen;
+                return self.adapter.chat_completion(req2).await;
+            }
+        }
         self.adapter.chat_completion(request).await
     }
 
@@ -1262,6 +1308,8 @@ impl AiClientBuilder {
             connection_options: None,
             custom_default_chat_model: self.default_chat_model,
             custom_default_multimodal_model: self.default_multimodal_model,
+            #[cfg(feature = "routing_mvp")]
+            routing_array: None,
         };
 
         Ok(client)

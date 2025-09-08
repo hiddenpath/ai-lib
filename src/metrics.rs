@@ -124,3 +124,45 @@ pub trait MetricsExt: Metrics {
 }
 
 impl<T: Metrics> MetricsExt for T {}
+
+/// Centralized metric key helpers to standardize naming across adapters
+pub mod keys {
+    /// Request counter key
+    pub fn requests(provider: &str) -> String {
+        format!("{}.requests", provider)
+    }
+    /// Request duration timer key (ms)
+    pub fn request_duration_ms(provider: &str) -> String {
+        format!("{}.request_duration_ms", provider)
+    }
+    /// Success ratio gauge/histogram can be derived; optional explicit keys
+    pub fn success(provider: &str) -> String { format!("{}.success", provider) }
+    pub fn failure(provider: &str) -> String { format!("{}.failure", provider) }
+}
+
+/// Minimal cost accounting helper (feature-gated)
+#[cfg(feature = "cost_metrics")]
+pub mod cost {
+    use crate::metrics::Metrics;
+
+    /// Compute cost using env vars like COST_INPUT_PER_1K and COST_OUTPUT_PER_1K (USD)
+    pub fn estimate_usd(input_tokens: u32, output_tokens: u32) -> f64 {
+        let in_rate = std::env::var("COST_INPUT_PER_1K").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0);
+        let out_rate = std::env::var("COST_OUTPUT_PER_1K").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0);
+        (input_tokens as f64 / 1000.0) * in_rate + (output_tokens as f64 / 1000.0) * out_rate
+    }
+
+    /// Report cost via Metrics as histogram (usd) and counters by provider/model
+    pub async fn record_cost<M: Metrics + ?Sized>(m: &M, provider: &str, model: &str, usd: f64) {
+        m.record_histogram_with_tags("cost.usd", usd, &[("provider", provider), ("model", model)]).await;
+    }
+}
+
+// Environment variables for optional features
+//
+// cost_metrics (if enabled):
+// - COST_INPUT_PER_1K: USD per 1000 input tokens
+// - COST_OUTPUT_PER_1K: USD per 1000 output tokens
+//
+// Note: In enterprise deployments (ai-lib PRO), these can be centrally managed
+// and hot-reloaded via external configuration providers.
