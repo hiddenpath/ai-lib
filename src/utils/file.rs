@@ -12,8 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// - validate_file: validate file exists and is readable
 /// - get_file_size: get file size in bytes
 /// - create_temp_dir: create a temporary directory
-
-/// Save bytes to a temporary file with a given prefix
+///   Save bytes to a temporary file with a given prefix
 pub fn save_temp_file(prefix: &str, bytes: &[u8]) -> io::Result<PathBuf> {
     let mut dir = std::env::temp_dir();
     let ts = SystemTime::now()

@@ -20,16 +20,15 @@ pub struct ModelOptions {
     pub auto_discovery: bool,
 }
 
+impl Default for ModelOptions {
+    fn default() -> Self {
+        Self { chat_model: None, multimodal_model: None, fallback_models: Vec::new(), auto_discovery: true }
+    }
+}
+
 impl ModelOptions {
     /// Create default model options
-    pub fn default() -> Self {
-        Self {
-            chat_model: None,
-            multimodal_model: None,
-            fallback_models: Vec::new(),
-            auto_discovery: true,
-        }
-    }
+    pub fn new() -> Self { Self::default() }
     
     /// Set chat model
     pub fn with_chat_model(mut self, model: &str) -> Self {
@@ -187,9 +186,18 @@ pub struct AiClient {
     // Custom default models (override provider defaults)
     custom_default_chat_model: Option<String>,
     custom_default_multimodal_model: Option<String>,
+    #[cfg(feature = "routing_mvp")]
+    routing_array: Option<crate::provider::models::ModelArray>,
 }
 
 impl AiClient {
+    /// Get the effective default chat model for this client (honors custom override)
+    pub fn default_chat_model(&self) -> String {
+        self
+            .custom_default_chat_model
+            .clone()
+            .unwrap_or_else(|| self.provider.default_chat_model().to_string())
+    }
     /// Create a new AI client
     ///
     /// # Arguments
@@ -211,6 +219,23 @@ impl AiClient {
         c.connection_options = None;
         Ok(c)
     }
+
+    #[cfg(feature = "routing_mvp")]
+    /// Set a routing model array to enable basic endpoint selection before requests.
+    pub fn with_routing_array(mut self, array: crate::provider::models::ModelArray) -> Self {
+        self.routing_array = Some(array);
+        self
+    }
+
+    // #[cfg(feature = "routing_mvp")]
+    // fn select_routed_model(&mut self, fallback: &str) -> String {
+    //     if let Some(arr) = self.routing_array.as_mut() {
+    //         if let Some(ep) = arr.select_endpoint() {
+    //             return ep.model_name.clone();
+    //         }
+    //     }
+    //     fallback.to_string()
+    // }
 
     /// Create client with minimal explicit options (base_url/proxy/timeout). Not all providers
     /// support overrides; unsupported providers ignore unspecified fields gracefully.
@@ -359,6 +384,8 @@ impl AiClient {
                 connection_options: Some(opts),
                 custom_default_chat_model: None,
                 custom_default_multimodal_model: None,
+                #[cfg(feature = "routing_mvp")]
+                routing_array: None,
             });
         }
 
@@ -503,6 +530,8 @@ impl AiClient {
             connection_options: None,
             custom_default_chat_model: None,
             custom_default_multimodal_model: None,
+            #[cfg(feature = "routing_mvp")]
+            routing_array: None,
         })
     }
 
@@ -523,6 +552,37 @@ impl AiClient {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
+        #[cfg(feature = "routing_mvp")]
+        {
+            // If request.model equals a sentinel like "__route__", pick from routing array
+            if request.model == "__route__" {
+                let _ = self.metrics.incr_counter("routing_mvp.request", 1).await;
+                let mut chosen = self.provider.default_chat_model().to_string();
+                if let Some(arr) = &self.routing_array {
+                    let mut arr_clone = arr.clone();
+                    if let Some(ep) = arr_clone.select_endpoint() {
+                        match crate::provider::utils::health_check(&ep.url).await {
+                            Ok(()) => {
+                                let _ = self.metrics.incr_counter("routing_mvp.selected", 1).await;
+                                chosen = ep.model_name.clone();
+                            }
+                            Err(_) => {
+                                let _ = self.metrics.incr_counter("routing_mvp.health_fail", 1).await;
+                                chosen = self.provider.default_chat_model().to_string();
+                                let _ = self.metrics.incr_counter("routing_mvp.fallback_default", 1).await;
+                            }
+                        }
+                    } else {
+                        let _ = self.metrics.incr_counter("routing_mvp.no_endpoint", 1).await;
+                    }
+                } else {
+                    let _ = self.metrics.incr_counter("routing_mvp.missing_array", 1).await;
+                }
+                let mut req2 = request;
+                req2.model = chosen;
+                return self.adapter.chat_completion(req2).await;
+            }
+        }
         self.adapter.chat_completion(request).await
     }
 
@@ -964,6 +1024,8 @@ pub struct AiClientBuilder {
     default_multimodal_model: Option<String>,
     // Resilience configuration
     resilience_config: ResilienceConfig,
+    #[cfg(feature = "routing_mvp")]
+    routing_array: Option<crate::provider::models::ModelArray>,
 }
 
 impl AiClientBuilder {
@@ -986,6 +1048,8 @@ impl AiClientBuilder {
             default_chat_model: None,
             default_multimodal_model: None,
             resilience_config: ResilienceConfig::default(),
+            #[cfg(feature = "routing_mvp")]
+            routing_array: None,
         }
     }
 
@@ -1214,6 +1278,16 @@ impl AiClientBuilder {
         self
     }
 
+    #[cfg(feature = "routing_mvp")]
+    /// Provide a `ModelArray` for client-side routing and fallback.
+    pub fn with_routing_array(
+        mut self,
+        array: crate::provider::models::ModelArray,
+    ) -> Self {
+        self.routing_array = Some(array);
+        self
+    }
+
     /// Build AiClient instance
     ///
     /// The build process applies configuration in the following priority order:
@@ -1262,6 +1336,8 @@ impl AiClientBuilder {
             connection_options: None,
             custom_default_chat_model: self.default_chat_model,
             custom_default_multimodal_model: self.default_multimodal_model,
+            #[cfg(feature = "routing_mvp")]
+            routing_array: self.routing_array,
         };
 
         Ok(client)

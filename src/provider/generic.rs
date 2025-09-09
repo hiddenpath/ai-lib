@@ -18,6 +18,31 @@ pub struct GenericAdapter {
     metrics: Arc<dyn Metrics>,
 }
 
+#[cfg(all(test, not(feature = "unified_sse")))]
+mod legacy_sse_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_event_sequence_non_ascii() {
+        let event1 = "data: {\"id\":\"1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"m\",\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"你好，\"}}]}\n\n";
+        let event2 = "data: {\"id\":\"2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"m\",\"choices\":[{\"delta\":{\"content\":\"世界！\"}}]}\n\n";
+        let mut buffer = [event1.as_bytes(), event2.as_bytes()].concat();
+        let mut out: Vec<String> = Vec::new();
+        while let Some(boundary) = GenericAdapter::find_event_boundary(&buffer) {
+            let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
+            if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                if let Some(parsed) = GenericAdapter::parse_sse_event(event_text) {
+                    let chunk = parsed.expect("ok").expect("chunk");
+                    if let Some(c) = &chunk.choices[0].delta.content {
+                        out.push(c.clone());
+                    }
+                }
+            }
+        }
+        assert_eq!(out, vec!["你好，".to_string(), "世界！".to_string()]);
+    }
+}
+
 impl GenericAdapter {
     pub fn new(config: ProviderConfig) -> Result<Self, AiLibError> {
         // Validate configuration
@@ -268,10 +293,42 @@ impl GenericAdapter {
             );
         }
 
+        // Function calling (OpenAI-compatible). Many config-driven providers accept this schema.
+        if let Some(funcs) = &request.functions {
+            let mapped: Vec<serde_json::Value> = funcs
+                .iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters.clone().unwrap_or(serde_json::json!({}))
+                    })
+                })
+                .collect();
+            provider_request["functions"] = serde_json::Value::Array(mapped);
+        }
+
+        if let Some(policy) = &request.function_call {
+            match policy {
+                crate::types::FunctionCallPolicy::Auto(name) => {
+                    if name == "auto" {
+                        provider_request["function_call"] = serde_json::Value::String("auto".to_string());
+                    } else {
+                        provider_request["function_call"] = serde_json::json!({"name": name});
+                    }
+                }
+                crate::types::FunctionCallPolicy::None => {
+                    provider_request["function_call"] = serde_json::Value::String("none".to_string());
+                }
+            }
+        }
+
         Ok(provider_request)
     }
 
     /// Find event boundary
+    /// Deprecated path (legacy SSE helper). Prefer `crate::sse::parser` when `unified_sse` is enabled.
+    #[cfg(not(feature = "unified_sse"))]
     fn find_event_boundary(buffer: &[u8]) -> Option<usize> {
         let mut i = 0;
         while i < buffer.len().saturating_sub(1) {
@@ -292,6 +349,8 @@ impl GenericAdapter {
     }
 
     /// Parse SSE event
+    /// Deprecated path (legacy SSE helper). Prefer `crate::sse::parser` when `unified_sse` is enabled.
+    #[cfg(not(feature = "unified_sse"))]
     fn parse_sse_event(
         event_text: &str,
     ) -> Option<Result<Option<ChatCompletionChunk>, AiLibError>> {
@@ -309,6 +368,8 @@ impl GenericAdapter {
     }
 
     /// Parse chunk data
+    /// Deprecated path (legacy SSE helper). Prefer `crate::sse::parser` when `unified_sse` is enabled.
+    #[cfg(not(feature = "unified_sse"))]
     fn parse_chunk_data(data: &str) -> Result<Option<ChatCompletionChunk>, AiLibError> {
         match serde_json::from_str::<serde_json::Value>(data) {
             Ok(json) => {
@@ -355,6 +416,28 @@ impl GenericAdapter {
                 e
             ))),
         }
+    }
+
+    // legacy test moved to separate file under tests/ when needed
+
+    fn split_text_into_chunks(text: &str, max_len: usize) -> Vec<String> {
+        let mut chunks = Vec::new();
+        let mut start = 0;
+        let bytes = text.as_bytes();
+        while start < bytes.len() {
+            let end = std::cmp::min(start + max_len, bytes.len());
+            let mut cut = end;
+            if end < bytes.len() {
+                if let Some(pos) = text[start..end].rfind(' ') {
+                    cut = start + pos;
+                }
+            }
+            if cut == start { cut = end; }
+            chunks.push(String::from_utf8_lossy(&bytes[start..cut]).to_string());
+            start = cut;
+            if start < bytes.len() && bytes[start] == b' ' { start += 1; }
+        }
+        chunks
     }
 
     /// Parse response
@@ -464,71 +547,49 @@ impl ChatApi for GenericAdapter {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
-        // metrics: count requests (standardized key) and start timer
-        self.metrics.incr_counter("generic.requests", 1).await;
+        // metrics: standardized keys
+        let provider_key = "generic";
+        self.metrics
+            .incr_counter(&crate::metrics::keys::requests(provider_key), 1)
+            .await;
         let timer = self
             .metrics
-            .start_timer("generic.request_duration_ms")
+            .start_timer(&crate::metrics::keys::request_duration_ms(provider_key))
             .await;
 
-        // Use direct reqwest approach like groqai for better reliability
+        // Build request body & headers
         let url = self.config.chat_url();
-        
-        // Create reqwest client with proxy support (like groqai does)
-        let mut client_builder = reqwest::Client::builder();
-        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
-            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-                client_builder = client_builder.proxy(proxy);
-            }
-        }
-        let client = client_builder.build()
-            .map_err(|e| AiLibError::ProviderError(format!("Failed to create HTTP client: {}", e)))?;
-
-        // Build request directly with proper serialization
         let provider_request = self.convert_request(&request).await?;
-        
-        let mut request_builder = client.post(&url);
-        
-        // Add headers from config
-        for (key, value) in &self.config.headers {
-            request_builder = request_builder.header(key, value);
-        }
-        
-        // Set different authentication methods based on provider when an API key is present
+        let mut headers = self.config.headers.clone();
         if let Some(key) = &self.api_key {
             if self.config.base_url.contains("anthropic.com") {
-                request_builder = request_builder.header("x-api-key", key);
+                headers.insert("x-api-key".to_string(), key.clone());
             } else {
-                request_builder = request_builder.header("Authorization", format!("Bearer {}", key));
+                headers.insert("Authorization".to_string(), format!("Bearer {}", key));
             }
         }
-        
-        let response = request_builder
-            .json(&provider_request)  // Use reqwest's json() method like groqai
-            .send()
-            .await
-            .map_err(|e| AiLibError::ProviderError(format!("HTTP request failed: {}", e)))?;
+
+        // Use transport to allow mocking in tests
+        let response_json = self
+            .transport
+            .post_json(&url, Some(headers), provider_request)
+            .await?;
 
         // Stop timer
         if let Some(t) = timer {
             t.stop();
         }
 
-        // Handle response
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(AiLibError::ProviderError(format!(
-                "HTTP request failed: {} - {}",
-                status, error_text
-            )));
+        let parsed = self.parse_response(response_json)?;
+
+        // optional cost metrics
+        #[cfg(feature = "cost_metrics")]
+        {
+            let usd = crate::metrics::cost::estimate_usd(parsed.usage.prompt_tokens, parsed.usage.completion_tokens);
+            crate::metrics::cost::record_cost(self.metrics.as_ref(), provider_key, &parsed.model, usd).await;
         }
 
-        let response_json: serde_json::Value = response.json().await
-            .map_err(|e| AiLibError::ProviderError(format!("Failed to parse response: {}", e)))?;
-
-        self.parse_response(response_json)
+        Ok(parsed)
     }
 
     async fn chat_completion_stream(
@@ -540,24 +601,10 @@ impl ChatApi for GenericAdapter {
     > {
         let mut stream_request = self.convert_request(&request).await?;
         stream_request["stream"] = serde_json::Value::Bool(true);
-
         let url = self.config.chat_url();
-
-        // Create HTTP client
-        let mut client_builder = reqwest::Client::builder();
-        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
-            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-                client_builder = client_builder.proxy(proxy);
-            }
-        }
-        let client = client_builder
-            .build()
-            .map_err(|e| AiLibError::ProviderError(format!("Client error: {}", e)))?;
 
         let mut headers = self.config.headers.clone();
         headers.insert("Accept".to_string(), "text/event-stream".to_string());
-
-        // Set different authentication methods based on provider when an API key is present
         if let Some(key) = &self.api_key {
             if self.config.base_url.contains("anthropic.com") {
                 headers.insert("x-api-key".to_string(), key.clone());
@@ -566,53 +613,46 @@ impl ChatApi for GenericAdapter {
             }
         }
 
-        let response = client.post(&url).json(&stream_request);
+        let byte_stream_res = self
+            .transport
+            .post_stream(&url, Some(headers), stream_request)
+            .await;
 
-        let mut req = response;
-        for (key, value) in headers {
-            req = req.header(key, value);
-        }
-
-        let response = req
-            .send()
-            .await
-            .map_err(|e| AiLibError::ProviderError(format!("Stream request failed: {}", e)))?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(AiLibError::ProviderError(format!(
-                "Stream error: {}",
-                error_text
-            )));
-        }
-
+        match byte_stream_res {
+            Ok(mut byte_stream) => {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-
         tokio::spawn(async move {
             let mut buffer = Vec::new();
-            let mut stream = response.bytes_stream();
-
-            while let Some(result) = stream.next().await {
+                    while let Some(result) = byte_stream.next().await {
                 match result {
                     Ok(bytes) => {
                         buffer.extend_from_slice(&bytes);
-
+                                #[cfg(feature = "unified_sse")]
+                                {
+                                    while let Some(event_end) = crate::sse::parser::find_event_boundary(&buffer) {
+                                        let event_bytes = buffer.drain(..event_end).collect::<Vec<_>>();
+                                        if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                                            if let Some(chunk) = crate::sse::parser::parse_sse_event(event_text) {
+                                                match chunk {
+                                                    Ok(Some(c)) => { if tx.send(Ok(c)).is_err() { return; } }
+                                                    Ok(None) => return,
+                                                    Err(e) => { let _ = tx.send(Err(e)); return; }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                #[cfg(not(feature = "unified_sse"))]
+                                {
                         while let Some(event_end) = Self::find_event_boundary(&buffer) {
                             let event_bytes = buffer.drain(..event_end).collect::<Vec<_>>();
-
                             if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
                                 if let Some(chunk) = Self::parse_sse_event(event_text) {
                                     match chunk {
-                                        Ok(Some(c)) => {
-                                            if tx.send(Ok(c)).is_err() {
-                                                return;
-                                            }
-                                        }
-                                        Ok(None) => return,
-                                        Err(e) => {
-                                            let _ = tx.send(Err(e));
-                                            return;
-                                        }
+                                                    Ok(Some(c)) => { if tx.send(Ok(c)).is_err() { return; } }
+                                                    Ok(None) => return,
+                                                    Err(e) => { let _ = tx.send(Err(e)); return; }
+                                                }
                                     }
                                 }
                             }
@@ -628,17 +668,47 @@ impl ChatApi for GenericAdapter {
                 }
             }
         });
-
+                let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
+                Ok(Box::new(Box::pin(stream)))
+            }
+            Err(_) => {
+                // Fallback to non-streaming + simulated chunks
+                let finished = self.chat_completion(request).await?;
+                let text = finished
+                    .choices
+                    .first()
+                    .map(|c| c.message.content.as_text())
+                    .unwrap_or_default();
+                let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+                tokio::spawn(async move {
+                    let chunks = Self::split_text_into_chunks(&text, 80);
+                    for chunk in chunks {
+                        let delta = ChoiceDelta {
+                            index: 0,
+                            delta: MessageDelta { role: Some(Role::Assistant), content: Some(chunk.clone()) },
+                            finish_reason: None,
+                        };
+                        let chunk_obj = ChatCompletionChunk {
+                            id: "simulated".to_string(),
+                            object: "chat.completion.chunk".to_string(),
+                            created: 0,
+                            model: finished.model.clone(),
+                            choices: vec![delta],
+                        };
+                        if tx.send(Ok(chunk_obj)).is_err() { return; }
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
+                });
         let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
         Ok(Box::new(Box::pin(stream)))
+            }
+        }
     }
 
     async fn list_models(&self) -> Result<Vec<String>, AiLibError> {
         if let Some(models_endpoint) = &self.config.models_endpoint {
             let url = format!("{}{}", self.config.base_url, models_endpoint);
             let mut headers = self.config.headers.clone();
-
-            // Set different authentication methods based on provider when an API key is present
             if let Some(key) = &self.api_key {
                 if self.config.base_url.contains("anthropic.com") {
                     headers.insert("x-api-key".to_string(), key.clone());
@@ -646,42 +716,7 @@ impl ChatApi for GenericAdapter {
                     headers.insert("Authorization".to_string(), format!("Bearer {}", key));
                 }
             }
-
-            // Use direct reqwest approach for better reliability
-            let mut client_builder = reqwest::Client::builder();
-            if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
-                if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-                    client_builder = client_builder.proxy(proxy);
-                }
-            }
-            let client = client_builder.build()
-                .map_err(|e| AiLibError::ProviderError(format!("Failed to create HTTP client: {}", e)))?;
-
-            let mut request_builder = client.get(&url);
-            
-            // Add headers
-            for (key, value) in headers {
-                request_builder = request_builder.header(key, value);
-            }
-            
-            let response = request_builder
-                .send()
-                .await
-                .map_err(|e| AiLibError::ProviderError(format!("HTTP request failed: {}", e)))?;
-
-            if !response.status().is_success() {
-                let status = response.status();
-                let error_text = response.text().await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                return Err(AiLibError::ProviderError(format!(
-                    "HTTP request failed: {} - {}",
-                    status, error_text
-                )));
-            }
-
-            let response: serde_json::Value = response.json().await
-                .map_err(|e| AiLibError::ProviderError(format!("Failed to parse response: {}", e)))?;
-
+            let response = self.transport.get_json(&url, Some(headers)).await?;
             Ok(response["data"]
                 .as_array()
                 .unwrap_or(&vec![])

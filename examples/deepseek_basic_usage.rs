@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create chat request
     let request = ChatCompletionRequest::new(
-        "deepseek-chat".to_string(), // DeepSeek model
+        client.default_chat_model(),
         vec![Message {
             role: Role::User,
                    content: Content::Text("hello".to_string()),
@@ -66,3 +66,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+

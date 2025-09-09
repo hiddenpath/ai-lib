@@ -237,13 +237,9 @@ impl HttpTransport {
             }
         }
 
-        // Add Content-Type
-        request_builder = request_builder.header("Content-Type", "application/json");
-
-        // Add body
+        // Add JSON body using reqwest's json() for correct serialization and headers
         if let Some(body) = body {
-            let json_body = serde_json::to_string(body)?;
-            request_builder = request_builder.body(json_body);
+            request_builder = request_builder.json(body);
         }
 
         // Send request

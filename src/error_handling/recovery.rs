@@ -21,6 +21,10 @@ pub struct ErrorRecoveryManager {
     error_patterns: Arc<Mutex<HashMap<ErrorType, ErrorPattern>>>,
 }
 
+impl Default for ErrorRecoveryManager {
+    fn default() -> Self { Self::new() }
+}
+
 /// Error pattern analysis for intelligent recovery
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorPattern {
@@ -193,22 +197,21 @@ impl ErrorRecoveryManager {
             context: context.clone(),
             timestamp: now,
         };
-        
-        // Update error patterns
+        // Update error patterns (drop lock before await in metrics)
         self.update_error_pattern(&error_type, now).await;
-        
+
         // Generate suggested action based on pattern
         let suggested_action = self.get_suggested_action_for_error(&error_type).await;
         context.suggested_action = suggested_action;
-        
-        let mut history = self.error_history.lock().unwrap();
-        history.push_back(record);
-        
-        // Keep only the last 1000 records
-        if history.len() > 1000 {
-            history.pop_front();
+        {
+            let mut history = self.error_history.lock().unwrap();
+            history.push_back(record);
+            if history.len() > 1000 {
+                history.pop_front();
+            }
         }
-        
+
+        // Keep only the last 1000 records
         // Record metrics
         if let Some(metrics) = &self.metrics {
             metrics.incr_counter(&format!("errors.{}", self.error_type_name(&error_type)), 1).await;
@@ -218,39 +221,38 @@ impl ErrorRecoveryManager {
     /// Update error pattern analysis
     async fn update_error_pattern(&self, error_type: &ErrorType, timestamp: chrono::DateTime<chrono::Utc>) {
         let mut patterns = self.error_patterns.lock().unwrap();
-        
-        let pattern = patterns.entry(error_type.clone()).or_insert_with(|| ErrorPattern {
-            error_type: error_type.clone(),
-            count: 0,
-            first_occurrence: timestamp,
-            last_occurrence: timestamp,
-            frequency: 0.0,
-            suggested_action: SuggestedAction::NoAction,
-            recovery_attempts: 0,
-            successful_recoveries: 0,
-        });
-        
-        pattern.count += 1;
-        pattern.last_occurrence = timestamp;
-        
-        // Calculate frequency (errors per minute)
-        let duration = pattern.last_occurrence.signed_duration_since(pattern.first_occurrence);
-        if duration.num_minutes() > 0 {
-            pattern.frequency = pattern.count as f64 / duration.num_minutes() as f64;
+        let entry = patterns.entry(error_type.clone());
+        use std::collections::hash_map::Entry;
+        match entry {
+            Entry::Occupied(mut occ) => {
+                let pattern = occ.get_mut();
+                pattern.count += 1;
+                pattern.last_occurrence = timestamp;
+                let duration = pattern.last_occurrence.signed_duration_since(pattern.first_occurrence);
+                if duration.num_minutes() > 0 {
+                    pattern.frequency = pattern.count as f64 / duration.num_minutes() as f64;
+                }
+                pattern.suggested_action = self.generate_suggested_action(error_type, pattern);
+            }
+            Entry::Vacant(vac) => {
+                vac.insert(ErrorPattern {
+                    error_type: error_type.clone(),
+                    count: 1,
+                    first_occurrence: timestamp,
+                    last_occurrence: timestamp,
+                    frequency: 0.0,
+                    suggested_action: SuggestedAction::NoAction,
+                    recovery_attempts: 0,
+                    successful_recoveries: 0,
+                });
+            }
         }
-        
-        // Generate suggested action
-        pattern.suggested_action = self.generate_suggested_action(error_type, pattern);
     }
 
     /// Get suggested action for a specific error type
     async fn get_suggested_action_for_error(&self, error_type: &ErrorType) -> SuggestedAction {
         let patterns = self.error_patterns.lock().unwrap();
-        if let Some(pattern) = patterns.get(error_type) {
-            pattern.suggested_action.clone()
-        } else {
-            SuggestedAction::NoAction
-        }
+        patterns.get(error_type).map(|p| p.suggested_action.clone()).unwrap_or(SuggestedAction::NoAction)
     }
 
     /// Get error type name for metrics

@@ -1,10 +1,12 @@
 # ai-lib 🦀✨  
+[![CI](https://github.com/hiddenpath/ai-lib/actions/workflows/ci.yml/badge.svg)](https://github.com/hiddenpath/ai-lib/actions/workflows/ci.yml)
 > 统一、可靠、高性能的多厂商AI SDK for Rust
 
 一个生产级、厂商无关的SDK，为17+个AI平台（OpenAI、Groq、Anthropic、Gemini、Mistral、Cohere、Azure OpenAI、Ollama、DeepSeek、Qwen、文心一言、混元、讯飞星火、Kimi、HuggingFace、TogetherAI、xAI Grok等）提供统一的Rust API。  
 消除分散的认证流程、流式格式、错误语义、模型命名差异和不一致的函数调用。从一行脚本扩展到多区域、多厂商系统，无需重写集成代码。
 
 ---
+[Website](https://www.ailib.info/)
 
 ## 🚀 核心价值（TL;DR）
 
@@ -109,7 +111,7 @@ ai-lib统一了：
 ### 安装
 ```toml
 [dependencies]
-ai-lib = "0.2.20"
+ai-lib = "0.2.21"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 ```
@@ -135,7 +137,11 @@ async fn main() -> anyhow::Result<()> {
     let client = AiClient::new(Provider::OpenAI)?;
     let req = ChatCompletionRequest::new(
         client.default_chat_model(),
-        vec![Message::user(Content::new_text("用一句话解释Rust所有权。"))]
+        vec![Message {
+            role: Role::User,
+            content: Content::new_text("用一句话解释Rust所有权。"),
+            function_call: None,
+        }]
     );
     let resp = client.chat_completion(req).await?;
     println!("Answer: {}", resp.first_text()?);
@@ -220,11 +226,15 @@ let smart = client.chat_completion_batch_smart(requests).await?;
 
 ### 多模态（图像）
 ```rust
-let msg = Message::user(ai_lib::types::common::Content::Image {
-    url: Some("https://example.com/image.jpg".into()),
-    mime: Some("image/jpeg".into()),
-    name: None,
-});
+let msg = Message {
+    role: Role::User,
+    content: ai_lib::types::common::Content::Image {
+        url: Some("https://example.com/image.jpg".into()),
+        mime: Some("image/jpeg".into()),
+        name: None,
+    },
+    function_call: None,
+};
 ```
 
 ### 推理模型
@@ -289,6 +299,10 @@ export AI_PROXY_URL=http://proxy.internal:8080
 
 # 全局超时（秒）
 export AI_TIMEOUT_SECS=30
+
+# 可选：成本指标（启用 `cost_metrics` 特性时生效）
+export COST_INPUT_PER_1K=0.5
+export COST_OUTPUT_PER_1K=1.5
 ```
 
 ### 显式覆盖
@@ -313,6 +327,26 @@ cargo run --example network_diagnosis
 cargo run --example proxy_example
 ```
 
+### ℹ️ 指示性定价查询（可选）
+
+优先使用环境变量（启用 `cost_metrics`）：`COST_INPUT_PER_1K`、`COST_OUTPUT_PER_1K`。
+未设置时，可选择性查询一个“指示性”的默认表：
+
+```rust
+// 首选 env；如果未设置，可使用指示性估算
+let usd = ai_lib::metrics::cost::estimate_usd(1000, 2000); // 若设置则使用 env
+
+// 可选：指示性查询（仅 OSS，非合同价）
+if let Some(p) = ai_lib::provider::pricing::get_pricing(ai_lib::Provider::DeepSeek, "deepseek-chat") {
+    let approx = p.calculate_cost(1000, 2000);
+    println!("指示性成本 ≈ ${:.4}", approx);
+}
+```
+
+说明：
+- 数值仅为代表性参考；请以供应商/合同价目为准。
+- PRO 部署建议使用集中价目目录与热更新，而非静态查表。
+
 ---
 
 ## 🛡️ 可靠性与弹性
@@ -333,28 +367,51 @@ cargo run --example proxy_example
 ## 🧭 模型管理与负载均衡
 
 ```rust
-use ai_lib::{CustomModelManager, ModelSelectionStrategy, ModelArray, LoadBalancingStrategy, ModelEndpoint};
+use ai_lib::{AiClientBuilder, ChatCompletionRequest, Message, Provider, Role};
+use ai_lib::types::common::Content;
+use ai_lib::provider::models::{ModelArray, ModelEndpoint, LoadBalancingStrategy};
 
-let mut manager = CustomModelManager::new("groq")
-    .with_strategy(ModelSelectionStrategy::PerformanceBased);
-
-let mut array = ModelArray::new("prod")
-    .with_strategy(LoadBalancingStrategy::HealthBased);
-
+// 构建 ModelArray 并通过 builder 挂载（需启用 feature: routing_mvp）
+let mut array = ModelArray::new("prod").with_strategy(LoadBalancingStrategy::RoundRobin);
 array.add_endpoint(ModelEndpoint {
-    name: "us-east-1".into(),
-    url: "https://api-east.groq.com".into(),
+    name: "groq-70b".to_string(),
+    model_name: "llama-3.3-70b-versatile".to_string(),
+    url: "https://api.groq.com".to_string(),
     weight: 1.0,
     healthy: true,
+    connection_count: 0,
 });
+array.add_endpoint(ModelEndpoint {
+    name: "groq-8b".to_string(),
+    model_name: "llama-3.1-8b-instant".to_string(),
+    url: "https://api.groq.com".to_string(),
+    weight: 1.0,
+    healthy: true,
+    connection_count: 0,
+});
+
+let client = AiClientBuilder::new(Provider::Groq)
+    .with_routing_array(array)
+    .build()?;
+
+// 使用占位模型 "__route__" 触发路由
+let req = ChatCompletionRequest::new(
+    "__route__".to_string(),
+    vec![Message { role: Role::User, content: Content::new_text("打个招呼"), function_call: None }]
+);
+let resp = client.chat_completion(req).await?;
+println!("已选择模型: {}", resp.model);
+# Ok::<(), ai_lib::AiLibError>(())
 ```
 
-支持：
-- 性能层级
-- 成本比较
-- 基于健康的过滤
-- 加权分布
-- 为自适应策略做好准备
+- 最小健康检查：选择端点时，客户端会在使用前探测 `{base_url}`（或 OpenAI 兼容路径 `{base_url}/models`）。
+- 指标（`routing_mvp` 特性下）：
+  - `routing_mvp.request`
+  - `routing_mvp.selected`
+  - `routing_mvp.health_fail`
+  - `routing_mvp.fallback_default`
+  - `routing_mvp.no_endpoint`
+  - `routing_mvp.missing_array`
 
 ---
 
@@ -370,6 +427,70 @@ impl ai_lib::metrics::Metrics for CustomMetrics {
     async fn start_timer(&self, name: &str) -> Option<Box<dyn ai_lib::metrics::Timer + Send>> { /* ... */ }
 }
 let client = AiClient::new_with_metrics(Provider::Groq, Arc::new(CustomMetrics))?;
+```
+
+#### 采集 routing_mvp 指标
+
+启用 `routing_mvp` 后，客户端在路由过程中会触发以下计数器：
+
+```rust
+// 可能出现的指标键：
+// routing_mvp.request, routing_mvp.selected, routing_mvp.health_fail,
+// routing_mvp.fallback_default, routing_mvp.no_endpoint, routing_mvp.missing_array
+
+use std::sync::Arc;
+use ai_lib::{AiClientBuilder, Provider};
+
+struct PrintMetrics;
+#[async_trait::async_trait]
+impl ai_lib::metrics::Metrics for PrintMetrics {
+    async fn incr_counter(&self, name: &str, value: u64) { println!("cnt {} += {}", name, value); }
+    async fn record_gauge(&self, name: &str, value: f64) { println!("gauge {} = {}", name, value); }
+    async fn start_timer(&self, _name: &str) -> Option<Box<dyn ai_lib::metrics::Timer + Send>> { None }
+    async fn record_histogram(&self, name: &str, value: f64) { println!("hist {} = {}", name, value); }
+    async fn record_histogram_with_tags(&self, name: &str, value: f64, tags: &[(&str, &str)]) { println!("hist {} = {} tags={:?}", name, value, tags); }
+    async fn incr_counter_with_tags(&self, name: &str, value: u64, tags: &[(&str, &str)]) { println!("cnt {} += {} tags={:?}", name, value, tags); }
+    async fn record_gauge_with_tags(&self, name: &str, value: f64, tags: &[(&str, &str)]) { println!("gauge {} = {} tags={:?}", name, value, tags); }
+    async fn record_error(&self, name: &str, error_type: &str) { println!("error {} type={}", name, error_type); }
+    async fn record_success(&self, name: &str, success: bool) { println!("success {} = {}", name, success); }
+}
+
+let metrics = Arc::new(PrintMetrics);
+let client = AiClientBuilder::new(Provider::Groq)
+    .with_metrics(metrics)
+    .build()?;
+```
+
+### 特性开关（可选）
+
+- `interceptors`：拦截器 trait 与管线（示例：interceptors_pipeline）
+- `unified_sse`：通用 SSE 解析器（`GenericAdapter` 已可接入）
+- `unified_transport`：共享 reqwest 客户端工厂
+- `cost_metrics`：基于环境变量的最小成本核算（见上方 COST_* 配置）
+- `routing_mvp`：启用 `ModelArray` 路由；将请求的 model 设为 "__route__" 触发路由
+
+企业说明：在 ai-lib PRO 中，上述成本与路由配置可通过外部配置中心统一管理并热更新。
+
+#### 本地验证矩阵
+```bash
+# 代码规范（将警告视为错误）
+cargo clippy --all-features -- -D warnings
+
+# 默认测试集
+cargo test
+
+# 特性测试集
+cargo test --features unified_sse
+cargo test --features "cost_metrics routing_mvp"
+
+# 构建所有示例
+cargo build --examples
+
+# 关键示例快速运行
+cargo run --example quickstart
+cargo run --example proxy_example
+cargo run --features interceptors --example interceptors_pipeline
+cargo run --features "interceptors unified_sse" --example mistral_features
 ```
 
 ---

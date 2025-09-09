@@ -71,10 +71,8 @@ impl ProviderClassification for Provider {
 }
 
 /// System-level provider classification constants
-/// 
 /// These arrays define the authoritative source of truth for provider behavior.
 /// All modules should use these constants instead of hardcoding provider lists.
-
 /// Providers that use GenericAdapter with ProviderConfig
 pub const CONFIG_DRIVEN_PROVIDERS: &[Provider] = &[
     // Core config-driven providers
