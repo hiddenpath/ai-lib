@@ -17,7 +17,7 @@ impl ChatCompletionResponse {
     pub fn first_text(&self) -> Result<&str, crate::types::AiLibError> {
         let choice = self
             .choices
-            .get(0)
+            .first()
             .ok_or_else(|| crate::types::AiLibError::InvalidModelResponse("empty choices".into()))?;
         match &choice.message.content {
             crate::types::common::Content::Text(t) => Ok(t.as_str()),

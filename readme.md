@@ -1,10 +1,13 @@
 # ai-lib 🦀✨  
+[![CI](https://github.com/hiddenpath/ai-lib/actions/workflows/ci.yml/badge.svg)](https://github.com/hiddenpath/ai-lib/actions/workflows/ci.yml)
 > Unified, Reliable & Performant Multi‑Provider AI SDK for Rust
 
 A production‑grade, provider‑agnostic SDK that gives you one coherent Rust API for 17+ AI platforms (OpenAI, Groq, Anthropic, Gemini, Mistral, Cohere, Azure OpenAI, Ollama, DeepSeek, Qwen, Wenxin, Hunyuan, iFlytek Spark, Kimi, HuggingFace, TogetherAI, xAI Grok, etc.).  
 Eliminate fragmented auth flows, streaming formats, error semantics, model naming quirks, and inconsistent function calling. Scale from a one‑line script to a multi‑region, multi‑vendor system without rewriting integration code.
 
 ---
+
+[Website](https://www.ailib.info/)
 
 ## 🚀 Elevator Pitch (TL;DR)
 
@@ -135,7 +138,11 @@ async fn main() -> anyhow::Result<()> {
     let client = AiClient::new(Provider::OpenAI)?;
     let req = ChatCompletionRequest::new(
         client.default_chat_model(),
-        vec![Message::user(Content::new_text("Explain Rust ownership in one sentence."))]
+        vec![Message {
+            role: Role::User,
+            content: Content::new_text("Explain Rust ownership in one sentence."),
+            function_call: None,
+        }]
     );
     let resp = client.chat_completion(req).await?;
     println!("Answer: {}", resp.first_text()?);
@@ -220,11 +227,15 @@ let smart = client.chat_completion_batch_smart(requests).await?;
 
 ### Multimodal (Image)
 ```rust
-let msg = Message::user(ai_lib::types::common::Content::Image {
-    url: Some("https://example.com/image.jpg".into()),
-    mime: Some("image/jpeg".into()),
-    name: None,
-});
+let msg = Message {
+    role: Role::User,
+    content: ai_lib::types::common::Content::Image {
+        url: Some("https://example.com/image.jpg".into()),
+        mime: Some("image/jpeg".into()),
+        name: None,
+    },
+    function_call: None,
+};
 ```
 
 ### Reasoning Models
@@ -337,28 +348,51 @@ cargo run --example proxy_example
 ## 🧭 Model Management & Load Balancing
 
 ```rust
-use ai_lib::{CustomModelManager, ModelSelectionStrategy, ModelArray, LoadBalancingStrategy, ModelEndpoint};
+use ai_lib::{AiClientBuilder, ChatCompletionRequest, Message, Provider, Role};
+use ai_lib::types::common::Content;
+use ai_lib::provider::models::{ModelArray, ModelEndpoint, LoadBalancingStrategy};
 
-let mut manager = CustomModelManager::new("groq")
-    .with_strategy(ModelSelectionStrategy::PerformanceBased);
-
-let mut array = ModelArray::new("prod")
-    .with_strategy(LoadBalancingStrategy::HealthBased);
-
+// Build a ModelArray and attach via builder (feature: routing_mvp)
+let mut array = ModelArray::new("prod").with_strategy(LoadBalancingStrategy::RoundRobin);
 array.add_endpoint(ModelEndpoint {
-    name: "us-east-1".into(),
-    url: "https://api-east.groq.com".into(),
+    name: "groq-70b".to_string(),
+    model_name: "llama-3.3-70b-versatile".to_string(),
+    url: "https://api.groq.com".to_string(),
     weight: 1.0,
     healthy: true,
+    connection_count: 0,
 });
+array.add_endpoint(ModelEndpoint {
+    name: "groq-8b".to_string(),
+    model_name: "llama-3.1-8b-instant".to_string(),
+    url: "https://api.groq.com".to_string(),
+    weight: 1.0,
+    healthy: true,
+    connection_count: 0,
+});
+
+let client = AiClientBuilder::new(Provider::Groq)
+    .with_routing_array(array)
+    .build()?;
+
+// Use sentinel model "__route__" to trigger routing
+let req = ChatCompletionRequest::new(
+    "__route__".to_string(),
+    vec![Message { role: Role::User, content: Content::new_text("Say hi"), function_call: None }]
+);
+let resp = client.chat_completion(req).await?;
+println!("selected model: {}", resp.model);
+# Ok::<(), ai_lib::AiLibError>(())
 ```
 
-Supports:
-- Performance tiers
-- Cost comparison
-- Health-based filtering
-- Weighted distributions
-- Future-ready for adaptive strategies
+- Minimal health check: when picking an endpoint, the client pings `{base_url}` (or `{base_url}/models` for OpenAI‑compatible) before using it.
+- Metrics (names under feature `routing_mvp`):
+  - `routing_mvp.request`
+  - `routing_mvp.selected`
+  - `routing_mvp.health_fail`
+  - `routing_mvp.fallback_default`
+  - `routing_mvp.no_endpoint`
+  - `routing_mvp.missing_array`
 
 ---
 
@@ -374,6 +408,38 @@ impl ai_lib::metrics::Metrics for CustomMetrics {
     async fn start_timer(&self, name: &str) -> Option<Box<dyn ai_lib::metrics::Timer + Send>> { /* ... */ }
 }
 let client = AiClient::new_with_metrics(Provider::Groq, Arc::new(CustomMetrics))?;
+```
+
+#### Collect routing_mvp metrics
+
+When `routing_mvp` is enabled, the client emits counters during routing:
+
+```rust
+// Keys that may be emitted:
+// routing_mvp.request, routing_mvp.selected, routing_mvp.health_fail,
+// routing_mvp.fallback_default, routing_mvp.no_endpoint, routing_mvp.missing_array
+
+use std::sync::Arc;
+use ai_lib::{AiClientBuilder, Provider};
+
+struct PrintMetrics;
+#[async_trait::async_trait]
+impl ai_lib::metrics::Metrics for PrintMetrics {
+    async fn incr_counter(&self, name: &str, value: u64) { println!("cnt {} += {}", name, value); }
+    async fn record_gauge(&self, name: &str, value: f64) { println!("gauge {} = {}", name, value); }
+    async fn start_timer(&self, _name: &str) -> Option<Box<dyn ai_lib::metrics::Timer + Send>> { None }
+    async fn record_histogram(&self, name: &str, value: f64) { println!("hist {} = {}", name, value); }
+    async fn record_histogram_with_tags(&self, name: &str, value: f64, tags: &[(&str, &str)]) { println!("hist {} = {} tags={:?}", name, value, tags); }
+    async fn incr_counter_with_tags(&self, name: &str, value: u64, tags: &[(&str, &str)]) { println!("cnt {} += {} tags={:?}", name, value, tags); }
+    async fn record_gauge_with_tags(&self, name: &str, value: f64, tags: &[(&str, &str)]) { println!("gauge {} = {} tags={:?}", name, value, tags); }
+    async fn record_error(&self, name: &str, error_type: &str) { println!("error {} type={} ", name, error_type); }
+    async fn record_success(&self, name: &str, success: bool) { println!("success {} = {}", name, success); }
+}
+
+let metrics = Arc::new(PrintMetrics);
+let client = AiClientBuilder::new(Provider::Groq)
+    .with_metrics(metrics)
+    .build()?;
 ```
 
 ### Feature Flags (Progressive & Optional)
@@ -395,10 +461,53 @@ cargo test --features unified_sse -- tests::sse_parser_tests sse_regression
 cargo test --features "cost_metrics routing_mvp" -- tests::cost_and_routing
 ```
 
+#### Local Validation Matrix
+```bash
+# Lints (deny warnings)
+cargo clippy --all-features -- -D warnings
+
+# Default test suite
+cargo test
+
+# Feature-gated suites
+cargo test --features unified_sse
+cargo test --features "cost_metrics routing_mvp"
+
+# Build all examples
+cargo build --examples
+
+# Smoke-run selected examples
+cargo run --example quickstart
+cargo run --example proxy_example
+cargo run --features interceptors --example interceptors_pipeline
+cargo run --features "interceptors unified_sse" --example mistral_features
+```
+
 Enterprise note: In ai-lib PRO, cost and routing configuration can be centrally managed
 and hot-reloaded via external config providers.
 
 ---
+
+### ℹ️ Indicative Pricing Lookup (optional)
+
+Use env-driven pricing first (feature `cost_metrics`): `COST_INPUT_PER_1K`, `COST_OUTPUT_PER_1K`.
+If not set, you can optionally consult an indicative table for defaults:
+
+```rust
+// Prefer env; fall back to indicative table when missing
+let usd = ai_lib::metrics::cost::estimate_usd(1000, 2000); // uses env if set
+
+// Optional: indicative pricing lookup (OSS only, not contractual)
+if let Some(p) = ai_lib::provider::pricing::get_pricing(ai_lib::Provider::DeepSeek, "deepseek-chat") {
+    let approx = p.calculate_cost(1000, 2000);
+    println!("indicative cost ≈ ${:.4}", approx);
+}
+```
+
+Notes:
+- Values are representative only; verify with your provider/pricing plan.
+- In PRO deployments, use centralized price catalogs and hot‑reload rather than static lookups.
+
 
 ## 🔒 Security & Privacy
 

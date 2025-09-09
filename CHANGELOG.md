@@ -5,7 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2025-09-09
+
+### Added
+- `AiClientBuilder::with_routing_array(...)` to configure `ModelArray` routing (feature: `routing_mvp`).
+- Minimal routing health check when selecting endpoints; probes base URL (or `/models` for OpenAI‑compatible) before use.
+- Routing metrics keys (feature: `routing_mvp`): `routing_mvp.request`, `routing_mvp.selected`, `routing_mvp.health_fail`, `routing_mvp.fallback_default`, `routing_mvp.no_endpoint`, `routing_mvp.missing_array`.
+- Examples:
+  - `interceptors_retry.rs`, `interceptors_timeout.rs`, `interceptors_circuit_breaker.rs` (feature: `interceptors`).
+  - `routing_modelarray.rs` (feature: `routing_mvp`).
+- Unified SSE MD5/event-sequence consistency test: `tests/sse_md5_consistency.rs` (feature: `unified_sse`).
+
+### Changed
+- README/README_CN updated with routing example (`with_routing_array` + `"__route__"`) and metrics/health-check notes.
+
+### Deprecated
+- Added deprecation notes on legacy adapter-local SSE helpers in favor of `sse::parser` when `unified_sse` is enabled.
 
 ## [0.2.21] - 2025-09-07 - Major Architecture Improvements & Performance Enhancement
 - Added feature-gated modules and docs:

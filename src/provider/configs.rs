@@ -89,7 +89,7 @@ impl ProviderConfigs {
         // Hugging Face model listing is served from the Hub API under huggingface.co.
         // Use an absolute models endpoint so we can query the Hub independently of the
         // inference base URL (inference and hub are different services).
-        let config = ProviderConfig {
+        ProviderConfig {
             base_url: base_url.clone(),
             api_key_env: "HUGGINGFACE_API_KEY".to_string(),
             chat_endpoint: "/models/{model}:predict".to_string(), // placeholder; per-model inference often requires model in path
@@ -111,8 +111,7 @@ impl ProviderConfigs {
                 },
                 response_content_path: "choices.0.message.content".to_string(),
             },
-        };
-        config
+        }
     }
 
     /// Together AI - OpenAI-compatible chat API

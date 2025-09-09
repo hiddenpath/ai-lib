@@ -213,6 +213,7 @@ impl MistralAdapter {
     }
 }
 
+#[cfg(not(feature = "unified_sse"))]
 fn find_event_boundary(buffer: &[u8]) -> Option<usize> {
     let mut i = 0;
     while i < buffer.len().saturating_sub(1) {
@@ -232,6 +233,7 @@ fn find_event_boundary(buffer: &[u8]) -> Option<usize> {
     None
 }
 
+#[cfg(not(feature = "unified_sse"))]
 fn parse_sse_event(event_text: &str) -> Option<Result<Option<ChatCompletionChunk>, AiLibError>> {
     for line in event_text.lines() {
         let line = line.trim();
@@ -246,6 +248,7 @@ fn parse_sse_event(event_text: &str) -> Option<Result<Option<ChatCompletionChunk
     None
 }
 
+#[cfg(not(feature = "unified_sse"))]
 fn parse_chunk_data(data: &str) -> Result<Option<ChatCompletionChunk>, AiLibError> {
     let json: serde_json::Value = serde_json::from_str(data)
         .map_err(|e| AiLibError::ProviderError(format!("JSON parse error: {}", e)))?;
@@ -325,55 +328,18 @@ impl ChatApi for MistralAdapter {
             .start_timer("mistral.request_duration_ms")
             .await;
 
-        // Use direct reqwest approach like groqai for better reliability
         let url = format!("{}{}", self.base_url, "/v1/chat/completions");
-        
-        // Create reqwest client with proxy support (like groqai does)
-        let mut client_builder = reqwest::Client::builder();
-        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
-            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-                client_builder = client_builder.proxy(proxy);
-            }
-        }
-        let client = client_builder.build()
-            .map_err(|e| AiLibError::ProviderError(format!("Failed to create HTTP client: {}", e)))?;
-
-        // Build request directly with proper serialization
         let provider_request = self.convert_request(&request);
-        
-        let mut request_builder = client
-            .post(&url)
-            .header("Content-Type", "application/json");
-            
+        let mut headers = HashMap::new();
+        headers.insert("Content-Type".to_string(), "application/json".to_string());
         if let Some(key) = &self.api_key {
-            request_builder = request_builder.header("Authorization", format!("Bearer {}", key));
+            headers.insert("Authorization".to_string(), format!("Bearer {}", key));
         }
-        
-        let response = request_builder
-            .json(&provider_request)  // Use reqwest's json() method like groqai
-            .send()
-            .await
-            .map_err(|e| AiLibError::ProviderError(format!("HTTP request failed: {}", e)))?;
-
-        // Stop timer
-        if let Some(t) = timer {
-            t.stop();
-        }
-
-        // Handle response
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(AiLibError::ProviderError(format!(
-                "HTTP request failed: {} - {}",
-                status, error_text
-            )));
-        }
-
-        let response_json: serde_json::Value = response.json().await
-            .map_err(|e| AiLibError::ProviderError(format!("Failed to parse response: {}", e)))?;
-
+        let response_json = self
+            .transport
+            .post_json(&url, Some(headers), provider_request)
+            .await?;
+        if let Some(t) = timer { t.stop(); }
         self.parse_response(response_json)
     }
 
@@ -389,88 +355,63 @@ impl ChatApi for MistralAdapter {
 
         let url = format!("{}{}", self.base_url, "/v1/chat/completions");
 
-        // build client honoring proxy
-        let mut client_builder = reqwest::Client::builder();
-        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
-            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-                client_builder = client_builder.proxy(proxy);
-            }
-        }
-        let client = client_builder
-            .build()
-            .map_err(|e| AiLibError::ProviderError(format!("Client error: {}", e)))?;
-
         let mut headers = HashMap::new();
         headers.insert("Accept".to_string(), "text/event-stream".to_string());
         if let Some(key) = &self.api_key {
             headers.insert("Authorization".to_string(), format!("Bearer {}", key));
         }
-
-        let response = client.post(&url).json(&stream_request);
-        let mut req = response;
-        for (k, v) in headers.clone() {
-            req = req.header(k, v);
-        }
-
-        let send_result = req.send().await;
-        if let Ok(response) = send_result {
-            if response.status().is_success() {
-                let (tx, rx) = mpsc::unbounded_channel();
-
-                tokio::spawn(async move {
-                    let mut buffer = Vec::new();
-                    let mut stream = response.bytes_stream();
-
-                    while let Some(item) = stream.next().await {
-                        match item {
-                            Ok(bytes) => {
-                                buffer.extend_from_slice(&bytes);
-
-                                // process complete events separated by boundaries
-                                #[cfg(feature = "unified_sse")]
-                                {
-                                    while let Some(boundary) = crate::sse::parser::find_event_boundary(&buffer) {
-                                        let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
-                                        if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
-                                            if let Some(parsed) = crate::sse::parser::parse_sse_event(event_text) {
-                                                match parsed {
-                                                    Ok(Some(chunk)) => { if tx.send(Ok(chunk)).is_err() { return; } }
-                                                    Ok(None) => return,
-                                                    Err(e) => { let _ = tx.send(Err(e)); return; }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                #[cfg(not(feature = "unified_sse"))]
-                                {
-                                    while let Some(boundary) = find_event_boundary(&buffer) {
-                                        let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
-                                        if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
-                                            if let Some(parsed) = parse_sse_event(event_text) {
-                                                match parsed {
-                                                    Ok(Some(chunk)) => { if tx.send(Ok(chunk)).is_err() { return; } }
-                                                    Ok(None) => return,
-                                                    Err(e) => { let _ = tx.send(Err(e)); return; }
-                                                }
+        if let Ok(mut byte_stream) = self
+            .transport
+            .post_stream(&url, Some(headers.clone()), stream_request.clone())
+            .await
+        {
+            let (tx, rx) = mpsc::unbounded_channel();
+            tokio::spawn(async move {
+                let mut buffer = Vec::new();
+                while let Some(item) = byte_stream.next().await {
+                    match item {
+                        Ok(bytes) => {
+                            buffer.extend_from_slice(&bytes);
+                            #[cfg(feature = "unified_sse")]
+                            {
+                                while let Some(boundary) = crate::sse::parser::find_event_boundary(&buffer) {
+                                    let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
+                                    if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                                        if let Some(parsed) = crate::sse::parser::parse_sse_event(event_text) {
+                                            match parsed {
+                                                Ok(Some(chunk)) => { if tx.send(Ok(chunk)).is_err() { return; } }
+                                                Ok(None) => return,
+                                                Err(e) => { let _ = tx.send(Err(e)); return; }
                                             }
                                         }
                                     }
                                 }
                             }
-                            Err(e) => {
-                                let _ = tx.send(Err(AiLibError::ProviderError(format!(
-                                    "Stream error: {}",
-                                    e
-                                ))));
-                                break;
+                            #[cfg(not(feature = "unified_sse"))]
+                            {
+                                while let Some(boundary) = find_event_boundary(&buffer) {
+                                    let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
+                                    if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                                        if let Some(parsed) = parse_sse_event(event_text) {
+                                            match parsed {
+                                                Ok(Some(chunk)) => { if tx.send(Ok(chunk)).is_err() { return; } }
+                                                Ok(None) => return,
+                                                Err(e) => { let _ = tx.send(Err(e)); return; }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
+                        Err(e) => {
+                            let _ = tx.send(Err(AiLibError::ProviderError(format!("Stream error: {}", e))));
+                            break;
+                        }
                     }
-                });
-                let stream = UnboundedReceiverStream::new(rx);
-                return Ok(Box::new(Box::pin(stream)));
-            }
+                }
+            });
+            let stream = UnboundedReceiverStream::new(rx);
+            return Ok(Box::new(Box::pin(stream)));
         }
 
         // fallback: call chat_completion and stream chunks
@@ -516,40 +457,7 @@ impl ChatApi for MistralAdapter {
         if let Some(key) = &self.api_key {
             headers.insert("Authorization".to_string(), format!("Bearer {}", key));
         }
-        // Use direct reqwest approach for better reliability
-        let mut client_builder = reqwest::Client::builder();
-        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
-            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-                client_builder = client_builder.proxy(proxy);
-            }
-        }
-        let client = client_builder.build()
-            .map_err(|e| AiLibError::ProviderError(format!("Failed to create HTTP client: {}", e)))?;
-
-        let mut request_builder = client.get(&url);
-        
-        // Add headers
-        for (key, value) in headers {
-            request_builder = request_builder.header(key, value);
-        }
-        
-        let response = request_builder
-            .send()
-            .await
-            .map_err(|e| AiLibError::ProviderError(format!("HTTP request failed: {}", e)))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(AiLibError::ProviderError(format!(
-                "HTTP request failed: {} - {}",
-                status, error_text
-            )));
-        }
-
-        let response: serde_json::Value = response.json().await
-            .map_err(|e| AiLibError::ProviderError(format!("Failed to parse response: {}", e)))?;
+        let response = self.transport.get_json(&url, Some(headers)).await?;
         Ok(response["data"]
             .as_array()
             .unwrap_or(&vec![])

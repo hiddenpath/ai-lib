@@ -20,16 +20,15 @@ pub struct ModelOptions {
     pub auto_discovery: bool,
 }
 
+impl Default for ModelOptions {
+    fn default() -> Self {
+        Self { chat_model: None, multimodal_model: None, fallback_models: Vec::new(), auto_discovery: true }
+    }
+}
+
 impl ModelOptions {
     /// Create default model options
-    pub fn default() -> Self {
-        Self {
-            chat_model: None,
-            multimodal_model: None,
-            fallback_models: Vec::new(),
-            auto_discovery: true,
-        }
-    }
+    pub fn new() -> Self { Self::default() }
     
     /// Set chat model
     pub fn with_chat_model(mut self, model: &str) -> Self {
@@ -557,12 +556,27 @@ impl AiClient {
         {
             // If request.model equals a sentinel like "__route__", pick from routing array
             if request.model == "__route__" {
+                let _ = self.metrics.incr_counter("routing_mvp.request", 1).await;
                 let mut chosen = self.provider.default_chat_model().to_string();
                 if let Some(arr) = &self.routing_array {
                     let mut arr_clone = arr.clone();
                     if let Some(ep) = arr_clone.select_endpoint() {
-                        chosen = ep.model_name.clone();
+                        match crate::provider::utils::health_check(&ep.url).await {
+                            Ok(()) => {
+                                let _ = self.metrics.incr_counter("routing_mvp.selected", 1).await;
+                                chosen = ep.model_name.clone();
+                            }
+                            Err(_) => {
+                                let _ = self.metrics.incr_counter("routing_mvp.health_fail", 1).await;
+                                chosen = self.provider.default_chat_model().to_string();
+                                let _ = self.metrics.incr_counter("routing_mvp.fallback_default", 1).await;
+                            }
+                        }
+                    } else {
+                        let _ = self.metrics.incr_counter("routing_mvp.no_endpoint", 1).await;
                     }
+                } else {
+                    let _ = self.metrics.incr_counter("routing_mvp.missing_array", 1).await;
                 }
                 let mut req2 = request;
                 req2.model = chosen;
@@ -1010,6 +1024,8 @@ pub struct AiClientBuilder {
     default_multimodal_model: Option<String>,
     // Resilience configuration
     resilience_config: ResilienceConfig,
+    #[cfg(feature = "routing_mvp")]
+    routing_array: Option<crate::provider::models::ModelArray>,
 }
 
 impl AiClientBuilder {
@@ -1032,6 +1048,8 @@ impl AiClientBuilder {
             default_chat_model: None,
             default_multimodal_model: None,
             resilience_config: ResilienceConfig::default(),
+            #[cfg(feature = "routing_mvp")]
+            routing_array: None,
         }
     }
 
@@ -1260,6 +1278,16 @@ impl AiClientBuilder {
         self
     }
 
+    #[cfg(feature = "routing_mvp")]
+    /// Provide a `ModelArray` for client-side routing and fallback.
+    pub fn with_routing_array(
+        mut self,
+        array: crate::provider::models::ModelArray,
+    ) -> Self {
+        self.routing_array = Some(array);
+        self
+    }
+
     /// Build AiClient instance
     ///
     /// The build process applies configuration in the following priority order:
@@ -1309,7 +1337,7 @@ impl AiClientBuilder {
             custom_default_chat_model: self.default_chat_model,
             custom_default_multimodal_model: self.default_multimodal_model,
             #[cfg(feature = "routing_mvp")]
-            routing_array: None,
+            routing_array: self.routing_array,
         };
 
         Ok(client)

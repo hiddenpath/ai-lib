@@ -9,7 +9,7 @@ use crate::error_handling::ErrorThresholds;
 /// explicitly control base URL, proxy, API key and timeout without relying exclusively
 /// on environment variables. Any field left as `None` will fall back to existing
 /// environment variable behavior or library defaults.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ConnectionOptions {
     pub base_url: Option<String>,
     pub proxy: Option<String>,
@@ -18,17 +18,7 @@ pub struct ConnectionOptions {
     pub disable_proxy: bool,
 }
 
-impl Default for ConnectionOptions {
-    fn default() -> Self {
-        Self {
-            base_url: None,
-            proxy: None,
-            api_key: None,
-            timeout: None,
-            disable_proxy: false,
-        }
-    }
-}
+// Default derived above
 
 impl ConnectionOptions {
     /// Hydrate unset fields from environment variables (lightweight fallback logic).
@@ -66,7 +56,7 @@ impl ConnectionOptions {
 }
 
 /// Resilience configuration for advanced error handling and rate limiting
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ResilienceConfig {
     pub circuit_breaker: Option<CircuitBreakerConfig>,
     pub rate_limiter: Option<RateLimiterConfig>,
@@ -88,16 +78,7 @@ pub struct ErrorHandlingConfig {
     pub error_thresholds: ErrorThresholds,
 }
 
-impl Default for ResilienceConfig {
-    fn default() -> Self {
-        Self {
-            circuit_breaker: None,
-            rate_limiter: None,
-            backpressure: None,
-            error_handling: None,
-        }
-    }
-}
+// Default derived above
 
 impl Default for BackpressureConfig {
     fn default() -> Self {

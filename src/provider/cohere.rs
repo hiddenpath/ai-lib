@@ -9,6 +9,7 @@ use std::clone::Clone;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[cfg(not(feature = "unified_sse"))]
 fn find_event_boundary(buffer: &[u8]) -> Option<usize> {
     let mut i = 0;
     while i < buffer.len().saturating_sub(1) {
@@ -28,6 +29,7 @@ fn find_event_boundary(buffer: &[u8]) -> Option<usize> {
     None
 }
 
+#[cfg(not(feature = "unified_sse"))]
 fn parse_sse_event(event_text: &str) -> Option<Result<Option<ChatCompletionChunk>, AiLibError>> {
     for line in event_text.lines() {
         let line = line.trim();
@@ -42,6 +44,7 @@ fn parse_sse_event(event_text: &str) -> Option<Result<Option<ChatCompletionChunk
     None
 }
 
+#[cfg(not(feature = "unified_sse"))]
 fn parse_chunk_data(data: &str) -> Result<Option<ChatCompletionChunk>, AiLibError> {
     match serde_json::from_str::<serde_json::Value>(data) {
         Ok(json) => {
@@ -246,19 +249,11 @@ impl CohereAdapter {
                 .or_else(|| c[0]["text"].as_str().map(|s| s.to_string()))
         } else if let Some(msg) = response.get("message") {
             // Cohere v2/chat format
-            if let Some(content_array) = msg.get("content") {
-                if let Some(content_obj) = content_array.as_array().and_then(|arr| arr.first()) {
-                    if let Some(text) = content_obj.get("text").and_then(|t| t.as_str()) {
-                        Some(text.to_string())
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
+            msg.get("content").and_then(|content_array| {
+                content_array.as_array().and_then(|arr| arr.first()).and_then(|content_obj| {
+                    content_obj.get("text").and_then(|t| t.as_str()).map(|text| text.to_string())
+                })
+            })
         } else if let Some(gens) = response.get("generations") {
             // Cohere v1 format
             gens[0]["text"].as_str().map(|s| s.to_string())
@@ -371,47 +366,13 @@ impl ChatApi for CohereAdapter {
                 }
 
 
-        // Use direct reqwest approach like groqai for better reliability
-        let mut client_builder = reqwest::Client::builder();
-        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
-            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-                client_builder = client_builder.proxy(proxy);
-            }
-        }
-        let client = client_builder.build()
-            .map_err(|e| AiLibError::ProviderError(format!("Failed to create HTTP client: {}", e)))?;
+        // Use unified transport
+        let response_json = self
+            .transport
+            .post_json(&url_generate, Some(headers), generate_body)
+            .await?;
 
-        let mut request_builder = client.post(&url_generate);
-        
-        // Add headers
-        for (key, value) in headers {
-            request_builder = request_builder.header(key, value);
-        }
-        
-        let response = request_builder
-            .json(&generate_body)  // Use reqwest's json() method like groqai
-            .send()
-            .await
-            .map_err(|e| AiLibError::ProviderError(format!("HTTP request failed: {}", e)))?;
-
-        // Stop timer
-                        if let Some(t) = timer {
-                            t.stop();
-                        }
-
-        // Handle response
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(AiLibError::ProviderError(format!(
-                "HTTP request failed: {} - {}",
-                status, error_text
-            )));
-        }
-
-        let response_json: serde_json::Value = response.json().await
-            .map_err(|e| AiLibError::ProviderError(format!("Failed to parse response: {}", e)))?;
+        if let Some(t) = timer { t.stop(); }
 
         self.parse_response(response_json)
     }
@@ -429,100 +390,65 @@ impl ChatApi for CohereAdapter {
 
         let url = format!("{}/v1/chat", self.base_url);
 
-        // Create HTTP client honoring AI_PROXY_URL
-        let mut client_builder = reqwest::Client::builder();
-        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
-            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-                client_builder = client_builder.proxy(proxy);
-            }
-        }
-        let client = client_builder
-            .build()
-            .map_err(|e| AiLibError::ProviderError(format!("Client error: {}", e)))?;
-
         let mut headers = HashMap::new();
         headers.insert(
             "Authorization".to_string(),
             format!("Bearer {}", self.api_key),
         );
-        headers.insert("Accept".to_string(), "text/event-stream".to_string());
-
-        let response = client.post(&url).json(&stream_request);
-        let mut req = response;
-        for (k, v) in headers.clone() {
-            req = req.header(k, v);
-        }
-
-        // Try to send the streaming request. If the service doesn't support SSE or
-        // responds with non-success, fall back to non-streaming and simulate a stream
-        // by splitting the completed response into smaller chunks.
-        let send_result = req.send().await;
-
-        match send_result {
-            Ok(response) => {
-                if response.status().is_success() {
-                    // Normal SSE flow
-                    let (tx, rx) = mpsc::unbounded_channel();
-
-                    tokio::spawn(async move {
-                        let mut buffer = Vec::new();
-                        let mut stream = response.bytes_stream();
-
-                        while let Some(item) = stream.next().await {
-                            match item {
-                                Ok(bytes) => {
-                                    buffer.extend_from_slice(&bytes);
-
-                                    // process complete events separated by boundaries
-                                    #[cfg(feature = "unified_sse")]
-                                    {
-                                        while let Some(boundary) = crate::sse::parser::find_event_boundary(&buffer) {
-                                            let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
-                                            if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
-                                                if let Some(parsed) = crate::sse::parser::parse_sse_event(event_text) {
-                                                    match parsed {
-                                                        Ok(Some(chunk)) => { if tx.send(Ok(chunk)).is_err() { return; } }
-                                                        Ok(None) => return,
-                                                        Err(e) => { let _ = tx.send(Err(e)); return; }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    #[cfg(not(feature = "unified_sse"))]
-                                    {
-                                        while let Some(boundary) = find_event_boundary(&buffer) {
-                                            let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
-                                            if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
-                                                if let Some(parsed) = parse_sse_event(event_text) {
-                                                    match parsed {
-                                                        Ok(Some(chunk)) => { if tx.send(Ok(chunk)).is_err() { return; } }
-                                                        Ok(None) => return,
-                                                        Err(e) => { let _ = tx.send(Err(e)); return; }
-                                                    }
-                                                }
+        // Try unified transport streaming first
+        if let Ok(byte_stream) = self
+            .transport
+            .post_stream(&url, Some(headers.clone()), stream_request.clone())
+            .await
+        {
+            let (tx, rx) = mpsc::unbounded_channel();
+            tokio::spawn(async move {
+                let mut buffer = Vec::new();
+                futures::pin_mut!(byte_stream);
+                while let Some(item) = byte_stream.next().await {
+                    match item {
+                        Ok(bytes) => {
+                            buffer.extend_from_slice(&bytes);
+                            #[cfg(feature = "unified_sse")]
+                            {
+                                while let Some(boundary) = crate::sse::parser::find_event_boundary(&buffer) {
+                                    let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
+                                    if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                                        if let Some(parsed) = crate::sse::parser::parse_sse_event(event_text) {
+                                            match parsed {
+                                                Ok(Some(chunk)) => { if tx.send(Ok(chunk)).is_err() { return; } }
+                                                Ok(None) => return,
+                                                Err(e) => { let _ = tx.send(Err(e)); return; }
                                             }
                                         }
                                     }
                                 }
-                                Err(e) => {
-                                    let _ = tx.send(Err(AiLibError::ProviderError(format!(
-                                        "Stream error: {}",
-                                        e
-                                    ))));
-                                    break;
+                            }
+                            #[cfg(not(feature = "unified_sse"))]
+                            {
+                                while let Some(boundary) = find_event_boundary(&buffer) {
+                                    let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
+                                    if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                                        if let Some(parsed) = parse_sse_event(event_text) {
+                                            match parsed {
+                                                Ok(Some(chunk)) => { if tx.send(Ok(chunk)).is_err() { return; } }
+                                                Ok(None) => return,
+                                                Err(e) => { let _ = tx.send(Err(e)); return; }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
-                    });
-
-                    let stream = UnboundedReceiverStream::new(rx);
-                    return Ok(Box::new(Box::pin(stream)));
+                        Err(e) => {
+                            let _ = tx.send(Err(AiLibError::ProviderError(format!("Stream error: {}", e))));
+                            break;
+                        }
+                    }
                 }
-            }
-            Err(_) => {
-                // fallthrough to simulated fallback below
-            }
+            });
+            let stream = UnboundedReceiverStream::new(rx);
+            return Ok(Box::new(Box::pin(stream)));
         }
 
         // Fallback: call non-streaming chat_completion and stream the result in chunks
@@ -567,7 +493,7 @@ impl ChatApi for CohereAdapter {
     }
 
     async fn list_models(&self) -> Result<Vec<String>, AiLibError> {
-        // Use v1/models endpoint for listing models
+        // Use v1/models endpoint for listing models via unified transport
         let url = format!("{}/v1/models", self.base_url);
         let mut headers = HashMap::new();
         headers.insert(
@@ -575,40 +501,10 @@ impl ChatApi for CohereAdapter {
             format!("Bearer {}", self.api_key),
         );
 
-        // Use direct reqwest approach for better reliability
-        let mut client_builder = reqwest::Client::builder();
-        if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
-            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-                client_builder = client_builder.proxy(proxy);
-            }
-        }
-        let client = client_builder.build()
-            .map_err(|e| AiLibError::ProviderError(format!("Failed to create HTTP client: {}", e)))?;
-
-        let mut request_builder = client.get(&url);
-        
-        // Add headers
-        for (key, value) in headers {
-            request_builder = request_builder.header(key, value);
-        }
-        
-        let response = request_builder
-            .send()
-            .await
-            .map_err(|e| AiLibError::ProviderError(format!("HTTP request failed: {}", e)))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(AiLibError::ProviderError(format!(
-                "HTTP request failed: {} - {}",
-                status, error_text
-            )));
-        }
-
-        let response: serde_json::Value = response.json().await
-            .map_err(|e| AiLibError::ProviderError(format!("Failed to parse response: {}", e)))?;
+        let response = self
+            .transport
+            .get_json(&url, Some(headers))
+            .await?;
 
         Ok(response["models"]
             .as_array()

@@ -223,7 +223,7 @@ impl TokenBucket {
 
         // Record metrics
         if let Some(metrics) = &self.metrics {
-            let _ = tokio::spawn({
+            tokio::spawn({
                 let metrics = metrics.clone();
                 async move {
                     metrics.record_gauge("rate_limiter.adaptive_rate", clamped_rate as f64).await;

@@ -86,4 +86,8 @@ impl InterceptorPipeline {
     }
 }
 
+impl Default for InterceptorPipeline {
+    fn default() -> Self { Self::new() }
+}
+
 

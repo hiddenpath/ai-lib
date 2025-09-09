@@ -316,13 +316,10 @@ impl CustomModelManager {
             }
             ModelSelectionStrategy::PerformanceBased => {
                 // Select model with best performance metrics
-                self.models.values().max_by_key(|model| {
-                    let speed_score = match model.performance.speed {
-                        SpeedTier::Fast => 3,
-                        SpeedTier::Balanced => 2,
-                        SpeedTier::Slow => 1,
-                    };
-                    speed_score
+                self.models.values().max_by_key(|model| match model.performance.speed {
+                    SpeedTier::Fast => 3,
+                    SpeedTier::Balanced => 2,
+                    SpeedTier::Slow => 1,
                 })
             }
             ModelSelectionStrategy::CostBased => {

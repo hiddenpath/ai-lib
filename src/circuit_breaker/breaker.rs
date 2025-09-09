@@ -157,16 +157,14 @@ impl CircuitBreaker {
             CircuitState::Closed => true,
             CircuitState::Open => {
                 // Check if enough time has passed to try half-open
-                if let Some(last_failure) = *self.last_failure_time.lock().unwrap() {
-                    if last_failure.elapsed() >= self.config.recovery_timeout {
-                        self.transition_to_half_open().await;
-                        true
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
+                let allow_half_open = {
+                    let last = self.last_failure_time.lock().unwrap();
+                    last.and_then(|t| Some(t.elapsed() >= self.config.recovery_timeout)).unwrap_or(false)
+                };
+                if allow_half_open {
+                    self.transition_to_half_open().await;
+                    true
+                } else { false }
             }
             CircuitState::HalfOpen => true,
         }
@@ -176,9 +174,10 @@ impl CircuitBreaker {
     async fn on_success(&self) {
         self.successful_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         
-        let mut state = self.state.lock().unwrap();
-        
-        match *state {
+        let mut record_closed_metric = false;
+        {
+            let mut state = self.state.lock().unwrap();
+            match *state {
             CircuitState::Closed => {
                 // Reset failure count on success
                 self.failure_count.store(0, std::sync::atomic::Ordering::Relaxed);
@@ -189,16 +188,15 @@ impl CircuitBreaker {
                     *state = CircuitState::Closed;
                     self.success_count.store(0, std::sync::atomic::Ordering::Relaxed);
                     self.circuit_close_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    
-                    // Record metrics
-                    if let Some(metrics) = &self.metrics {
-                        metrics.incr_counter("circuit_breaker.closed", 1).await;
-                    }
+                    record_closed_metric = true;
                 }
             }
             CircuitState::Open => {
                 // This shouldn't happen, but handle gracefully
             }
+        }}
+        if record_closed_metric {
+            if let Some(metrics) = &self.metrics { metrics.incr_counter("circuit_breaker.closed", 1).await; }
         }
     }
 
@@ -213,14 +211,14 @@ impl CircuitBreaker {
         
         // Check if we should open the circuit
         if failure_count >= self.config.failure_threshold {
-            let mut state = self.state.lock().unwrap();
-            *state = CircuitState::Open;
+            {
+                let mut state = self.state.lock().unwrap();
+                *state = CircuitState::Open;
+            }
             self.circuit_open_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             
             // Record metrics
-            if let Some(metrics) = &self.metrics {
-                metrics.incr_counter("circuit_breaker.opened", 1).await;
-            }
+            if let Some(metrics) = &self.metrics { let m = metrics.clone(); m.incr_counter("circuit_breaker.opened", 1).await; }
         }
     }
 
@@ -236,14 +234,14 @@ impl CircuitBreaker {
         
         // Check if we should open the circuit
         if failure_count >= self.config.failure_threshold {
-            let mut state = self.state.lock().unwrap();
-            *state = CircuitState::Open;
+            {
+                let mut state = self.state.lock().unwrap();
+                *state = CircuitState::Open;
+            }
             self.circuit_open_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             
             // Record metrics
-            if let Some(metrics) = &self.metrics {
-                metrics.incr_counter("circuit_breaker.opened", 1).await;
-            }
+            if let Some(metrics) = &self.metrics { let m = metrics.clone(); m.incr_counter("circuit_breaker.opened", 1).await; }
         }
     }
 
