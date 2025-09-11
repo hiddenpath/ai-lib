@@ -1,5 +1,5 @@
 # ai-lib 🦀✨  
-[![CI](https://github.com/hiddenpath/ai-lib/actions/workflows/ci.yml/badge.svg)](https://github.com/hiddenpath/ai-lib/actions/workflows/ci.yml)
+
 > A unified, reliable, high-performance multi-provider AI SDK for Rust
 
 A production-grade, provider-agnostic SDK that provides a unified Rust API for 17+ AI platforms (OpenAI, Groq, Anthropic, Gemini, Mistral, Cohere, Azure OpenAI, Ollama, DeepSeek, Qwen, Baidu ERNIE, Tencent Hunyuan, iFlytek Spark, Kimi, HuggingFace, TogetherAI, xAI Grok, etc.).  

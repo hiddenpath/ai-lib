@@ -1,5 +1,5 @@
 # ai-lib 🦀✨  
-[![CI](https://github.com/hiddenpath/ai-lib/actions/workflows/ci.yml/badge.svg)](https://github.com/hiddenpath/ai-lib/actions/workflows/ci.yml)
+
 > 统一、可靠、高性能的多厂商AI SDK for Rust
 
 一个生产级、厂商无关的SDK，为17+个AI平台（OpenAI、Groq、Anthropic、Gemini、Mistral、Cohere、Azure OpenAI、Ollama、DeepSeek、Qwen、文心一言、混元、讯飞星火、Kimi、HuggingFace、TogetherAI、xAI Grok等）提供统一的Rust API。  
