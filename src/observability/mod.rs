@@ -21,12 +21,16 @@ pub struct NoopTracer;
 
 #[async_trait]
 impl Tracer for NoopTracer {
-    async fn start_span(&self, _name: &str) -> Box<dyn Span + Send> { Box::new(NoopSpan) }
-    async fn event(&self, _name: &str, _attrs: &[(&str, &str)]) { }
+    async fn start_span(&self, _name: &str) -> Box<dyn Span + Send> {
+        Box::new(NoopSpan)
+    }
+    async fn event(&self, _name: &str, _attrs: &[(&str, &str)]) {}
 }
 
 pub struct NoopSpan;
-impl Span for NoopSpan { fn set_attr(&mut self, _key: &str, _value: &str) {} }
+impl Span for NoopSpan {
+    fn set_attr(&mut self, _key: &str, _value: &str) {}
+}
 
 /// Structured audit sink for compliance and diagnostics.
 #[async_trait]
@@ -42,5 +46,3 @@ pub struct NoopAudit;
 impl AuditSink for NoopAudit {
     async fn record(&self, _category: &str, _payload_json: &str) {}
 }
-
-

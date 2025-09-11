@@ -40,8 +40,16 @@ fn golden_large_payload_split_boundaries() -> Result<(), AiLibError> {
         if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
             if let Some(parsed) = ai_lib::sse::parser::parse_sse_event(event_text) {
                 let chunk = parsed?.expect("chunk");
-                assert!(matches!(chunk.choices[0].delta.role, Some(ai_lib::types::Role::Assistant)));
-                assert!(chunk.choices[0].delta.content.as_ref().unwrap().ends_with("结束"));
+                assert!(matches!(
+                    chunk.choices[0].delta.role,
+                    Some(ai_lib::types::Role::Assistant)
+                ));
+                assert!(chunk.choices[0]
+                    .delta
+                    .content
+                    .as_ref()
+                    .unwrap()
+                    .ends_with("结束"));
                 seen = true;
             }
         }
@@ -49,5 +57,3 @@ fn golden_large_payload_split_boundaries() -> Result<(), AiLibError> {
     assert!(seen);
     Ok(())
 }
-
-

@@ -1,9 +1,11 @@
+#[cfg(feature = "routing_mvp")]
 use ai_lib::{
     CustomModelManager, LoadBalancingStrategy, ModelArray, ModelCapabilities, ModelEndpoint,
     ModelInfo, ModelSelectionStrategy, PerformanceMetrics, PricingInfo, QualityTier, SpeedTier,
 };
 use std::time::Duration;
 
+#[cfg(feature = "routing_mvp")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 AI-lib Model Management Tools Example");
@@ -226,4 +228,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   • Recommend models for specific use cases");
 
     Ok(())
+}
+
+#[cfg(not(feature = "routing_mvp"))]
+fn main() {
+    eprintln!("Enable feature 'routing_mvp' to run this example.");
 }

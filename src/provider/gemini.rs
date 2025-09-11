@@ -4,10 +4,13 @@ use crate::transport::{DynHttpTransportRef, HttpTransport};
 use crate::types::{
     AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
 };
-use futures::stream::{self, Stream};
+use futures::stream::Stream;
+use futures::StreamExt;
 use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
+#[cfg(feature = "unified_transport")]
+use std::time::Duration;
 
 /// Google Gemini independent adapter, supporting multimodal AI services
 ///
@@ -27,6 +30,29 @@ pub struct GeminiAdapter {
 }
 
 impl GeminiAdapter {
+    fn build_default_timeout_secs() -> u64 {
+        std::env::var("AI_HTTP_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(30)
+    }
+
+    fn build_default_transport() -> Result<DynHttpTransportRef, AiLibError> {
+        #[cfg(feature = "unified_transport")]
+        {
+            let timeout = Duration::from_secs(Self::build_default_timeout_secs());
+            let client = crate::transport::client_factory::build_shared_client()
+                .map_err(|e| AiLibError::NetworkError(format!("Failed to build http client: {}", e)))?;
+            let t = HttpTransport::with_reqwest_client(client, timeout);
+            return Ok(t.boxed());
+        }
+        #[cfg(not(feature = "unified_transport"))]
+        {
+            let t = HttpTransport::new();
+            return Ok(t.boxed());
+        }
+    }
+
     pub fn new() -> Result<Self, AiLibError> {
         let api_key = env::var("GEMINI_API_KEY").map_err(|_| {
             AiLibError::AuthenticationError(
@@ -35,7 +61,7 @@ impl GeminiAdapter {
         })?;
 
         Ok(Self {
-            transport: HttpTransport::new().boxed(),
+            transport: Self::build_default_transport()?,
             api_key,
             base_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
             metrics: Arc::new(NoopMetrics::new()),
@@ -48,7 +74,7 @@ impl GeminiAdapter {
         base_url: Option<String>,
     ) -> Result<Self, AiLibError> {
         Ok(Self {
-            transport: HttpTransport::new().boxed(),
+            transport: Self::build_default_transport()?,
             api_key,
             base_url: base_url
                 .unwrap_or_else(|| "https://generativelanguage.googleapis.com/v1beta".to_string()),
@@ -242,31 +268,280 @@ impl ChatApi for GeminiAdapter {
         let gemini_request = self.convert_to_gemini_request(&request);
 
         // Gemini uses URL parameter authentication, not headers
-        let url = format!(
-            "{}/models/{}:generateContent?key={}",
-            self.base_url, request.model, self.api_key
-        );
+        let url = format!("{}/models/{}:generateContent", self.base_url, request.model);
 
-        let headers = HashMap::from([("Content-Type".to_string(), "application/json".to_string())]);
+        let headers = HashMap::from([
+            ("Content-Type".to_string(), "application/json".to_string()),
+            ("x-goog-api-key".to_string(), self.api_key.clone()),
+        ]);
 
         // Use unified transport
         let response_json = self
             .transport
             .post_json(&url, Some(headers), gemini_request)
             .await?;
-        if let Some(t) = timer { t.stop(); }
+        if let Some(t) = timer {
+            t.stop();
+        }
         self.parse_gemini_response(response_json, &request.model)
     }
 
     async fn chat_completion_stream(
         &self,
-        _request: ChatCompletionRequest,
+        request: ChatCompletionRequest,
     ) -> Result<
         Box<dyn Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin>,
         AiLibError,
     > {
-        // Gemini streaming response requires special handling, return empty stream for now
-        let stream = stream::empty();
+        // Try native SSE first per Gemini API streamGenerateContent
+        let url = format!(
+            "{}/models/{}:streamGenerateContent",
+            self.base_url, request.model
+        );
+        let gemini_request = self.convert_to_gemini_request(&request);
+        let mut headers = HashMap::new();
+        headers.insert("Content-Type".to_string(), "application/json".to_string());
+        headers.insert("Accept".to_string(), "text/event-stream".to_string());
+        headers.insert("x-goog-api-key".to_string(), self.api_key.clone());
+
+        if let Ok(mut byte_stream) = self
+            .transport
+            .post_stream(&url, Some(headers), gemini_request)
+            .await
+        {
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+            tokio::spawn(async move {
+                let mut buffer = Vec::new();
+                while let Some(item) = byte_stream.next().await {
+                    match item {
+                        Ok(bytes) => {
+                            buffer.extend_from_slice(&bytes);
+                            #[cfg(feature = "unified_sse")]
+                            {
+                                while let Some(boundary) =
+                                    crate::sse::parser::find_event_boundary(&buffer)
+                                {
+                                    let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
+                                    if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                                        for line in event_text.lines() {
+                                            let line = line.trim();
+                                            if let Some(data) = line.strip_prefix("data: ") {
+                                                if data.is_empty() {
+                                                    continue;
+                                                }
+                                                if data == "[DONE]" {
+                                                    return;
+                                                }
+                                                match serde_json::from_str::<serde_json::Value>(
+                                                    data,
+                                                ) {
+                                                    Ok(json) => {
+                                                        let text = json
+                                                            .get("candidates")
+                                                            .and_then(|c| c.as_array())
+                                                            .and_then(|arr| arr.first())
+                                                            .and_then(|cand| {
+                                                                cand.get("content")
+                                                                    .and_then(|c| c.get("parts"))
+                                                                    .and_then(|p| p.as_array())
+                                                                    .and_then(|parts| parts.first())
+                                                                    .and_then(|part| {
+                                                                        part.get("text")
+                                                                    })
+                                                                    .and_then(|t| t.as_str())
+                                                            })
+                                                            .map(|s| s.to_string());
+                                                        if let Some(tdelta) = text {
+                                                            let delta = crate::api::ChoiceDelta { index: 0, delta: crate::api::MessageDelta { role: Some(crate::types::Role::Assistant), content: Some(tdelta) }, finish_reason: json.get("candidates").and_then(|c| c.as_array()).and_then(|arr| arr.first()).and_then(|cand| cand.get("finishReason").or_else(|| json.get("finishReason"))).and_then(|v| v.as_str()).map(|r| match r { "STOP" => "stop".to_string(), "MAX_TOKENS" => "length".to_string(), other => other.to_string() }) };
+                                                            let chunk_obj = ChatCompletionChunk {
+                                                                id: json
+                                                                    .get("responseId")
+                                                                    .and_then(|v| v.as_str())
+                                                                    .unwrap_or("")
+                                                                    .to_string(),
+                                                                object: "chat.completion.chunk"
+                                                                    .to_string(),
+                                                                created: 0,
+                                                                model: request.model.clone(),
+                                                                choices: vec![delta],
+                                                            };
+                                                            if tx.send(Ok(chunk_obj)).is_err() {
+                                                                return;
+                                                            }
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        let _ = tx.send(Err(
+                                                            AiLibError::ProviderError(format!(
+                                                                "Gemini SSE JSON parse error: {}",
+                                                                e
+                                                            )),
+                                                        ));
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            #[cfg(not(feature = "unified_sse"))]
+                            {
+                                fn find_event_boundary(buffer: &[u8]) -> Option<usize> {
+                                    let mut i = 0;
+                                    while i + 1 < buffer.len() {
+                                        if buffer[i] == b'\n' && buffer[i + 1] == b'\n' {
+                                            return Some(i + 2);
+                                        }
+                                        if i + 3 < buffer.len()
+                                            && buffer[i] == b'\r'
+                                            && buffer[i + 1] == b'\n'
+                                            && buffer[i + 2] == b'\r'
+                                            && buffer[i + 3] == b'\n'
+                                        {
+                                            return Some(i + 4);
+                                        }
+                                        i += 1;
+                                    }
+                                    None
+                                }
+                                while let Some(boundary) = find_event_boundary(&buffer) {
+                                    let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
+                                    if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                                        for line in event_text.lines() {
+                                            let line = line.trim();
+                                            if let Some(data) = line.strip_prefix("data: ") {
+                                                if data.is_empty() {
+                                                    continue;
+                                                }
+                                                if data == "[DONE]" {
+                                                    return;
+                                                }
+                                                match serde_json::from_str::<serde_json::Value>(
+                                                    data,
+                                                ) {
+                                                    Ok(json) => {
+                                                        let text = json
+                                                            .get("candidates")
+                                                            .and_then(|c| c.as_array())
+                                                            .and_then(|arr| arr.first())
+                                                            .and_then(|cand| {
+                                                                cand.get("content")
+                                                                    .and_then(|c| c.get("parts"))
+                                                                    .and_then(|p| p.as_array())
+                                                                    .and_then(|parts| parts.first())
+                                                                    .and_then(|part| {
+                                                                        part.get("text")
+                                                                    })
+                                                                    .and_then(|t| t.as_str())
+                                                            })
+                                                            .map(|s| s.to_string());
+                                                        if let Some(tdelta) = text {
+                                                            let delta = crate::api::ChoiceDelta { index: 0, delta: crate::api::MessageDelta { role: Some(crate::types::Role::Assistant), content: Some(tdelta) }, finish_reason: None };
+                                                            let chunk_obj = ChatCompletionChunk {
+                                                                id: json
+                                                                    .get("responseId")
+                                                                    .and_then(|v| v.as_str())
+                                                                    .unwrap_or("")
+                                                                    .to_string(),
+                                                                object: "chat.completion.chunk"
+                                                                    .to_string(),
+                                                                created: 0,
+                                                                model: request.model.clone(),
+                                                                choices: vec![delta],
+                                                            };
+                                                            if tx.send(Ok(chunk_obj)).is_err() {
+                                                                return;
+                                                            }
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        let _ = tx.send(Err(
+                                                            AiLibError::ProviderError(format!(
+                                                                "Gemini SSE JSON parse error: {}",
+                                                                e
+                                                            )),
+                                                        ));
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            let _ = tx.send(Err(AiLibError::ProviderError(format!(
+                                "Stream error: {}",
+                                e
+                            ))));
+                            break;
+                        }
+                    }
+                }
+            });
+            let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
+            return Ok(Box::new(Box::pin(stream)));
+        }
+
+        // Fallback to non-streaming + simulated chunks
+        fn split_text_into_chunks(text: &str, max_len: usize) -> Vec<String> {
+            let mut chunks = Vec::new();
+            let mut start = 0;
+            let bytes = text.as_bytes();
+            while start < bytes.len() {
+                let end = std::cmp::min(start + max_len, bytes.len());
+                let mut cut = end;
+                if end < bytes.len() {
+                    if let Some(pos) = text[start..end].rfind(' ') {
+                        cut = start + pos;
+                    }
+                }
+                if cut == start {
+                    cut = end;
+                }
+                chunks.push(String::from_utf8_lossy(&bytes[start..cut]).to_string());
+                start = cut;
+                if start < bytes.len() && bytes[start] == b' ' {
+                    start += 1;
+                }
+            }
+            chunks
+        }
+
+        let finished = self.chat_completion(request).await?;
+        let text = finished
+            .choices
+            .first()
+            .map(|c| c.message.content.as_text())
+            .unwrap_or_default();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            let chunks = split_text_into_chunks(&text, 80);
+            for chunk in chunks {
+                let delta = crate::api::ChoiceDelta {
+                    index: 0,
+                    delta: crate::api::MessageDelta {
+                        role: Some(crate::types::Role::Assistant),
+                        content: Some(chunk.clone()),
+                    },
+                    finish_reason: None,
+                };
+                let chunk_obj = ChatCompletionChunk {
+                    id: "simulated".to_string(),
+                    object: "chat.completion.chunk".to_string(),
+                    created: 0,
+                    model: finished.model.clone(),
+                    choices: vec![delta],
+                };
+                if tx.send(Ok(chunk_obj)).is_err() {
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        });
+        let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
         Ok(Box::new(Box::pin(stream)))
     }
 

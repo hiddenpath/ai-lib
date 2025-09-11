@@ -30,13 +30,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "command".to_string(), // Cohere model
         vec![Message {
             role: Role::User,
-                   content: Content::Text("hello".to_string()),
+            content: Content::Text("hello".to_string()),
             function_call: None,
         }],
     );
 
     println!("\n📤 Sending request to model: {}", request.model);
-           println!("📝 Request: hello");
+    println!("📝 Request: hello");
 
     // Send request and get response
     match client.chat_completion(request).await {

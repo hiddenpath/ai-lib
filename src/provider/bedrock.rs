@@ -5,7 +5,7 @@ use futures::stream::Stream;
 
 pub struct BedrockAdapter {
     transport: DynHttpTransportRef,
-    // TODO: add region/credentials fields or AWS SDK client in future
+    // Note: Region/credentials fields or AWS SDK client can be added in future versions
 }
 
 impl BedrockAdapter {

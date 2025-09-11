@@ -17,9 +17,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = AiClient::new(Provider::Groq)?;
     println!("✅ Groq client created successfully");
 
+    // Choose model from env or fallback to a sensible default
+    let model = std::env::var("GROQ_MODEL").unwrap_or_else(|_| "llama-3.1-8b-instant".to_string());
+
     // Create streaming request
     let request = ChatCompletionRequest::new(
-        "llama3-8b-8192".to_string(),
+        model,
         vec![Message {
             role: Role::User,
             content: Content::Text(

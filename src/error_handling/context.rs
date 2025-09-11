@@ -24,24 +24,15 @@ pub struct ErrorContext {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SuggestedAction {
     /// Retry the request with specified delay and max attempts
-    Retry { 
-        delay_ms: u64, 
-        max_attempts: u32 
-    },
+    Retry { delay_ms: u64, max_attempts: u32 },
     /// Switch to alternative providers
-    SwitchProvider { 
-        alternative_providers: Vec<String> 
-    },
+    SwitchProvider { alternative_providers: Vec<String> },
     /// Reduce request size or complexity
-    ReduceRequestSize { 
-        max_tokens: Option<u32> 
-    },
+    ReduceRequestSize { max_tokens: Option<u32> },
     /// Check API credentials
     CheckCredentials,
     /// Contact support with specific reason
-    ContactSupport { 
-        reason: String 
-    },
+    ContactSupport { reason: String },
     /// No specific action recommended
     NoAction,
 }

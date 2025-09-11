@@ -26,7 +26,9 @@ pub fn find_event_boundary(buffer: &[u8]) -> Option<usize> {
 
 /// Parse a raw SSE event text into an optional chunk.
 /// Returns Ok(None) for [DONE] signals.
-pub fn parse_sse_event(event_text: &str) -> Option<Result<Option<ChatCompletionChunk>, AiLibError>> {
+pub fn parse_sse_event(
+    event_text: &str,
+) -> Option<Result<Option<ChatCompletionChunk>, AiLibError>> {
     for line in event_text.lines() {
         let line = line.trim();
         if let Some(stripped) = line.strip_prefix("data: ") {
@@ -55,12 +57,18 @@ pub fn parse_chunk_data(data: &str) -> Result<Option<ChatCompletionChunk>, AiLib
                 "system" => Role::System,
                 _ => Role::Assistant,
             });
-            let content = delta.get("content").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let content = delta
+                .get("content")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
             let md = MessageDelta { role, content };
             let cd = ChoiceDelta {
                 index: index as u32,
                 delta: md,
-                finish_reason: choice.get("finish_reason").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                finish_reason: choice
+                    .get("finish_reason")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
             };
             choices_vec.push(cd);
         }
@@ -68,11 +76,12 @@ pub fn parse_chunk_data(data: &str) -> Result<Option<ChatCompletionChunk>, AiLib
 
     Ok(Some(ChatCompletionChunk {
         id: json["id"].as_str().unwrap_or_default().to_string(),
-        object: json["object"].as_str().unwrap_or("chat.completion.chunk").to_string(),
+        object: json["object"]
+            .as_str()
+            .unwrap_or("chat.completion.chunk")
+            .to_string(),
         created: json["created"].as_u64().unwrap_or(0),
         model: json["model"].as_str().unwrap_or_default().to_string(),
         choices: choices_vec,
     }))
 }
-
-

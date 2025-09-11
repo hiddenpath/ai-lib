@@ -25,12 +25,14 @@ impl BackpressureController {
 
     /// Acquire a permit for executing a request
     pub async fn acquire_permit(&self) -> Result<BackpressurePermit, BackpressureError> {
-        let permit = self.semaphore.clone().acquire_owned().await
+        let permit = self
+            .semaphore
+            .clone()
+            .acquire_owned()
+            .await
             .map_err(|_| BackpressureError::SemaphoreClosed)?;
-        
-        Ok(BackpressurePermit {
-            _permit: permit,
-        })
+
+        Ok(BackpressurePermit { _permit: permit })
     }
 
     /// Get the maximum number of concurrent requests

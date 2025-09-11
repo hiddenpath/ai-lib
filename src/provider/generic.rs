@@ -312,13 +312,15 @@ impl GenericAdapter {
             match policy {
                 crate::types::FunctionCallPolicy::Auto(name) => {
                     if name == "auto" {
-                        provider_request["function_call"] = serde_json::Value::String("auto".to_string());
+                        provider_request["function_call"] =
+                            serde_json::Value::String("auto".to_string());
                     } else {
                         provider_request["function_call"] = serde_json::json!({"name": name});
                     }
                 }
                 crate::types::FunctionCallPolicy::None => {
-                    provider_request["function_call"] = serde_json::Value::String("none".to_string());
+                    provider_request["function_call"] =
+                        serde_json::Value::String("none".to_string());
                 }
             }
         }
@@ -432,10 +434,14 @@ impl GenericAdapter {
                     cut = start + pos;
                 }
             }
-            if cut == start { cut = end; }
+            if cut == start {
+                cut = end;
+            }
             chunks.push(String::from_utf8_lossy(&bytes[start..cut]).to_string());
             start = cut;
-            if start < bytes.len() && bytes[start] == b' ' { start += 1; }
+            if start < bytes.len() && bytes[start] == b' ' {
+                start += 1;
+            }
         }
         chunks
     }
@@ -507,6 +513,29 @@ impl GenericAdapter {
                             });
                         }
                     }
+                } else if let Some(tool_calls) = message.get("tool_calls").and_then(|v| v.as_array()) {
+                    // OpenAI tool_calls format: [{"type":"function","function":{"name":...,"arguments":...}}]
+                    if let Some(first) = tool_calls.first() {
+                        if let Some(func) = first.get("function") {
+                            if let Some(name) = func.get("name").and_then(|v| v.as_str()) {
+                                let mut args_opt = func.get("arguments").cloned();
+                                // If arguments is a string, attempt to parse JSON
+                                if let Some(args_val) = &args_opt {
+                                    if args_val.is_string() {
+                                        if let Some(s) = args_val.as_str() {
+                                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(s) {
+                                                args_opt = Some(parsed);
+                                            }
+                                        }
+                                    }
+                                }
+                                function_call = Some(crate::types::function_call::FunctionCall {
+                                    name: name.to_string(),
+                                    arguments: args_opt,
+                                });
+                            }
+                        }
+                    }
                 }
 
                 Ok(Choice {
@@ -564,6 +593,8 @@ impl ChatApi for GenericAdapter {
         if let Some(key) = &self.api_key {
             if self.config.base_url.contains("anthropic.com") {
                 headers.insert("x-api-key".to_string(), key.clone());
+                // Anthropic requires version header per API docs
+                headers.insert("anthropic-version".to_string(), "2023-06-01".to_string());
             } else {
                 headers.insert("Authorization".to_string(), format!("Bearer {}", key));
             }
@@ -585,8 +616,17 @@ impl ChatApi for GenericAdapter {
         // optional cost metrics
         #[cfg(feature = "cost_metrics")]
         {
-            let usd = crate::metrics::cost::estimate_usd(parsed.usage.prompt_tokens, parsed.usage.completion_tokens);
-            crate::metrics::cost::record_cost(self.metrics.as_ref(), provider_key, &parsed.model, usd).await;
+            let usd = crate::metrics::cost::estimate_usd(
+                parsed.usage.prompt_tokens,
+                parsed.usage.completion_tokens,
+            );
+            crate::metrics::cost::record_cost(
+                self.metrics.as_ref(),
+                provider_key,
+                &parsed.model,
+                usd,
+            )
+            .await;
         }
 
         Ok(parsed)
@@ -608,6 +648,7 @@ impl ChatApi for GenericAdapter {
         if let Some(key) = &self.api_key {
             if self.config.base_url.contains("anthropic.com") {
                 headers.insert("x-api-key".to_string(), key.clone());
+                headers.insert("anthropic-version".to_string(), "2023-06-01".to_string());
             } else {
                 headers.insert("Authorization".to_string(), format!("Bearer {}", key));
             }
@@ -620,23 +661,35 @@ impl ChatApi for GenericAdapter {
 
         match byte_stream_res {
             Ok(mut byte_stream) => {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        tokio::spawn(async move {
-            let mut buffer = Vec::new();
+                let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+                tokio::spawn(async move {
+                    let mut buffer = Vec::new();
                     while let Some(result) = byte_stream.next().await {
-                match result {
-                    Ok(bytes) => {
-                        buffer.extend_from_slice(&bytes);
+                        match result {
+                            Ok(bytes) => {
+                                buffer.extend_from_slice(&bytes);
                                 #[cfg(feature = "unified_sse")]
                                 {
-                                    while let Some(event_end) = crate::sse::parser::find_event_boundary(&buffer) {
-                                        let event_bytes = buffer.drain(..event_end).collect::<Vec<_>>();
+                                    while let Some(event_end) =
+                                        crate::sse::parser::find_event_boundary(&buffer)
+                                    {
+                                        let event_bytes =
+                                            buffer.drain(..event_end).collect::<Vec<_>>();
                                         if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
-                                            if let Some(chunk) = crate::sse::parser::parse_sse_event(event_text) {
+                                            if let Some(chunk) =
+                                                crate::sse::parser::parse_sse_event(event_text)
+                                            {
                                                 match chunk {
-                                                    Ok(Some(c)) => { if tx.send(Ok(c)).is_err() { return; } }
+                                                    Ok(Some(c)) => {
+                                                        if tx.send(Ok(c)).is_err() {
+                                                            return;
+                                                        }
+                                                    }
                                                     Ok(None) => return,
-                                                    Err(e) => { let _ = tx.send(Err(e)); return; }
+                                                    Err(e) => {
+                                                        let _ = tx.send(Err(e));
+                                                        return;
+                                                    }
                                                 }
                                             }
                                         }
@@ -644,30 +697,38 @@ impl ChatApi for GenericAdapter {
                                 }
                                 #[cfg(not(feature = "unified_sse"))]
                                 {
-                        while let Some(event_end) = Self::find_event_boundary(&buffer) {
-                            let event_bytes = buffer.drain(..event_end).collect::<Vec<_>>();
-                            if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
-                                if let Some(chunk) = Self::parse_sse_event(event_text) {
-                                    match chunk {
-                                                    Ok(Some(c)) => { if tx.send(Ok(c)).is_err() { return; } }
+                                    while let Some(event_end) = Self::find_event_boundary(&buffer) {
+                                        let event_bytes =
+                                            buffer.drain(..event_end).collect::<Vec<_>>();
+                                        if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                                            if let Some(chunk) = Self::parse_sse_event(event_text) {
+                                                match chunk {
+                                                    Ok(Some(c)) => {
+                                                        if tx.send(Ok(c)).is_err() {
+                                                            return;
+                                                        }
+                                                    }
                                                     Ok(None) => return,
-                                                    Err(e) => { let _ = tx.send(Err(e)); return; }
+                                                    Err(e) => {
+                                                        let _ = tx.send(Err(e));
+                                                        return;
+                                                    }
                                                 }
+                                            }
+                                        }
                                     }
                                 }
                             }
+                            Err(e) => {
+                                let _ = tx.send(Err(AiLibError::ProviderError(format!(
+                                    "Stream error: {}",
+                                    e
+                                ))));
+                                break;
+                            }
                         }
                     }
-                    Err(e) => {
-                        let _ = tx.send(Err(AiLibError::ProviderError(format!(
-                            "Stream error: {}",
-                            e
-                        ))));
-                        break;
-                    }
-                }
-            }
-        });
+                });
                 let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
                 Ok(Box::new(Box::pin(stream)))
             }
@@ -685,7 +746,10 @@ impl ChatApi for GenericAdapter {
                     for chunk in chunks {
                         let delta = ChoiceDelta {
                             index: 0,
-                            delta: MessageDelta { role: Some(Role::Assistant), content: Some(chunk.clone()) },
+                            delta: MessageDelta {
+                                role: Some(Role::Assistant),
+                                content: Some(chunk.clone()),
+                            },
                             finish_reason: None,
                         };
                         let chunk_obj = ChatCompletionChunk {
@@ -695,12 +759,14 @@ impl ChatApi for GenericAdapter {
                             model: finished.model.clone(),
                             choices: vec![delta],
                         };
-                        if tx.send(Ok(chunk_obj)).is_err() { return; }
+                        if tx.send(Ok(chunk_obj)).is_err() {
+                            return;
+                        }
                         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     }
                 });
-        let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
-        Ok(Box::new(Box::pin(stream)))
+                let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
+                Ok(Box::new(Box::pin(stream)))
             }
         }
     }

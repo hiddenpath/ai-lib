@@ -1,11 +1,14 @@
 //! Token bucket rate limiter implementation
 
-use crate::rate_limiter::RateLimiterConfig;
 use crate::metrics::Metrics;
-use std::sync::{Arc, atomic::{AtomicU64, AtomicBool, Ordering}};
+use crate::rate_limiter::RateLimiterConfig;
+use serde::{Deserialize, Serialize};
+use std::sync::{
+    atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc,
+};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
-use serde::{Serialize, Deserialize};
 
 /// Rate limiter metrics for monitoring
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,7 +53,7 @@ impl TokenBucket {
         let refill_rate = config.requests_per_second;
         let adaptive = config.adaptive;
         let initial_rate = config.initial_rate.unwrap_or(refill_rate);
-        
+
         Self {
             capacity,
             tokens: AtomicU64::new(capacity),
@@ -59,7 +62,7 @@ impl TokenBucket {
             adaptive,
             adaptive_rate: AtomicU64::new(initial_rate),
             min_rate: (refill_rate / 4).max(1), // Minimum 25% of original rate
-            max_rate: refill_rate * 2, // Maximum 200% of original rate
+            max_rate: refill_rate * 2,          // Maximum 200% of original rate
             total_requests: AtomicU64::new(0),
             successful_requests: AtomicU64::new(0),
             rejected_requests: AtomicU64::new(0),
@@ -101,22 +104,28 @@ impl TokenBucket {
 
         loop {
             self.refill_tokens();
-            
+
             let current = self.tokens.load(Ordering::Acquire);
             if current >= tokens {
-                if self.tokens.compare_exchange_weak(
-                    current, 
-                    current - tokens, 
-                    Ordering::Release, 
-                    Ordering::Relaxed
-                ).is_ok() {
+                if self
+                    .tokens
+                    .compare_exchange_weak(
+                        current,
+                        current - tokens,
+                        Ordering::Release,
+                        Ordering::Relaxed,
+                    )
+                    .is_ok()
+                {
                     self.successful_requests.fetch_add(1, Ordering::Relaxed);
-                    
+
                     // Record metrics
                     if let Some(metrics) = &self.metrics {
-                        metrics.incr_counter("rate_limiter.requests_successful", 1).await;
+                        metrics
+                            .incr_counter("rate_limiter.requests_successful", 1)
+                            .await;
                     }
-                    
+
                     return Ok(());
                 }
             } else {
@@ -126,7 +135,7 @@ impl TokenBucket {
                 } else {
                     self.refill_rate
                 };
-                
+
                 let wait_time = (tokens - current) * 1000 / current_rate;
                 if wait_time > 0 {
                     sleep(Duration::from_millis(wait_time)).await;
@@ -140,18 +149,18 @@ impl TokenBucket {
         let now = Instant::now().elapsed().as_millis() as u64;
         let last_refill = self.last_refill.load(Ordering::Acquire);
         let elapsed = now - last_refill;
-        
+
         if elapsed > 0 {
             let current_rate = if self.adaptive {
                 self.adaptive_rate.load(Ordering::Acquire)
             } else {
                 self.refill_rate
             };
-            
+
             let tokens_to_add = (elapsed * current_rate) / 1000;
             if tokens_to_add > 0 {
                 self.last_refill.store(now, Ordering::Release);
-                
+
                 let current = self.tokens.load(Ordering::Acquire);
                 let new_tokens = (current + tokens_to_add).min(self.capacity);
                 self.tokens.store(new_tokens, Ordering::Release);
@@ -226,7 +235,9 @@ impl TokenBucket {
             tokio::spawn({
                 let metrics = metrics.clone();
                 async move {
-                    metrics.record_gauge("rate_limiter.adaptive_rate", clamped_rate as f64).await;
+                    metrics
+                        .record_gauge("rate_limiter.adaptive_rate", clamped_rate as f64)
+                        .await;
                 }
             });
         }
@@ -235,7 +246,8 @@ impl TokenBucket {
     /// Reset adaptive rate to initial value
     pub fn reset_adaptive_rate(&self) {
         if self.adaptive {
-            self.adaptive_rate.store(self.refill_rate, Ordering::Release);
+            self.adaptive_rate
+                .store(self.refill_rate, Ordering::Release);
         }
     }
 

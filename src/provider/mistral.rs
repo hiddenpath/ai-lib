@@ -9,6 +9,8 @@ use crate::types::{
 use futures::stream::Stream;
 use futures::StreamExt;
 use std::collections::HashMap;
+#[cfg(feature = "unified_transport")]
+use std::time::Duration;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -26,11 +28,34 @@ pub struct MistralAdapter {
 }
 
 impl MistralAdapter {
+    fn build_default_timeout_secs() -> u64 {
+        std::env::var("AI_HTTP_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(30)
+    }
+
+    fn build_default_transport() -> Result<DynHttpTransportRef, AiLibError> {
+        #[cfg(feature = "unified_transport")]
+        {
+            let timeout = Duration::from_secs(Self::build_default_timeout_secs());
+            let client = crate::transport::client_factory::build_shared_client()
+                .map_err(|e| AiLibError::NetworkError(format!("Failed to build http client: {}", e)))?;
+            let t = HttpTransport::with_reqwest_client(client, timeout);
+            return Ok(t.boxed());
+        }
+        #[cfg(not(feature = "unified_transport"))]
+        {
+            let t = HttpTransport::new();
+            return Ok(t.boxed());
+        }
+    }
+
     pub fn new() -> Result<Self, AiLibError> {
         let api_key = std::env::var("MISTRAL_API_KEY").ok();
         let base_url = std::env::var("MISTRAL_BASE_URL")
             .unwrap_or_else(|_| "https://api.mistral.ai".to_string());
-        let boxed = HttpTransport::new().boxed();
+        let boxed = Self::build_default_transport()?;
         Ok(Self {
             transport: boxed,
             api_key,
@@ -44,7 +69,7 @@ impl MistralAdapter {
         api_key: Option<String>,
         base_url: Option<String>,
     ) -> Result<Self, AiLibError> {
-        let boxed = HttpTransport::new().boxed();
+        let boxed = Self::build_default_transport()?;
         Ok(Self {
             transport: boxed,
             api_key,
@@ -178,6 +203,27 @@ impl MistralAdapter {
                             name,
                             arguments: args,
                         });
+                    }
+                } else if let Some(tool_calls) = message.get("tool_calls").and_then(|v| v.as_array()) {
+                    if let Some(first) = tool_calls.first() {
+                        if let Some(func) = first.get("function").or_else(|| first.get("function_call")) {
+                            if let Some(name) = func.get("name").and_then(|v| v.as_str()) {
+                                let mut args_opt = func.get("arguments").cloned();
+                                if let Some(args_val) = &args_opt {
+                                    if args_val.is_string() {
+                                        if let Some(s) = args_val.as_str() {
+                                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(s) {
+                                                args_opt = Some(parsed);
+                                            }
+                                        }
+                                    }
+                                }
+                                function_call = Some(crate::types::function_call::FunctionCall {
+                                    name: name.to_string(),
+                                    arguments: args_opt,
+                                });
+                            }
+                        }
                     }
                 }
 
@@ -339,7 +385,9 @@ impl ChatApi for MistralAdapter {
             .transport
             .post_json(&url, Some(headers), provider_request)
             .await?;
-        if let Some(t) = timer { t.stop(); }
+        if let Some(t) = timer {
+            t.stop();
+        }
         self.parse_response(response_json)
     }
 
@@ -374,14 +422,25 @@ impl ChatApi for MistralAdapter {
                             buffer.extend_from_slice(&bytes);
                             #[cfg(feature = "unified_sse")]
                             {
-                                while let Some(boundary) = crate::sse::parser::find_event_boundary(&buffer) {
+                                while let Some(boundary) =
+                                    crate::sse::parser::find_event_boundary(&buffer)
+                                {
                                     let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
                                     if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
-                                        if let Some(parsed) = crate::sse::parser::parse_sse_event(event_text) {
+                                        if let Some(parsed) =
+                                            crate::sse::parser::parse_sse_event(event_text)
+                                        {
                                             match parsed {
-                                                Ok(Some(chunk)) => { if tx.send(Ok(chunk)).is_err() { return; } }
+                                                Ok(Some(chunk)) => {
+                                                    if tx.send(Ok(chunk)).is_err() {
+                                                        return;
+                                                    }
+                                                }
                                                 Ok(None) => return,
-                                                Err(e) => { let _ = tx.send(Err(e)); return; }
+                                                Err(e) => {
+                                                    let _ = tx.send(Err(e));
+                                                    return;
+                                                }
                                             }
                                         }
                                     }
@@ -394,9 +453,16 @@ impl ChatApi for MistralAdapter {
                                     if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
                                         if let Some(parsed) = parse_sse_event(event_text) {
                                             match parsed {
-                                                Ok(Some(chunk)) => { if tx.send(Ok(chunk)).is_err() { return; } }
+                                                Ok(Some(chunk)) => {
+                                                    if tx.send(Ok(chunk)).is_err() {
+                                                        return;
+                                                    }
+                                                }
                                                 Ok(None) => return,
-                                                Err(e) => { let _ = tx.send(Err(e)); return; }
+                                                Err(e) => {
+                                                    let _ = tx.send(Err(e));
+                                                    return;
+                                                }
                                             }
                                         }
                                     }
@@ -404,7 +470,10 @@ impl ChatApi for MistralAdapter {
                             }
                         }
                         Err(e) => {
-                            let _ = tx.send(Err(AiLibError::ProviderError(format!("Stream error: {}", e))));
+                            let _ = tx.send(Err(AiLibError::ProviderError(format!(
+                                "Stream error: {}",
+                                e
+                            ))));
                             break;
                         }
                     }

@@ -20,7 +20,11 @@ fn sse_multibyte_utf8_content() {
     let frame = format!("data: {}\n\n", data);
     let parsed = parse_sse_event(&frame).expect("some").expect("ok");
     let chunk = parsed.expect("chunk");
-    assert!(chunk.choices.first().and_then(|c| c.delta.content.as_ref()).is_some());
+    assert!(chunk
+        .choices
+        .first()
+        .and_then(|c| c.delta.content.as_ref())
+        .is_some());
 }
 
 #[test]
@@ -29,5 +33,3 @@ fn sse_done_signal() {
     let parsed = parse_sse_event(frame).expect("some").expect("ok");
     assert!(parsed.is_none());
 }
-
-

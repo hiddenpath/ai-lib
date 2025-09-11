@@ -6,11 +6,11 @@
 //! 3. JSON format reasoning - getting structured reasoning results
 //! 4. Reasoning configuration - using escape hatch to pass provider-specific parameters
 
-use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
 use ai_lib::types::common::Content;
-use ai_lib::types::function_call::{Tool, FunctionCallPolicy};
-use serde_json::json;
+use ai_lib::types::function_call::{FunctionCallPolicy, Tool};
+use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 use futures::StreamExt;
+use serde_json::json;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -67,7 +67,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Method 1: Structured reasoning - using function calls for step-by-step reasoning
-async fn demonstrate_structured_reasoning(client: &AiClient) -> Result<(), Box<dyn std::error::Error>> {
+async fn demonstrate_structured_reasoning(
+    client: &AiClient,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Define reasoning tool
     let reasoning_tool = Tool {
         name: "step_by_step_reasoning".to_string(),
@@ -127,12 +129,17 @@ async fn demonstrate_structured_reasoning(client: &AiClient) -> Result<(), Box<d
 }
 
 /// Method 2: Streaming reasoning - observing real-time output of reasoning process
-async fn demonstrate_streaming_reasoning(client: &AiClient) -> Result<(), Box<dyn std::error::Error>> {
+async fn demonstrate_streaming_reasoning(
+    client: &AiClient,
+) -> Result<(), Box<dyn std::error::Error>> {
     let request = ChatCompletionRequest::new(
         "qwen-qwq-32b".to_string(),
         vec![Message {
             role: Role::User,
-            content: Content::Text("Please explain how photosynthesis works and show your reasoning process".to_string()),
+            content: Content::Text(
+                "Please explain how photosynthesis works and show your reasoning process"
+                    .to_string(),
+            ),
             function_call: None,
         }],
     );
@@ -163,7 +170,10 @@ async fn demonstrate_streaming_reasoning(client: &AiClient) -> Result<(), Box<dy
     }
 
     println!("\n{}", "─".repeat(50));
-    println!("✅ Complete reasoning process saved ({} characters)", full_reasoning.len());
+    println!(
+        "✅ Complete reasoning process saved ({} characters)",
+        full_reasoning.len()
+    );
     Ok(())
 }
 
@@ -188,7 +198,7 @@ async fn demonstrate_json_reasoning(client: &AiClient) -> Result<(), Box<dyn std
     for choice in response.choices {
         let content = choice.message.content.as_text();
         println!("📋 JSON format reasoning result:");
-        
+
         if let Ok(reasoning_json) = serde_json::from_str::<serde_json::Value>(&content) {
             println!("{}", serde_json::to_string_pretty(&reasoning_json)?);
         } else {
@@ -213,10 +223,19 @@ async fn demonstrate_reasoning_config(client: &AiClient) -> Result<(), Box<dyn s
 
     // Add Groq-specific reasoning parameters
     request = request
-        .with_provider_specific("reasoning_format", serde_json::Value::String("parsed".to_string()))
-        .with_provider_specific("reasoning_effort", serde_json::Value::String("high".to_string()))
+        .with_provider_specific(
+            "reasoning_format",
+            serde_json::Value::String("parsed".to_string()),
+        )
+        .with_provider_specific(
+            "reasoning_effort",
+            serde_json::Value::String("high".to_string()),
+        )
         .with_provider_specific("parallel_tool_calls", serde_json::Value::Bool(true))
-        .with_provider_specific("service_tier", serde_json::Value::String("flex".to_string()));
+        .with_provider_specific(
+            "service_tier",
+            serde_json::Value::String("flex".to_string()),
+        );
 
     println!("⚙️  Using reasoning configuration:");
     println!("   - reasoning_format: parsed");
@@ -245,18 +264,21 @@ async fn demonstrate_math_reasoning(client: &AiClient) -> Result<(), Box<dyn std
 
     for (i, problem) in math_problems.iter().enumerate() {
         println!("📐 Math problem {}: {}", i + 1, problem);
-        
+
         let request = ChatCompletionRequest::new(
             "qwen-qwq-32b".to_string(),
             vec![Message {
                 role: Role::User,
-                content: Content::Text(format!("Please solve this math problem and show your reasoning process: {}", problem)),
+                content: Content::Text(format!(
+                    "Please solve this math problem and show your reasoning process: {}",
+                    problem
+                )),
                 function_call: None,
             }],
         );
 
         let response = client.chat_completion(request).await?;
-        
+
         for choice in response.choices {
             println!("💡 Solution:");
             println!("{}", choice.message.content.as_text());
@@ -277,18 +299,21 @@ async fn demonstrate_logic_reasoning(client: &AiClient) -> Result<(), Box<dyn st
 
     for (i, problem) in logic_problems.iter().enumerate() {
         println!("🧩 Logic problem {}: {}", i + 1, problem);
-        
+
         let request = ChatCompletionRequest::new(
             "qwen-qwq-32b".to_string(),
             vec![Message {
                 role: Role::User,
-                content: Content::Text(format!("Please analyze this logic problem and show your reasoning process: {}", problem)),
+                content: Content::Text(format!(
+                    "Please analyze this logic problem and show your reasoning process: {}",
+                    problem
+                )),
                 function_call: None,
             }],
         );
 
         let response = client.chat_completion(request).await?;
-        
+
         for choice in response.choices {
             println!("🔍 Analysis:");
             println!("{}", choice.message.content.as_text());

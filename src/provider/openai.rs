@@ -6,6 +6,8 @@ use crate::types::{
 };
 use futures::stream::{self, Stream};
 use std::collections::HashMap;
+#[cfg(feature = "unified_transport")]
+use std::time::Duration;
 use std::env;
 use std::sync::Arc;
 
@@ -20,6 +22,29 @@ pub struct OpenAiAdapter {
 }
 
 impl OpenAiAdapter {
+    fn build_default_timeout_secs() -> u64 {
+        std::env::var("AI_HTTP_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(30)
+    }
+
+    fn build_default_transport() -> Result<DynHttpTransportRef, AiLibError> {
+        #[cfg(feature = "unified_transport")]
+        {
+            let timeout = Duration::from_secs(Self::build_default_timeout_secs());
+            let client = crate::transport::client_factory::build_shared_client()
+                .map_err(|e| AiLibError::NetworkError(format!("Failed to build http client: {}", e)))?;
+            let t = HttpTransport::with_reqwest_client(client, timeout);
+            return Ok(t.boxed());
+        }
+        #[cfg(not(feature = "unified_transport"))]
+        {
+            let t = HttpTransport::new();
+            return Ok(t.boxed());
+        }
+    }
+
     pub fn new() -> Result<Self, AiLibError> {
         let api_key = env::var("OPENAI_API_KEY").map_err(|_| {
             AiLibError::AuthenticationError(
@@ -28,7 +53,7 @@ impl OpenAiAdapter {
         })?;
 
         Ok(Self {
-            transport: HttpTransport::new().boxed(),
+            transport: Self::build_default_transport()?,
             api_key,
             base_url: "https://api.openai.com/v1".to_string(),
             metrics: Arc::new(NoopMetrics::new()),
@@ -41,7 +66,7 @@ impl OpenAiAdapter {
         base_url: Option<String>,
     ) -> Result<Self, AiLibError> {
         Ok(Self {
-            transport: HttpTransport::new().boxed(),
+            transport: Self::build_default_transport()?,
             api_key,
             base_url: base_url.unwrap_or_else(|| "https://api.openai.com/v1".to_string()),
             metrics: Arc::new(NoopMetrics::new()),
@@ -82,7 +107,7 @@ impl OpenAiAdapter {
         metrics: Arc<dyn Metrics>,
     ) -> Result<Self, AiLibError> {
         Ok(Self {
-            transport: HttpTransport::new().boxed(),
+            transport: Self::build_default_transport()?,
             api_key,
             base_url,
             metrics,
@@ -340,7 +365,10 @@ impl ChatApi for OpenAiAdapter {
 
         // Use unified transport
         let mut headers = HashMap::new();
-        headers.insert("Authorization".to_string(), format!("Bearer {}", self.api_key));
+        headers.insert(
+            "Authorization".to_string(),
+            format!("Bearer {}", self.api_key),
+        );
         headers.insert("Content-Type".to_string(), "application/json".to_string());
 
         let response_json = self
@@ -348,7 +376,9 @@ impl ChatApi for OpenAiAdapter {
             .post_json(&url, Some(headers), openai_request)
             .await?;
 
-        if let Some(t) = timer { t.stop(); }
+        if let Some(t) = timer {
+            t.stop();
+        }
 
         self.parse_response(response_json)
     }
@@ -367,7 +397,10 @@ impl ChatApi for OpenAiAdapter {
     async fn list_models(&self) -> Result<Vec<String>, AiLibError> {
         let url = format!("{}/models", self.base_url);
         let mut headers = HashMap::new();
-        headers.insert("Authorization".to_string(), format!("Bearer {}", self.api_key));
+        headers.insert(
+            "Authorization".to_string(),
+            format!("Bearer {}", self.api_key),
+        );
 
         let response = self.transport.get_json(&url, Some(headers)).await?;
 

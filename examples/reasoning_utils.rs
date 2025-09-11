@@ -2,9 +2,9 @@
 //!
 //! Provides convenient tools and helper functions for interacting with reasoning models
 
-use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
 use ai_lib::types::common::Content;
-use serde_json::{Value, json};
+use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
+use serde_json::{json, Value};
 // use std::collections::HashMap;
 
 /// Reasoning utilities library
@@ -16,42 +16,47 @@ impl ReasoningUtils {
         match format {
             ReasoningFormat::Structured => {
                 format!("Please solve this problem and show your reasoning process, provide a structured answer:\n\nProblem: {}\n\nPlease provide:\n1. Problem understanding\n2. Step-by-step solution\n3. Final answer\n4. Verification process", problem)
-            },
+            }
             ReasoningFormat::JSON => {
                 format!("Please solve this problem and respond in JSON format, including your reasoning process:\n\nProblem: {}\n\nPlease respond in the following JSON format: {{\"problem_understanding\": \"...\", \"steps\": [{{\"step\": 1, \"description\": \"...\", \"reasoning\": \"...\"}}], \"final_answer\": \"...\", \"verification\": \"...\"}}", problem)
-            },
+            }
             ReasoningFormat::Streaming => {
                 format!("Please solve this problem and show your reasoning process step by step:\n\nProblem: {}", problem)
-            },
+            }
             ReasoningFormat::StepByStep => {
                 format!("Please solve this problem, showing your reasoning process step by step so readers can follow your thinking:\n\nProblem: {}", problem)
             }
         }
     }
-    
+
     /// Parse reasoning result
-    pub fn parse_reasoning_result(content: &str) -> Result<ReasoningResult, Box<dyn std::error::Error>> {
+    pub fn parse_reasoning_result(
+        content: &str,
+    ) -> Result<ReasoningResult, Box<dyn std::error::Error>> {
         // Try to parse JSON format
         if let Ok(json) = serde_json::from_str::<Value>(content) {
             return Ok(ReasoningResult::Structured(json));
         }
-        
+
         // Parse text format
         Ok(ReasoningResult::Text(content.to_string()))
     }
-    
+
     /// Create math reasoning request
     pub fn create_math_reasoning_request(problem: &str, model: &str) -> ChatCompletionRequest {
         ChatCompletionRequest::new(
             model.to_string(),
             vec![Message {
                 role: Role::User,
-                content: Content::Text(Self::create_reasoning_prompt(problem, ReasoningFormat::StepByStep)),
+                content: Content::Text(Self::create_reasoning_prompt(
+                    problem,
+                    ReasoningFormat::StepByStep,
+                )),
                 function_call: None,
             }],
         )
     }
-    
+
     /// Create logic reasoning request
     pub fn create_logic_reasoning_request(problem: &str, model: &str) -> ChatCompletionRequest {
         ChatCompletionRequest::new(
@@ -67,7 +72,7 @@ impl ReasoningUtils {
             }],
         )
     }
-    
+
     /// Create science reasoning request
     pub fn create_science_reasoning_request(problem: &str, model: &str) -> ChatCompletionRequest {
         ChatCompletionRequest::new(
@@ -83,12 +88,12 @@ impl ReasoningUtils {
             }],
         )
     }
-    
+
     /// Create reasoning request with configuration
     pub fn create_reasoning_config_request(
-        problem: &str, 
-        model: &str, 
-        config: ReasoningConfig
+        problem: &str,
+        model: &str,
+        config: ReasoningConfig,
     ) -> ChatCompletionRequest {
         let mut request = ChatCompletionRequest::new(
             model.to_string(),
@@ -98,38 +103,40 @@ impl ReasoningUtils {
                 function_call: None,
             }],
         );
-        
+
         // Add reasoning configuration
         request = request
-            .with_provider_specific("reasoning_format", serde_json::Value::String(
-                format!("{:?}", config.format).to_lowercase()
-            ))
-            .with_provider_specific("reasoning_effort", serde_json::Value::String(
-                format!("{:?}", config.effort).to_lowercase()
-            ));
-            
-        if let Some(parallel) = config.parallel_tool_calls {
-            request = request.with_provider_specific(
-                "parallel_tool_calls", 
-                serde_json::Value::Bool(parallel)
+            .with_provider_specific(
+                "reasoning_format",
+                serde_json::Value::String(format!("{:?}", config.format).to_lowercase()),
+            )
+            .with_provider_specific(
+                "reasoning_effort",
+                serde_json::Value::String(format!("{:?}", config.effort).to_lowercase()),
             );
+
+        if let Some(parallel) = config.parallel_tool_calls {
+            request = request
+                .with_provider_specific("parallel_tool_calls", serde_json::Value::Bool(parallel));
         }
-        
+
         if let Some(tier) = config.service_tier {
             request = request.with_provider_specific(
-                "service_tier", 
-                serde_json::Value::String(format!("{:?}", tier).to_lowercase())
+                "service_tier",
+                serde_json::Value::String(format!("{:?}", tier).to_lowercase()),
             );
         }
-        
+
         request
     }
-    
+
     /// Create reasoning tool definition
     pub fn create_reasoning_tool() -> ai_lib::types::function_call::Tool {
         ai_lib::types::function_call::Tool {
             name: "step_by_step_reasoning".to_string(),
-            description: Some("Execute step-by-step reasoning to solve complex problems".to_string()),
+            description: Some(
+                "Execute step-by-step reasoning to solve complex problems".to_string(),
+            ),
             parameters: Some(json!({
                 "type": "object",
                 "properties": {
@@ -155,16 +162,16 @@ impl ReasoningUtils {
             })),
         }
     }
-    
+
     /// Extract reasoning steps
     pub fn extract_reasoning_steps(content: &str) -> Vec<ReasoningStep> {
         let mut steps = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
-        
+
         for (i, line) in lines.iter().enumerate() {
             let line = line.trim();
-            if line.starts_with("Step") || 
-               line.starts_with(char::is_numeric) && line.contains('.') {
+            if line.starts_with("Step") || line.starts_with(char::is_numeric) && line.contains('.')
+            {
                 steps.push(ReasoningStep {
                     step_number: i + 1,
                     description: line.to_string(),
@@ -173,10 +180,10 @@ impl ReasoningUtils {
                 });
             }
         }
-        
+
         steps
     }
-    
+
     /// Validate reasoning result
     pub fn validate_reasoning_result(result: &ReasoningResult) -> ValidationResult {
         match result {
@@ -186,7 +193,7 @@ impl ReasoningUtils {
                 } else {
                     ValidationResult::Invalid("Missing required fields".to_string())
                 }
-            },
+            }
             ReasoningResult::Text(text) => {
                 if text.len() > 50 && text.contains("answer") {
                     ValidationResult::Valid
@@ -201,10 +208,10 @@ impl ReasoningUtils {
 /// Reasoning format enumeration
 #[derive(Debug, Clone)]
 pub enum ReasoningFormat {
-    Structured,  // Structured format
-    JSON,        // JSON format
-    Streaming,   // Streaming format
-    StepByStep,  // Step-by-step format
+    Structured, // Structured format
+    JSON,       // JSON format
+    Streaming,  // Streaming format
+    StepByStep, // Step-by-step format
 }
 
 /// Reasoning configuration
@@ -268,60 +275,72 @@ impl ReasoningAssistant {
     pub fn new(client: AiClient, model: String) -> Self {
         Self { client, model }
     }
-    
+
     /// Execute math reasoning
-    pub async fn solve_math_problem(&self, problem: &str) -> Result<String, Box<dyn std::error::Error>> {
+    pub async fn solve_math_problem(
+        &self,
+        problem: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         let request = ReasoningUtils::create_math_reasoning_request(problem, &self.model);
         let response = self.client.chat_completion(request).await?;
-        
+
         Ok(response.choices[0].message.content.as_text())
     }
-    
+
     /// Execute logic reasoning
-    pub async fn solve_logic_problem(&self, problem: &str) -> Result<String, Box<dyn std::error::Error>> {
+    pub async fn solve_logic_problem(
+        &self,
+        problem: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         let request = ReasoningUtils::create_logic_reasoning_request(problem, &self.model);
         let response = self.client.chat_completion(request).await?;
-        
+
         Ok(response.choices[0].message.content.as_text())
     }
-    
+
     /// Execute science reasoning
-    pub async fn solve_science_problem(&self, problem: &str) -> Result<String, Box<dyn std::error::Error>> {
+    pub async fn solve_science_problem(
+        &self,
+        problem: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         let request = ReasoningUtils::create_science_reasoning_request(problem, &self.model);
         let response = self.client.chat_completion(request).await?;
-        
+
         Ok(response.choices[0].message.content.as_text())
     }
-    
+
     /// Execute reasoning with configuration
     pub async fn solve_with_config(
-        &self, 
-        problem: &str, 
-        config: ReasoningConfig
+        &self,
+        problem: &str,
+        config: ReasoningConfig,
     ) -> Result<String, Box<dyn std::error::Error>> {
         let request = ReasoningUtils::create_reasoning_config_request(problem, &self.model, config);
         let response = self.client.chat_completion(request).await?;
-        
+
         Ok(response.choices[0].message.content.as_text())
     }
-    
+
     /// Streaming reasoning
-    pub async fn solve_streaming(&self, problem: &str) -> Result<String, Box<dyn std::error::Error>> {
+    pub async fn solve_streaming(
+        &self,
+        problem: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         let request = ChatCompletionRequest::new(
             self.model.clone(),
             vec![Message {
                 role: Role::User,
                 content: Content::Text(ReasoningUtils::create_reasoning_prompt(
-                    problem, 
-                    ReasoningFormat::Streaming
+                    problem,
+                    ReasoningFormat::Streaming,
                 )),
                 function_call: None,
             }],
         );
-        
+
         let mut stream = self.client.chat_completion_stream(request).await?;
         let mut result = String::new();
-        
+
         use futures::StreamExt;
         while let Some(chunk) = stream.next().await {
             match chunk {
@@ -335,7 +354,7 @@ impl ReasoningAssistant {
                 Err(e) => return Err(Box::new(e)),
             }
         }
-        
+
         Ok(result)
     }
 }
@@ -351,33 +370,39 @@ fn main() {
 async fn run_example() -> Result<(), Box<dyn std::error::Error>> {
     println!("🧠 Reasoning Utils Library Example");
     println!("===================================");
-    
+
     // Check environment variables
     if std::env::var("GROQ_API_KEY").is_err() {
         println!("❌ Please set GROQ_API_KEY environment variable");
         return Ok(());
     }
-    
+
     let client = AiClient::new(Provider::Groq)?;
     let assistant = ReasoningAssistant::new(client, "qwen-qwq-32b".to_string());
-    
+
     // Math reasoning example
     println!("📐 Math reasoning example:");
-    let math_result = assistant.solve_math_problem("Calculate the value of 2^10 + 3^5").await?;
+    let math_result = assistant
+        .solve_math_problem("Calculate the value of 2^10 + 3^5")
+        .await?;
     println!("{}", math_result);
     println!();
-    
+
     // Logic reasoning example
     println!("🧩 Logic reasoning example:");
-    let logic_result = assistant.solve_logic_problem("If all birds can fly, and penguins are birds, can penguins fly?").await?;
+    let logic_result = assistant
+        .solve_logic_problem("If all birds can fly, and penguins are birds, can penguins fly?")
+        .await?;
     println!("{}", logic_result);
     println!();
-    
+
     // Science reasoning example
     println!("🔬 Science reasoning example:");
-    let science_result = assistant.solve_science_problem("Explain why the sky is blue").await?;
+    let science_result = assistant
+        .solve_science_problem("Explain why the sky is blue")
+        .await?;
     println!("{}", science_result);
-    
+
     Ok(())
 }
 
@@ -387,7 +412,8 @@ mod tests {
 
     #[test]
     fn test_create_reasoning_prompt() {
-        let prompt = ReasoningUtils::create_reasoning_prompt("test problem", ReasoningFormat::Structured);
+        let prompt =
+            ReasoningUtils::create_reasoning_prompt("test problem", ReasoningFormat::Structured);
         assert!(prompt.contains("test problem"));
         assert!(prompt.contains("Problem understanding"));
     }
@@ -397,7 +423,7 @@ mod tests {
         let json_result = r#"{"final_answer": "42", "steps": []}"#;
         let result = ReasoningUtils::parse_reasoning_result(json_result);
         assert!(matches!(result, Ok(ReasoningResult::Structured(_))));
-        
+
         let text_result = "This is a text reasoning result";
         let result = ReasoningUtils::parse_reasoning_result(text_result);
         assert!(matches!(result, Ok(ReasoningResult::Text(_))));

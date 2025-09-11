@@ -132,7 +132,7 @@ impl ProviderConfigs {
             "https://api.groq.com/openai/v1",
             "GROQ_API_KEY",
             "llama-3.1-8b-instant", // Default chat model
-            None,             // No multimodal support yet
+            None,                   // No multimodal support yet
         )
     }
 

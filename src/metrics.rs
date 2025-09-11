@@ -121,6 +121,63 @@ pub trait MetricsExt: Metrics {
         self.incr_counter_with_tags(name, 1, &[("error_type", error_type), ("context", context)])
             .await;
     }
+
+    /// Record a complete request with timing, status, and success metrics
+    async fn record_complete_request(
+        &self,
+        name: &str,
+        timer: Option<Box<dyn Timer + Send>>,
+        status_code: u16,
+        success: bool,
+        tags: &[(&str, &str)],
+    ) {
+        if let Some(t) = timer {
+            t.stop();
+        }
+
+        // Record basic metrics
+        self.record_success(name, success).await;
+        self.record_gauge_with_tags(&format!("{}.status_code", name), status_code as f64, tags)
+            .await;
+
+        // Record counters
+        self.incr_counter_with_tags(&format!("{}.total", name), 1, tags)
+            .await;
+        if success {
+            self.incr_counter_with_tags(&format!("{}.success", name), 1, tags)
+                .await;
+        } else {
+            self.incr_counter_with_tags(&format!("{}.failure", name), 1, tags)
+                .await;
+        }
+    }
+
+    /// Record latency percentiles for a batch of measurements
+    async fn record_batch_latency_percentiles(
+        &self,
+        name: &str,
+        measurements: &[f64],
+        tags: &[(&str, &str)],
+    ) {
+        if measurements.is_empty() {
+            return;
+        }
+
+        let mut sorted = measurements.to_vec();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        let len = sorted.len();
+        let p50 = sorted[(len * 50 / 100).min(len - 1)];
+        let p95 = sorted[(len * 95 / 100).min(len - 1)];
+        let p99 = sorted[(len * 99 / 100).min(len - 1)];
+
+        self.record_gauge_with_tags(&format!("{}.latency.p50", name), p50, tags)
+            .await;
+        self.record_gauge_with_tags(&format!("{}.latency.p95", name), p95, tags)
+            .await;
+        self.record_gauge_with_tags(&format!("{}.latency.p99", name), p99, tags)
+            .await;
+    }
 }
 
 impl<T: Metrics> MetricsExt for T {}
@@ -136,8 +193,63 @@ pub mod keys {
         format!("{}.request_duration_ms", provider)
     }
     /// Success ratio gauge/histogram can be derived; optional explicit keys
-    pub fn success(provider: &str) -> String { format!("{}.success", provider) }
-    pub fn failure(provider: &str) -> String { format!("{}.failure", provider) }
+    pub fn success(provider: &str) -> String {
+        format!("{}.success", provider)
+    }
+    pub fn failure(provider: &str) -> String {
+        format!("{}.failure", provider)
+    }
+
+    /// Latency percentile keys
+    pub fn latency_p50(provider: &str) -> String {
+        format!("{}.latency_p50", provider)
+    }
+    pub fn latency_p95(provider: &str) -> String {
+        format!("{}.latency_p95", provider)
+    }
+    pub fn latency_p99(provider: &str) -> String {
+        format!("{}.latency_p99", provider)
+    }
+
+    /// Status code distribution key
+    pub fn status_codes(provider: &str) -> String {
+        format!("{}.status_codes", provider)
+    }
+
+    /// Error rate key
+    pub fn error_rate(provider: &str) -> String {
+        format!("{}.error_rate", provider)
+    }
+
+    /// Throughput key (requests per second)
+    pub fn throughput(provider: &str) -> String {
+        format!("{}.throughput", provider)
+    }
+
+    /// Cost metrics keys
+    pub fn cost_usd(provider: &str) -> String {
+        format!("{}.cost_usd", provider)
+    }
+    pub fn cost_per_request(provider: &str) -> String {
+        format!("{}.cost_per_request", provider)
+    }
+    pub fn tokens_input(provider: &str) -> String {
+        format!("{}.tokens_input", provider)
+    }
+    pub fn tokens_output(provider: &str) -> String {
+        format!("{}.tokens_output", provider)
+    }
+
+    /// Routing metrics keys
+    pub fn routing_requests(route: &str) -> String {
+        format!("routing.{}.requests", route)
+    }
+    pub fn routing_selected(route: &str) -> String {
+        format!("routing.{}.selected", route)
+    }
+    pub fn routing_health_fail(route: &str) -> String {
+        format!("routing.{}.health_fail", route)
+    }
 }
 
 /// Minimal cost accounting helper (feature-gated)
@@ -147,14 +259,21 @@ pub mod cost {
 
     /// Compute cost using env vars like COST_INPUT_PER_1K and COST_OUTPUT_PER_1K (USD)
     pub fn estimate_usd(input_tokens: u32, output_tokens: u32) -> f64 {
-        let in_rate = std::env::var("COST_INPUT_PER_1K").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0);
-        let out_rate = std::env::var("COST_OUTPUT_PER_1K").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0);
+        let in_rate = std::env::var("COST_INPUT_PER_1K")
+            .ok()
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(0.0);
+        let out_rate = std::env::var("COST_OUTPUT_PER_1K")
+            .ok()
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(0.0);
         (input_tokens as f64 / 1000.0) * in_rate + (output_tokens as f64 / 1000.0) * out_rate
     }
 
     /// Report cost via Metrics as histogram (usd) and counters by provider/model
     pub async fn record_cost<M: Metrics + ?Sized>(m: &M, provider: &str, model: &str, usd: f64) {
-        m.record_histogram_with_tags("cost.usd", usd, &[("provider", provider), ("model", model)]).await;
+        m.record_histogram_with_tags("cost.usd", usd, &[("provider", provider), ("model", model)])
+            .await;
     }
 }
 

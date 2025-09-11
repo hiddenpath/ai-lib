@@ -6,13 +6,13 @@ use crate::provider::configs::ProviderConfigs;
 pub trait ProviderClassification {
     /// Check if this provider is config-driven (uses GenericAdapter)
     fn is_config_driven(&self) -> bool;
-    
+
     /// Check if this provider supports custom configuration
     fn supports_custom_config(&self) -> bool;
-    
+
     /// Get the adapter type for this provider
     fn adapter_type(&self) -> AdapterType;
-    
+
     /// Get the default configuration for this provider
     fn get_default_config(&self) -> Result<ProviderConfig, crate::types::AiLibError>;
 }
@@ -30,11 +30,11 @@ impl ProviderClassification for Provider {
     fn is_config_driven(&self) -> bool {
         CONFIG_DRIVEN_PROVIDERS.contains(self)
     }
-    
+
     fn supports_custom_config(&self) -> bool {
         CONFIG_DRIVEN_PROVIDERS.contains(self)
     }
-    
+
     fn adapter_type(&self) -> AdapterType {
         if CONFIG_DRIVEN_PROVIDERS.contains(self) {
             AdapterType::ConfigDriven
@@ -42,7 +42,7 @@ impl ProviderClassification for Provider {
             AdapterType::Independent
         }
     }
-    
+
     fn get_default_config(&self) -> Result<ProviderConfig, crate::types::AiLibError> {
         match self {
             // Config-driven providers
@@ -59,7 +59,7 @@ impl ProviderClassification for Provider {
             Provider::AzureOpenAI => Ok(ProviderConfigs::azure_openai()),
             Provider::HuggingFace => Ok(ProviderConfigs::huggingface()),
             Provider::TogetherAI => Ok(ProviderConfigs::together_ai()),
-            
+
             // Independent providers don't support custom configuration
             Provider::OpenAI | Provider::Gemini | Provider::Mistral | Provider::Cohere => {
                 Err(crate::types::AiLibError::ConfigurationError(
@@ -130,22 +130,22 @@ impl Provider {
     pub fn is_config_driven(&self) -> bool {
         CONFIG_DRIVEN_PROVIDERS.contains(self)
     }
-    
+
     /// Check if this provider is independent
     pub fn is_independent(&self) -> bool {
         INDEPENDENT_PROVIDERS.contains(self)
     }
-    
+
     /// Get all config-driven providers
     pub fn config_driven_providers() -> &'static [Provider] {
         CONFIG_DRIVEN_PROVIDERS
     }
-    
+
     /// Get all independent providers
     pub fn independent_providers() -> &'static [Provider] {
         INDEPENDENT_PROVIDERS
     }
-    
+
     /// Get all supported providers
     pub fn all_providers() -> &'static [Provider] {
         ALL_PROVIDERS
@@ -155,34 +155,34 @@ impl Provider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_provider_classification() {
         // Test config-driven providers
         assert!(Provider::Groq.is_config_driven());
         assert!(Provider::Anthropic.is_config_driven());
         assert!(Provider::BaiduWenxin.is_config_driven());
-        
+
         // Test independent providers
         assert!(Provider::OpenAI.is_independent());
         assert!(Provider::Gemini.is_independent());
         assert!(Provider::Mistral.is_independent());
         assert!(Provider::Cohere.is_independent());
-        
+
         // Test adapter types
         assert_eq!(Provider::Groq.adapter_type(), AdapterType::ConfigDriven);
         assert_eq!(Provider::OpenAI.adapter_type(), AdapterType::Independent);
     }
-    
+
     #[test]
     fn test_provider_arrays() {
         // Ensure all providers are covered
         let config_driven_count = CONFIG_DRIVEN_PROVIDERS.len();
         let independent_count = INDEPENDENT_PROVIDERS.len();
         let all_count = ALL_PROVIDERS.len();
-        
+
         assert_eq!(config_driven_count + independent_count, all_count);
-        
+
         // Ensure no duplicates by checking each provider appears only once
         for provider in ALL_PROVIDERS {
             let count = ALL_PROVIDERS.iter().filter(|&&p| p == *provider).count();

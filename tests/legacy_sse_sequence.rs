@@ -6,5 +6,3 @@ fn legacy_event_sequence_non_ascii_doc() {
     // The real event-sequence coverage lives in unified_sse golden tests.
     assert!(true);
 }
-
-

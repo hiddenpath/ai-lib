@@ -5,9 +5,6 @@
 *.log
 build_log.txt
 test_log.txt
-git_branch.txt
-git_diff.txt
-git_status.txt
 logs/
 tmp/
 *.tmp
@@ -27,7 +24,7 @@ Thumbs.db
 aitest/
 
 ## Release checklists (local only, not for GitHub)
-RELEASE_CHECKLIST_*.md
+RELEASE_CHECKLIST.md
 
 ## Local analysis and development notes (not for GitHub)
 *_ANALYSIS.md
@@ -36,14 +33,6 @@ RELEASE_CHECKLIST_*.md
 *_IMPROVEMENTS.md
 *_FLOW.md
 *_TEXT_*.md
-BUILDER_PATTERN.md
-
-## Upgrade documentation (keep only in docs/)
-UPGRADE_*.md
-
-## Docs watch artifacts
-data/api_doc_snapshots.json
-changes_out.json
 
 ## Python cache / venv / tooling
 __pycache__/
@@ -72,6 +61,3 @@ build/
 *.bak
 *.orig
 *.rej
-
-docs/RELEASE_STEPS_RC.md
-docs/RELEASE_NOTES_0.3.0-rc.1.md

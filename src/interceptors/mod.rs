@@ -2,6 +2,18 @@ use async_trait::async_trait;
 
 use crate::types::{AiLibError, ChatCompletionRequest, ChatCompletionResponse};
 
+pub mod breaker;
+pub mod default;
+pub mod rate_limit;
+pub mod retry;
+pub mod timeout;
+
+pub use breaker::CircuitBreakerInterceptor;
+pub use default::{create_default_interceptors, DefaultInterceptorsBuilder};
+pub use rate_limit::RateLimitInterceptor;
+pub use retry::RetryInterceptor;
+pub use timeout::TimeoutInterceptor;
+
 /// Request context passed to interceptors. Keep minimal to avoid API churn.
 #[derive(Debug, Clone)]
 pub struct RequestContext {
@@ -36,7 +48,7 @@ pub trait Interceptor: Send + Sync {
 
 /// A simple interceptor pipeline that runs hooks in order.
 pub struct InterceptorPipeline {
-    interceptors: Vec<Box<dyn Interceptor>>,
+    pub(crate) interceptors: Vec<Box<dyn Interceptor>>,
 }
 
 impl InterceptorPipeline {

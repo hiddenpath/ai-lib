@@ -1,5 +1,5 @@
-use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
 use ai_lib::types::common::Content;
+use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -10,15 +10,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("   Or set it in .env file");
         return Ok(());
     }
-    
+
     println!("🔧 Creating Groq client using new Provider classification system...");
-    
+
     // Create Groq client - using new provider classification system
     let client = AiClient::new(Provider::Groq)?;
-    
+
     // fetch available models before have a konwn model
     let models = client.list_models().await?;
-    
+
     // print models list
     println!("📝 Available models: {:?}", models);
 
@@ -31,21 +31,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             function_call: None,
         }],
     );
-    
+
     println!("🚀 Sending request to Groq...");
     println!("📝 Request: Hello! Please respond with a simple greeting.");
     println!();
-    
+
     // Send request and get response
     let response = client.chat_completion(request).await?;
-    
+
     println!("✅ Groq Response:");
     match &response.choices[0].message.content {
         Content::Text(text) => println!("{}", text),
         Content::Json(json) => println!("JSON: {:?}", json),
-        Content::Image { url, mime, name } => println!("Image: url={:?}, mime={:?}, name={:?}", url, mime, name),
+        Content::Image { url, mime, name } => {
+            println!("Image: url={:?}, mime={:?}, name={:?}", url, mime, name)
+        }
         Content::Audio { url, mime } => println!("Audio: url={:?}, mime={:?}", url, mime),
     }
-    
+
     Ok(())
 }

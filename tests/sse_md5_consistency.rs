@@ -13,13 +13,25 @@ fn reference_parse_events(stream: &str) -> Vec<DeltaPayload> {
         for line in block.lines() {
             let line = line.trim();
             if let Some(data) = line.strip_prefix("data: ") {
-                if data == "[DONE]" { continue; }
+                if data == "[DONE]" {
+                    continue;
+                }
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                    let choices = json.get("choices").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                    let choices = json
+                        .get("choices")
+                        .and_then(|v| v.as_array())
+                        .cloned()
+                        .unwrap_or_default();
                     if let Some(first) = choices.get(0) {
                         let delta = first.get("delta").cloned().unwrap_or(serde_json::json!({}));
-                        let role = delta.get("role").and_then(|v| v.as_str()).map(|s| s.to_string());
-                        let content = delta.get("content").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        let role = delta
+                            .get("role")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        let content = delta
+                            .get("content")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
                         payloads.push(DeltaPayload { role, content });
                     }
                 }
@@ -82,11 +94,15 @@ fn md5_and_sequence_consistency_with_unified_parser() -> Result<(), Box<dyn std:
         if let Some(parsed_res) = ai_lib::sse::parser::parse_sse_event(text) {
             let chunk_opt = parsed_res?;
             if let Some(chunk) = chunk_opt {
-                let role = chunk.choices.get(0).and_then(|ch| ch.delta.role.clone()).map(|r| match r {
-                    ai_lib::types::Role::Assistant => "assistant".to_string(),
-                    ai_lib::types::Role::User => "user".to_string(),
-                    ai_lib::types::Role::System => "system".to_string(),
-                });
+                let role = chunk
+                    .choices
+                    .get(0)
+                    .and_then(|ch| ch.delta.role.clone())
+                    .map(|r| match r {
+                        ai_lib::types::Role::Assistant => "assistant".to_string(),
+                        ai_lib::types::Role::User => "user".to_string(),
+                        ai_lib::types::Role::System => "system".to_string(),
+                    });
                 let content = chunk.choices.get(0).and_then(|ch| ch.delta.content.clone());
                 unified_payloads.push(DeltaPayload { role, content });
             }
@@ -100,12 +116,20 @@ fn md5_and_sequence_consistency_with_unified_parser() -> Result<(), Box<dyn std:
     assert_eq!(unified_payloads, ref_payloads);
 
     // Whole-stream MD5 (joined content only)
-    let uni_joined = unified_payloads.iter().filter_map(|p| p.content.as_ref()).cloned().collect::<Vec<_>>().join("\n");
-    let ref_joined = ref_payloads.iter().filter_map(|p| p.content.as_ref()).cloned().collect::<Vec<_>>().join("\n");
+    let uni_joined = unified_payloads
+        .iter()
+        .filter_map(|p| p.content.as_ref())
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
+    let ref_joined = ref_payloads
+        .iter()
+        .filter_map(|p| p.content.as_ref())
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
     let h_uni = format!("{:x}", md5::compute(uni_joined.as_bytes()));
     let h_ref = format!("{:x}", md5::compute(ref_joined.as_bytes()));
     assert_eq!(h_uni, h_ref);
     Ok(())
 }
-
-

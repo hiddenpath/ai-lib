@@ -88,22 +88,33 @@ pub async fn upload_file_to_provider(
     let part = multipart::Part::bytes(bytes).file_name(file_name.to_string());
     let form = multipart::Form::new().part(field_name.to_string(), part);
 
-    // Build client: respect AI_PROXY_URL if provided, otherwise disable proxy so
-    // local mock servers (127.0.0.1) work even when system HTTP_PROXY is set.
-    let client_builder = reqwest::Client::builder();
-    let client_builder = if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
-        if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-            client_builder.proxy(proxy)
-        } else {
-            client_builder.no_proxy()
+    // Build HTTP client (feature-gated). Falls back to local builder if unified_transport is disabled.
+    fn build_http_client() -> Result<Client, crate::types::AiLibError> {
+        #[cfg(feature = "unified_transport")]
+        {
+            crate::transport::client_factory::build_shared_client()
+                .map_err(|e| crate::types::AiLibError::NetworkError(format!("failed to build http client: {}", e)))
         }
-    } else {
-        client_builder.no_proxy()
-    };
+        #[cfg(not(feature = "unified_transport"))]
+        {
+            let mut builder = reqwest::Client::builder();
+            // respect AI_PROXY_URL if provided; otherwise no_proxy so local mocks work
+            if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
+                if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+                    builder = builder.proxy(proxy);
+                } else {
+                    builder = builder.no_proxy();
+                }
+            } else {
+                builder = builder.no_proxy();
+            }
+            builder
+                .build()
+                .map_err(|e| crate::types::AiLibError::NetworkError(format!("failed to build http client: {}", e)))
+        }
+    }
 
-    let client = client_builder.build().map_err(|e| {
-        crate::types::AiLibError::NetworkError(format!("failed to build http client: {}", e))
-    })?;
+    let client = build_http_client()?;
     let resp = client
         .post(upload_url)
         .multipart(form)
@@ -186,20 +197,11 @@ pub(crate) fn parse_upload_response(
 /// Tries to GET {base_url}/models (common OpenAI-compatible endpoint) or the base URL
 /// and returns Ok(()) if reachable and returns an AiLibError otherwise.
 pub async fn health_check(base_url: &str) -> Result<(), AiLibError> {
-    let client_builder = Client::builder().timeout(Duration::from_secs(5));
-
-    // honor AI_PROXY_URL if set
-    let client_builder = if let Ok(proxy_url) = std::env::var("AI_PROXY_URL") {
-        if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-            client_builder.proxy(proxy)
-        } else {
-            client_builder
-        }
-    } else {
-        client_builder
-    };
-
-    let client = client_builder
+    #[cfg(feature = "unified_transport")]
+    let client = crate::transport::client_factory::build_shared_client()
+        .map_err(|e| AiLibError::NetworkError(format!("Failed to build HTTP client: {}", e)))?;
+    #[cfg(not(feature = "unified_transport"))]
+    let client = reqwest::Client::builder()
         .build()
         .map_err(|e| AiLibError::NetworkError(format!("Failed to build HTTP client: {}", e)))?;
 
@@ -210,12 +212,12 @@ pub async fn health_check(base_url: &str) -> Result<(), AiLibError> {
         format!("{}/models", base_url)
     };
 
-    let resp = client.get(&models_url).send().await;
+    let resp = client.get(&models_url).timeout(Duration::from_secs(5)).send().await;
     match resp {
         Ok(r) if r.status().is_success() => Ok(()),
         _ => {
             // fallback to base url
-            let resp2 = client.get(base_url).send().await;
+            let resp2 = client.get(base_url).timeout(Duration::from_secs(5)).send().await;
             match resp2 {
                 Ok(r2) if r2.status().is_success() => Ok(()),
                 Ok(r2) => Err(AiLibError::NetworkError(format!(

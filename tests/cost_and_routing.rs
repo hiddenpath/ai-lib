@@ -1,6 +1,6 @@
 #![cfg(any(feature = "cost_metrics", feature = "routing_mvp"))]
 
-use ai_lib::{AiClient, Provider, ChatCompletionRequest};
+use ai_lib::{AiClient, ChatCompletionRequest, Provider};
 
 #[test]
 fn routing_sentinel_model_constant_present() {
@@ -26,5 +26,3 @@ async fn can_build_client_and_request_without_network() {
     let req = ChatCompletionRequest::new(client.default_chat_model(), vec![]);
     assert!(!req.model.is_empty());
 }
-
-

@@ -1,14 +1,14 @@
 //! Circuit breaker implementation
 
-use crate::types::AiLibError;
-use crate::circuit_breaker::{CircuitState, CircuitBreakerConfig};
+use crate::circuit_breaker::{CircuitBreakerConfig, CircuitState};
 use crate::metrics::Metrics;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicU32, AtomicU64};
-use std::time::{Instant, Duration};
-use tokio::time::timeout;
+use crate::types::AiLibError;
 use futures::Future;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU32, AtomicU64};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use tokio::time::timeout;
 
 /// Circuit breaker error types
 #[derive(Debug, thiserror::Error)]
@@ -119,12 +119,13 @@ impl CircuitBreaker {
         }
 
         // Increment total requests counter
-        self.total_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.total_requests
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         // Check if we should allow the request
         if !self.should_allow_request().await {
             return Err(CircuitBreakerError::CircuitOpen(
-                "Circuit breaker is open".to_string()
+                "Circuit breaker is open".to_string(),
             ));
         }
 
@@ -143,7 +144,7 @@ impl CircuitBreaker {
             Err(_) => {
                 self.on_timeout().await;
                 Err(CircuitBreakerError::RequestTimeout(
-                    "Request timed out".to_string()
+                    "Request timed out".to_string(),
                 ))
             }
         }
@@ -152,19 +153,22 @@ impl CircuitBreaker {
     /// Check if the circuit breaker should allow a request
     async fn should_allow_request(&self) -> bool {
         let state = *self.state.lock().unwrap();
-        
+
         match state {
             CircuitState::Closed => true,
             CircuitState::Open => {
                 // Check if enough time has passed to try half-open
                 let allow_half_open = {
                     let last = self.last_failure_time.lock().unwrap();
-                    last.and_then(|t| Some(t.elapsed() >= self.config.recovery_timeout)).unwrap_or(false)
+                    last.and_then(|t| Some(t.elapsed() >= self.config.recovery_timeout))
+                        .unwrap_or(false)
                 };
                 if allow_half_open {
                     self.transition_to_half_open().await;
                     true
-                } else { false }
+                } else {
+                    false
+                }
             }
             CircuitState::HalfOpen => true,
         }
@@ -172,76 +176,103 @@ impl CircuitBreaker {
 
     /// Handle successful request
     async fn on_success(&self) {
-        self.successful_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        
+        self.successful_requests
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
         let mut record_closed_metric = false;
         {
             let mut state = self.state.lock().unwrap();
             match *state {
-            CircuitState::Closed => {
-                // Reset failure count on success
-                self.failure_count.store(0, std::sync::atomic::Ordering::Relaxed);
-            }
-            CircuitState::HalfOpen => {
-                let success_count = self.success_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-                if success_count >= self.config.success_threshold {
-                    *state = CircuitState::Closed;
-                    self.success_count.store(0, std::sync::atomic::Ordering::Relaxed);
-                    self.circuit_close_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    record_closed_metric = true;
+                CircuitState::Closed => {
+                    // Reset failure count on success
+                    self.failure_count
+                        .store(0, std::sync::atomic::Ordering::Relaxed);
+                }
+                CircuitState::HalfOpen => {
+                    let success_count = self
+                        .success_count
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                        + 1;
+                    if success_count >= self.config.success_threshold {
+                        *state = CircuitState::Closed;
+                        self.success_count
+                            .store(0, std::sync::atomic::Ordering::Relaxed);
+                        self.circuit_close_count
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        record_closed_metric = true;
+                    }
+                }
+                CircuitState::Open => {
+                    // This shouldn't happen, but handle gracefully
                 }
             }
-            CircuitState::Open => {
-                // This shouldn't happen, but handle gracefully
-            }
-        }}
+        }
         if record_closed_metric {
-            if let Some(metrics) = &self.metrics { metrics.incr_counter("circuit_breaker.closed", 1).await; }
+            if let Some(metrics) = &self.metrics {
+                metrics.incr_counter("circuit_breaker.closed", 1).await;
+            }
         }
     }
 
     /// Handle failed request
     async fn on_failure(&self) {
-        self.failed_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        
-        let failure_count = self.failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-        
+        self.failed_requests
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+        let failure_count = self
+            .failure_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            + 1;
+
         // Record failure time
         *self.last_failure_time.lock().unwrap() = Some(Instant::now());
-        
+
         // Check if we should open the circuit
         if failure_count >= self.config.failure_threshold {
             {
                 let mut state = self.state.lock().unwrap();
                 *state = CircuitState::Open;
             }
-            self.circuit_open_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            
+            self.circuit_open_count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
             // Record metrics
-            if let Some(metrics) = &self.metrics { let m = metrics.clone(); m.incr_counter("circuit_breaker.opened", 1).await; }
+            if let Some(metrics) = &self.metrics {
+                let m = metrics.clone();
+                m.incr_counter("circuit_breaker.opened", 1).await;
+            }
         }
     }
 
     /// Handle timeout request
     async fn on_timeout(&self) {
-        self.timeout_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        self.failed_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        
-        let failure_count = self.failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-        
+        self.timeout_requests
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.failed_requests
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+        let failure_count = self
+            .failure_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            + 1;
+
         // Record failure time
         *self.last_failure_time.lock().unwrap() = Some(Instant::now());
-        
+
         // Check if we should open the circuit
         if failure_count >= self.config.failure_threshold {
             {
                 let mut state = self.state.lock().unwrap();
                 *state = CircuitState::Open;
             }
-            self.circuit_open_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            
+            self.circuit_open_count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
             // Record metrics
-            if let Some(metrics) = &self.metrics { let m = metrics.clone(); m.incr_counter("circuit_breaker.opened", 1).await; }
+            if let Some(metrics) = &self.metrics {
+                let m = metrics.clone();
+                m.incr_counter("circuit_breaker.opened", 1).await;
+            }
         }
     }
 
@@ -249,7 +280,8 @@ impl CircuitBreaker {
     async fn transition_to_half_open(&self) {
         let mut state = self.state.lock().unwrap();
         *state = CircuitState::HalfOpen;
-        self.success_count.store(0, std::sync::atomic::Ordering::Relaxed);
+        self.success_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Get current circuit state
@@ -259,24 +291,38 @@ impl CircuitBreaker {
 
     /// Get current failure count
     pub fn failure_count(&self) -> u32 {
-        self.failure_count.load(std::sync::atomic::Ordering::Relaxed)
+        self.failure_count
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Get current success count
     pub fn success_count(&self) -> u32 {
-        self.success_count.load(std::sync::atomic::Ordering::Relaxed)
+        self.success_count
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Get comprehensive metrics
     pub fn get_metrics(&self) -> CircuitBreakerMetrics {
         CircuitBreakerMetrics {
             state: self.state(),
-            total_requests: self.total_requests.load(std::sync::atomic::Ordering::Relaxed),
-            successful_requests: self.successful_requests.load(std::sync::atomic::Ordering::Relaxed),
-            failed_requests: self.failed_requests.load(std::sync::atomic::Ordering::Relaxed),
-            timeout_requests: self.timeout_requests.load(std::sync::atomic::Ordering::Relaxed),
-            circuit_open_count: self.circuit_open_count.load(std::sync::atomic::Ordering::Relaxed),
-            circuit_close_count: self.circuit_close_count.load(std::sync::atomic::Ordering::Relaxed),
+            total_requests: self
+                .total_requests
+                .load(std::sync::atomic::Ordering::Relaxed),
+            successful_requests: self
+                .successful_requests
+                .load(std::sync::atomic::Ordering::Relaxed),
+            failed_requests: self
+                .failed_requests
+                .load(std::sync::atomic::Ordering::Relaxed),
+            timeout_requests: self
+                .timeout_requests
+                .load(std::sync::atomic::Ordering::Relaxed),
+            circuit_open_count: self
+                .circuit_open_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            circuit_close_count: self
+                .circuit_close_count
+                .load(std::sync::atomic::Ordering::Relaxed),
             current_failure_count: self.failure_count(),
             current_success_count: self.success_count(),
             last_failure_time: *self.last_failure_time.lock().unwrap(),
@@ -286,21 +332,29 @@ impl CircuitBreaker {
 
     /// Get success rate as a percentage
     pub fn success_rate(&self) -> f64 {
-        let total = self.total_requests.load(std::sync::atomic::Ordering::Relaxed);
+        let total = self
+            .total_requests
+            .load(std::sync::atomic::Ordering::Relaxed);
         if total == 0 {
             return 100.0;
         }
-        let successful = self.successful_requests.load(std::sync::atomic::Ordering::Relaxed);
+        let successful = self
+            .successful_requests
+            .load(std::sync::atomic::Ordering::Relaxed);
         (successful as f64 / total as f64) * 100.0
     }
 
     /// Get failure rate as a percentage
     pub fn failure_rate(&self) -> f64 {
-        let total = self.total_requests.load(std::sync::atomic::Ordering::Relaxed);
+        let total = self
+            .total_requests
+            .load(std::sync::atomic::Ordering::Relaxed);
         if total == 0 {
             return 0.0;
         }
-        let failed = self.failed_requests.load(std::sync::atomic::Ordering::Relaxed);
+        let failed = self
+            .failed_requests
+            .load(std::sync::atomic::Ordering::Relaxed);
         (failed as f64 / total as f64) * 100.0
     }
 
@@ -311,18 +365,26 @@ impl CircuitBreaker {
 
     /// Reset all counters and state
     pub fn reset(&self) {
-        self.failure_count.store(0, std::sync::atomic::Ordering::Relaxed);
-        self.success_count.store(0, std::sync::atomic::Ordering::Relaxed);
-        self.total_requests.store(0, std::sync::atomic::Ordering::Relaxed);
-        self.successful_requests.store(0, std::sync::atomic::Ordering::Relaxed);
-        self.failed_requests.store(0, std::sync::atomic::Ordering::Relaxed);
-        self.timeout_requests.store(0, std::sync::atomic::Ordering::Relaxed);
-        self.circuit_open_count.store(0, std::sync::atomic::Ordering::Relaxed);
-        self.circuit_close_count.store(0, std::sync::atomic::Ordering::Relaxed);
-        
+        self.failure_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        self.success_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        self.total_requests
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        self.successful_requests
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        self.failed_requests
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        self.timeout_requests
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        self.circuit_open_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        self.circuit_close_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+
         let mut state = self.state.lock().unwrap();
         *state = CircuitState::Closed;
-        
+
         let mut last_failure = self.last_failure_time.lock().unwrap();
         *last_failure = None;
     }
@@ -331,15 +393,19 @@ impl CircuitBreaker {
     pub fn force_open(&self) {
         let mut state = self.state.lock().unwrap();
         *state = CircuitState::Open;
-        self.circuit_open_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.circuit_open_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Force circuit breaker to closed state
     pub fn force_close(&self) {
         let mut state = self.state.lock().unwrap();
         *state = CircuitState::Closed;
-        self.failure_count.store(0, std::sync::atomic::Ordering::Relaxed);
-        self.success_count.store(0, std::sync::atomic::Ordering::Relaxed);
-        self.circuit_close_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.failure_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        self.success_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        self.circuit_close_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }

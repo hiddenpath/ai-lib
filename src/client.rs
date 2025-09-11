@@ -2,8 +2,8 @@ use crate::api::{ChatApi, ChatCompletionChunk};
 use crate::config::{ConnectionOptions, ResilienceConfig};
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::provider::{
-    classification::ProviderClassification,
-    CohereAdapter, GeminiAdapter, GenericAdapter, MistralAdapter, OpenAiAdapter, ProviderConfigs,
+    classification::ProviderClassification, CohereAdapter, GeminiAdapter, GenericAdapter,
+    MistralAdapter, OpenAiAdapter, ProviderConfigs,
 };
 use crate::types::{AiLibError, ChatCompletionRequest, ChatCompletionResponse};
 use futures::stream::Stream;
@@ -22,32 +22,39 @@ pub struct ModelOptions {
 
 impl Default for ModelOptions {
     fn default() -> Self {
-        Self { chat_model: None, multimodal_model: None, fallback_models: Vec::new(), auto_discovery: true }
+        Self {
+            chat_model: None,
+            multimodal_model: None,
+            fallback_models: Vec::new(),
+            auto_discovery: true,
+        }
     }
 }
 
 impl ModelOptions {
     /// Create default model options
-    pub fn new() -> Self { Self::default() }
-    
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Set chat model
     pub fn with_chat_model(mut self, model: &str) -> Self {
         self.chat_model = Some(model.to_string());
         self
     }
-    
+
     /// Set multimodal model
     pub fn with_multimodal_model(mut self, model: &str) -> Self {
         self.multimodal_model = Some(model.to_string());
         self
     }
-    
+
     /// Set fallback models
     pub fn with_fallback_models(mut self, models: Vec<&str>) -> Self {
         self.fallback_models = models.into_iter().map(|s| s.to_string()).collect();
         self
     }
-    
+
     /// Enable or disable auto discovery
     pub fn with_auto_discovery(mut self, enabled: bool) -> Self {
         self.auto_discovery = enabled;
@@ -61,7 +68,10 @@ fn create_generic_adapter(
     transport: Option<crate::transport::DynHttpTransportRef>,
 ) -> Result<Box<dyn ChatApi>, AiLibError> {
     if let Some(custom_transport) = transport {
-        Ok(Box::new(GenericAdapter::with_transport_ref(config, custom_transport)?))
+        Ok(Box::new(GenericAdapter::with_transport_ref(
+            config,
+            custom_transport,
+        )?))
     } else {
         Ok(Box::new(GenericAdapter::new(config)?))
     }
@@ -114,9 +124,9 @@ impl Provider {
             Provider::Moonshot => "moonshot-v1-8k",
             Provider::OpenAI => "gpt-3.5-turbo",
             Provider::Qwen => "qwen-turbo",
-            Provider::Gemini => "gemini-pro", // widely used text/chat model
-            Provider::Mistral => "mistral-small", // generic default
-            Provider::Cohere => "command-r", // chat-capable model
+            Provider::Gemini => "gemini-1.5-flash", // current v1beta-supported chat model
+            Provider::Mistral => "mistral-small",   // generic default
+            Provider::Cohere => "command-r",        // chat-capable model
         }
     }
 
@@ -183,6 +193,8 @@ pub struct AiClient {
     adapter: Box<dyn ChatApi>,
     metrics: Arc<dyn Metrics>,
     connection_options: Option<ConnectionOptions>,
+    #[cfg(feature = "interceptors")]
+    interceptor_pipeline: Option<crate::interceptors::InterceptorPipeline>,
     // Custom default models (override provider defaults)
     custom_default_chat_model: Option<String>,
     custom_default_multimodal_model: Option<String>,
@@ -193,8 +205,7 @@ pub struct AiClient {
 impl AiClient {
     /// Get the effective default chat model for this client (honors custom override)
     pub fn default_chat_model(&self) -> String {
-        self
-            .custom_default_chat_model
+        self.custom_default_chat_model
             .clone()
             .unwrap_or_else(|| self.provider.default_chat_model().to_string())
     }
@@ -386,6 +397,8 @@ impl AiClient {
                 custom_default_multimodal_model: None,
                 #[cfg(feature = "routing_mvp")]
                 routing_array: None,
+                #[cfg(feature = "interceptors")]
+                interceptor_pipeline: None,
             });
         }
 
@@ -532,6 +545,8 @@ impl AiClient {
             custom_default_multimodal_model: None,
             #[cfg(feature = "routing_mvp")]
             routing_array: None,
+            #[cfg(feature = "interceptors")]
+            interceptor_pipeline: None,
         })
     }
 
@@ -567,22 +582,45 @@ impl AiClient {
                                 chosen = ep.model_name.clone();
                             }
                             Err(_) => {
-                                let _ = self.metrics.incr_counter("routing_mvp.health_fail", 1).await;
+                                let _ = self
+                                    .metrics
+                                    .incr_counter("routing_mvp.health_fail", 1)
+                                    .await;
                                 chosen = self.provider.default_chat_model().to_string();
-                                let _ = self.metrics.incr_counter("routing_mvp.fallback_default", 1).await;
+                                let _ = self
+                                    .metrics
+                                    .incr_counter("routing_mvp.fallback_default", 1)
+                                    .await;
                             }
                         }
                     } else {
-                        let _ = self.metrics.incr_counter("routing_mvp.no_endpoint", 1).await;
+                        let _ = self
+                            .metrics
+                            .incr_counter("routing_mvp.no_endpoint", 1)
+                            .await;
                     }
                 } else {
-                    let _ = self.metrics.incr_counter("routing_mvp.missing_array", 1).await;
+                    let _ = self
+                        .metrics
+                        .incr_counter("routing_mvp.missing_array", 1)
+                        .await;
                 }
                 let mut req2 = request;
                 req2.model = chosen;
                 return self.adapter.chat_completion(req2).await;
             }
         }
+        #[cfg(feature = "interceptors")]
+        if let Some(p) = &self.interceptor_pipeline {
+            let ctx = crate::interceptors::RequestContext {
+                provider: format!("{:?}", self.provider).to_lowercase(),
+                model: request.model.clone(),
+            };
+            return p
+                .execute(&ctx, &request, || self.adapter.chat_completion(request.clone()))
+                .await;
+        }
+
         self.adapter.chat_completion(request).await
     }
 
@@ -601,6 +639,20 @@ impl AiClient {
         AiLibError,
     > {
         request.stream = Some(true);
+        #[cfg(feature = "interceptors")]
+        if let Some(p) = &self.interceptor_pipeline {
+            let ctx = crate::interceptors::RequestContext {
+                provider: format!("{:?}", self.provider).to_lowercase(),
+                model: request.model.clone(),
+            };
+            // Wrap stream request by executing core first and then mapping events (interceptors receive only request/response hooks here)
+            // For simplicity, we only run on_request and then delegate to adapter for streaming.
+            for ic in &p.interceptors {
+                ic.on_request(&ctx, &request).await;
+            }
+            return self.adapter.chat_completion_stream(request).await;
+        }
+
         self.adapter.chat_completion_stream(request).await
     }
 
@@ -829,10 +881,11 @@ impl AiClient {
     /// This does NOT send the request.
     /// Uses custom default model if set via AiClientBuilder, otherwise uses provider default.
     pub fn build_simple_request<S: Into<String>>(&self, prompt: S) -> ChatCompletionRequest {
-        let model = self.custom_default_chat_model
+        let model = self
+            .custom_default_chat_model
             .clone()
             .unwrap_or_else(|| self.provider.default_chat_model().to_string());
-            
+
         ChatCompletionRequest::new(
             model,
             vec![crate::types::Message {
@@ -842,13 +895,13 @@ impl AiClient {
             }],
         )
     }
-    
+
     /// Convenience helper: construct a request with an explicitly specified chat model.
     /// This does NOT send the request.
     pub fn build_simple_request_with_model<S: Into<String>>(
-        &self, 
-        prompt: S, 
-        model: S
+        &self,
+        prompt: S,
+        model: S,
     ) -> ChatCompletionRequest {
         ChatCompletionRequest::new(
             model.into(),
@@ -859,21 +912,29 @@ impl AiClient {
             }],
         )
     }
-    
+
     /// Convenience helper: construct a request with the provider's default multimodal model.
     /// This does NOT send the request.
     /// Uses custom default model if set via AiClientBuilder, otherwise uses provider default.
     pub fn build_multimodal_request<S: Into<String>>(
-        &self, 
-        prompt: S
+        &self,
+        prompt: S,
     ) -> Result<ChatCompletionRequest, AiLibError> {
-        let model = self.custom_default_multimodal_model
+        let model = self
+            .custom_default_multimodal_model
             .clone()
-            .or_else(|| self.provider.default_multimodal_model().map(|s| s.to_string()))
-            .ok_or_else(|| AiLibError::ConfigurationError(
-                format!("No multimodal model available for provider {:?}", self.provider)
-            ))?;
-            
+            .or_else(|| {
+                self.provider
+                    .default_multimodal_model()
+                    .map(|s| s.to_string())
+            })
+            .ok_or_else(|| {
+                AiLibError::ConfigurationError(format!(
+                    "No multimodal model available for provider {:?}",
+                    self.provider
+                ))
+            })?;
+
         Ok(ChatCompletionRequest::new(
             model,
             vec![crate::types::Message {
@@ -883,13 +944,13 @@ impl AiClient {
             }],
         ))
     }
-    
+
     /// Convenience helper: construct a request with an explicitly specified multimodal model.
     /// This does NOT send the request.
     pub fn build_multimodal_request_with_model<S: Into<String>>(
-        &self, 
-        prompt: S, 
-        model: S
+        &self,
+        prompt: S,
+        model: S,
     ) -> ChatCompletionRequest {
         ChatCompletionRequest::new(
             model.into(),
@@ -912,7 +973,7 @@ impl AiClient {
         let resp = client.chat_completion(req).await?;
         resp.first_text().map(|s| s.to_string())
     }
-    
+
     /// One-shot helper: create a client for `provider`, send a single user prompt using an
     /// explicitly specified chat model, and return plain text content (first choice).
     pub async fn quick_chat_text_with_model<P: Into<String>, M: Into<String>>(
@@ -925,7 +986,7 @@ impl AiClient {
         let resp = client.chat_completion(req).await?;
         resp.first_text().map(|s| s.to_string())
     }
-    
+
     /// One-shot helper: create a client for `provider`, send a single user prompt using the
     /// default multimodal model, and return plain text content (first choice).
     pub async fn quick_multimodal_text<P: Into<String>>(
@@ -937,7 +998,7 @@ impl AiClient {
         let resp = client.chat_completion(req).await?;
         resp.first_text().map(|s| s.to_string())
     }
-    
+
     /// One-shot helper: create a client for `provider`, send a single user prompt using an
     /// explicitly specified multimodal model, and return plain text content (first choice).
     pub async fn quick_multimodal_text_with_model<P: Into<String>, M: Into<String>>(
@@ -950,7 +1011,7 @@ impl AiClient {
         let resp = client.chat_completion(req).await?;
         resp.first_text().map(|s| s.to_string())
     }
-    
+
     /// One-shot helper with model options: create a client for `provider`, send a single user prompt
     /// using specified model options, and return plain text content (first choice).
     pub async fn quick_chat_text_with_options<P: Into<String>>(
@@ -959,17 +1020,83 @@ impl AiClient {
         options: ModelOptions,
     ) -> Result<String, AiLibError> {
         let client = AiClient::new(provider)?;
-        
+
         // Determine which model to use based on options
         let model = if let Some(chat_model) = options.chat_model {
             chat_model
         } else {
             provider.default_chat_model().to_string()
         };
-        
+
         let req = client.build_simple_request_with_model(prompt.into(), model);
         let resp = client.chat_completion(req).await?;
         resp.first_text().map(|s| s.to_string())
+    }
+
+    /// Upload a local file using provider's multipart endpoint and return a URL or file id.
+    ///
+    /// Behavior:
+    /// - For config-driven providers, uses their configured `upload_endpoint` if available.
+    /// - For OpenAI, posts to `{base_url}/files`.
+    /// - Providers without a known upload endpoint return `UnsupportedFeature`.
+    pub async fn upload_file(&self, path: &str) -> Result<String, AiLibError> {
+        // Determine base_url precedence: explicit connection_options > provider default
+        let base_url = if let Some(opts) = &self.connection_options {
+            if let Some(b) = &opts.base_url {
+                b.clone()
+            } else {
+                self.provider_default_base_url()?
+            }
+        } else {
+            self.provider_default_base_url()?
+        };
+
+        // Determine upload endpoint
+        let endpoint: Option<String> = if self.provider.is_config_driven() {
+            // Use provider default config to discover upload endpoint
+            let cfg = self.provider.get_default_config()?;
+            cfg.upload_endpoint.clone()
+        } else {
+            match self.provider {
+                Provider::OpenAI => Some("/files".to_string()),
+                _ => None,
+            }
+        };
+
+        let endpoint = endpoint.ok_or_else(|| {
+            AiLibError::UnsupportedFeature(format!(
+                "Provider {:?} does not expose an upload endpoint in OSS",
+                self.provider
+            ))
+        })?;
+
+        // Compose URL (avoid double slashes)
+        let upload_url = if base_url.ends_with('/') {
+            format!("{}{}", base_url.trim_end_matches('/'), endpoint)
+        } else {
+            format!("{}{}", base_url, endpoint)
+        };
+
+        // Perform upload using unified transport helper (uses injected transport when None)
+        crate::provider::utils::upload_file_with_transport(None, &upload_url, path, "file").await
+    }
+
+    fn provider_default_base_url(&self) -> Result<String, AiLibError> {
+        if self.provider.is_config_driven() {
+            Ok(self.provider.get_default_config()?.base_url)
+        } else {
+            match self.provider {
+                Provider::OpenAI => Ok("https://api.openai.com/v1".to_string()),
+                Provider::Gemini => {
+                    Ok("https://generativelanguage.googleapis.com/v1beta".to_string())
+                }
+                Provider::Mistral => Ok("https://api.mistral.ai".to_string()),
+                Provider::Cohere => Ok("https://api.cohere.ai".to_string()),
+                _ => Err(AiLibError::ConfigurationError(
+                    "No default base URL for provider".to_string(),
+                )),
+            }
+        }
     }
 }
 
@@ -1026,6 +1153,8 @@ pub struct AiClientBuilder {
     resilience_config: ResilienceConfig,
     #[cfg(feature = "routing_mvp")]
     routing_array: Option<crate::provider::models::ModelArray>,
+    #[cfg(feature = "interceptors")]
+    interceptor_pipeline: Option<crate::interceptors::InterceptorPipeline>,
 }
 
 impl AiClientBuilder {
@@ -1050,6 +1179,8 @@ impl AiClientBuilder {
             resilience_config: ResilienceConfig::default(),
             #[cfg(feature = "routing_mvp")]
             routing_array: None,
+            #[cfg(feature = "interceptors")]
+            interceptor_pipeline: None,
         }
     }
 
@@ -1153,6 +1284,32 @@ impl AiClientBuilder {
     /// * `Self` - Builder instance for method chaining
     pub fn with_metrics(mut self, metrics: Arc<dyn Metrics>) -> Self {
         self.metrics = Some(metrics);
+        self
+    }
+
+    #[cfg(feature = "interceptors")]
+    pub fn with_interceptor_pipeline(
+        mut self,
+        pipeline: crate::interceptors::InterceptorPipeline,
+    ) -> Self {
+        self.interceptor_pipeline = Some(pipeline);
+        self
+    }
+
+    #[cfg(feature = "interceptors")]
+    pub fn enable_default_interceptors(mut self) -> Self {
+        let p = crate::interceptors::create_default_interceptors();
+        self.interceptor_pipeline = Some(p);
+        self
+    }
+
+    #[cfg(feature = "interceptors")]
+    pub fn enable_minimal_interceptors(mut self) -> Self {
+        let p = crate::interceptors::default::DefaultInterceptorsBuilder::new()
+            .enable_circuit_breaker(false)
+            .enable_rate_limit(false)
+            .build();
+        self.interceptor_pipeline = Some(p);
         self
     }
 
@@ -1280,10 +1437,7 @@ impl AiClientBuilder {
 
     #[cfg(feature = "routing_mvp")]
     /// Provide a `ModelArray` for client-side routing and fallback.
-    pub fn with_routing_array(
-        mut self,
-        array: crate::provider::models::ModelArray,
-    ) -> Self {
+    pub fn with_routing_array(mut self, array: crate::provider::models::ModelArray) -> Self {
         self.routing_array = Some(array);
         self
     }
@@ -1338,6 +1492,8 @@ impl AiClientBuilder {
             custom_default_multimodal_model: self.default_multimodal_model,
             #[cfg(feature = "routing_mvp")]
             routing_array: self.routing_array,
+            #[cfg(feature = "interceptors")]
+            interceptor_pipeline: self.interceptor_pipeline,
         };
 
         Ok(client)

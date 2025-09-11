@@ -1,123 +1,149 @@
-//! AI-lib: A Unified AI SDK for Rust
+//! ai-lib-pro: Enterprise-grade extensions for ai-lib
 //!
-//! This library provides a single, consistent interface for interacting with multiple AI model providers.
+//! This crate provides advanced capabilities that layer on top of the open-source `ai-lib`:
+//! - Advanced routing and load balancing
+//! - Enterprise observability and monitoring
+//! - Pricing catalogs and cost management
+//! - Quota and rate limiting
+//! - Audit logging and compliance
+//! - Key management and encryption
+//! - Hot-reload configuration management
 //!
-//! # Quick Start
+//! # Status
+//! 
+//! This is currently a skeleton implementation. Individual PRO features are being
+//! developed incrementally and will be released as they become stable.
+//!
+//! # Versioning
+//! 
+//! Follows SemVer independently from `ai-lib`. PRO features are additive and
+//! maintain backward compatibility within major versions.
+//!
+//! # Usage
+//!
+//! ```toml
+//! [dependencies]
+//! ai-lib-pro = { version = "0.1", features = ["routing_advanced", "observability_pro"] }
+//! ```
 //!
 //! ```rust
-//! use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
-//! use ai_lib::types::common::Content;
+//! use ai_lib_pro::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     // Switch provider by changing Provider:: value
-//!     let client = AiClient::new(Provider::Groq)?;
-//!
-//!     let request = ChatCompletionRequest::new(
-//!         "llama3-8b-8192".to_string(),
-//!         vec![Message {
-//!             role: Role::User,
-//!             content: Content::Text("Hello, how are you?".to_string()),
-//!             function_call: None,
-//!         }],
-//!     );
-//!
-//!     println!("Client created successfully with provider: {:?}", client.current_provider());
-//!     println!("Request prepared for model: {}", request.model);
-//!
+//!     // Use ai-lib as usual; PRO features are additive and optional
+//!     let client = AiClient::new(Provider::OpenAI)?;
+//!     
+//!     // PRO features are available when enabled
+//!     #[cfg(feature = "routing_advanced")]
+//!     {
+//!         // Advanced routing logic here
+//!     }
+//!     
 //!     Ok(())
 //! }
 //! ```
 //!
-//! # Proxy Support
+//! # Feature Flags
 //!
-//! AI-lib supports proxy configuration via environment variables:
+//! - `pricing_catalog`: Centralized pricing tables and cost calculation
+//! - `routing_advanced`: Policy-driven routing, health checks, fallbacks
+//! - `observability_pro`: Structured logging, metrics, tracing, exporters
+//! - `quota`: Tenant/organization quotas and rate policies
+//! - `audit`: Comprehensive audit trails with redaction strategies
+//! - `kms`: Envelope encryption and key rotation
+//! - `config_hot_reload_pro`: Dynamic configuration providers and watchers
+//! - `full`: Enables all PRO features
 //!
-//! ```bash
-//! # Set proxy server
-//! export AI_PROXY_URL=http://proxy.example.com:8080
+//! # Architecture
 //!
-//! # Proxy with authentication
-//! export AI_PROXY_URL=http://username:password@proxy.example.com:8080
-//!
-//! # HTTPS proxy
-//! export AI_PROXY_URL=https://proxy.example.com:8080
-//! ```
-//!
-//! All AI provider requests will automatically use the specified proxy server.
-//!
-//! Optional environment variables for feature-gated capabilities:
-//! - cost_metrics feature:
-//!   - `COST_INPUT_PER_1K`: USD per 1000 input tokens
-//!   - `COST_OUTPUT_PER_1K`: USD per 1000 output tokens
-//!
-//! Enterprise note: In ai-lib PRO, these can be centrally configured and hot-reloaded
-//! via external configuration providers; in OSS they are read from environment variables.
+//! PRO features are designed to be:
+//! - **Additive**: Layer on top of OSS `ai-lib` without breaking changes
+//! - **Optional**: Each feature can be enabled independently
+//! - **Composable**: Features work together when multiple are enabled
+//! - **Stable**: Follow SemVer and maintain backward compatibility
 
-pub mod api;
-pub mod client;
-pub mod config;
-pub mod metrics;
-pub mod provider;
-pub mod transport;
-pub mod types;
-pub mod utils; // minimal explicit configuration entrypoint
+#[cfg(feature = "pricing_catalog")]
+pub mod pricing_catalog {
+    //! Centralized pricing tables and cost calculation
+    //! 
+    //! Provides dynamic pricing information, cost calculation,
+    //! and budget management capabilities.
+}
 
-// Feature-gated modules (OSS progressive complexity)
-#[cfg(feature = "interceptors")]
-pub mod interceptors;
+#[cfg(feature = "routing_advanced")]
+pub mod routing_advanced {
+    //! Advanced routing and load balancing
+    //! 
+    //! Policy-driven routing, health monitoring, automatic failover,
+    //! and intelligent load distribution across multiple providers.
+}
 
-#[cfg(feature = "unified_sse")]
-pub mod sse;
+#[cfg(feature = "observability_pro")]
+pub mod observability_pro {
+    //! Enterprise observability and monitoring
+    //! 
+    //! Structured logging, metrics collection, distributed tracing,
+    //! and integration with monitoring platforms.
+}
 
-#[cfg(feature = "unified_transport")]
-pub mod net { pub use crate::transport::client_factory; }
+#[cfg(feature = "quota")]
+pub mod quota {
+    //! Quota and rate limiting
+    //! 
+    //! Tenant/organization-level quotas, rate limiting policies,
+    //! and usage tracking.
+}
 
-#[cfg(feature = "observability")]
-pub mod observability;
+#[cfg(feature = "audit")]
+pub mod audit {
+    //! Audit logging and compliance
+    //! 
+    //! Comprehensive audit trails, compliance reporting,
+    //! and data redaction strategies.
+}
 
-#[cfg(feature = "config_hot_reload")]
-pub mod config_hot_reload;
+#[cfg(feature = "kms")]
+pub mod kms {
+    //! Key management and encryption
+    //! 
+    //! Envelope encryption, key rotation, and integration
+    //! with enterprise key management systems.
+}
 
-// Resilience modules
-pub mod circuit_breaker;
-pub mod rate_limiter;
-pub mod error_handling;
+#[cfg(feature = "config_hot_reload_pro")]
+pub mod config_hot_reload_pro {
+    //! Dynamic configuration management
+    //! 
+    //! Hot-reload configuration providers, configuration watchers,
+    //! and dynamic policy updates.
+}
 
-// Re-export main types for user convenience
-pub use api::ChatApi;
-pub use client::{AiClient, AiClientBuilder, ModelOptions, Provider};
-pub use types::{
-    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
-};
-// Convenience re-exports: make the most-used types available from the crate root so
-// users don't need deep imports for common flows.
-pub use api::ChatCompletionChunk;
-pub use client::CancelHandle;
-pub use metrics::{Metrics, MetricsExt, NoopMetrics, NoopTimer, Timer};
-pub use transport::{
-    DynHttpTransport, DynHttpTransportRef, HttpClient, HttpTransport, TransportError,
-};
-// Re-export minimal configuration type
-pub use config::ConnectionOptions;
-pub use types::common::Content;
-
-// Re-export configuration types
-pub use provider::config::{FieldMapping, ProviderConfig};
-pub use provider::configs::ProviderConfigs;
-
-// Re-export model management tools
-pub use provider::models::{
-    CustomModelManager, LoadBalancingStrategy, ModelArray, ModelCapabilities, ModelEndpoint,
-    ModelInfo, ModelSelectionStrategy, PerformanceMetrics, PricingInfo, QualityTier, SpeedTier,
-};
-
-// Re-export batch processing functionality
-pub use api::chat::{batch_utils, BatchResult};
-
-// Re-export enhanced file utilities
-pub use utils::file::{
-    create_temp_dir, get_file_extension, get_file_size, guess_mime_from_path, is_audio_file,
-    is_file_size_acceptable, is_image_file, is_text_file, is_video_file, read_file, remove_file,
-    save_temp_file, validate_file,
-};
+// Re-export ai-lib types for convenience
+pub mod prelude {
+    //! Re-exports commonly used types from ai-lib and ai-lib-pro
+    
+    pub use ai_lib::*;
+    
+    // Add PRO specific re-exports here as features are implemented
+    #[cfg(feature = "pricing_catalog")]
+    pub use crate::pricing_catalog::*;
+    
+    #[cfg(feature = "routing_advanced")]
+    pub use crate::routing_advanced::*;
+    
+    #[cfg(feature = "observability_pro")]
+    pub use crate::observability_pro::*;
+    
+    #[cfg(feature = "quota")]
+    pub use crate::quota::*;
+    
+    #[cfg(feature = "audit")]
+    pub use crate::audit::*;
+    
+    #[cfg(feature = "kms")]
+    pub use crate::kms::*;
+    
+    #[cfg(feature = "config_hot_reload_pro")]
+    pub use crate::config_hot_reload_pro::*;
+}

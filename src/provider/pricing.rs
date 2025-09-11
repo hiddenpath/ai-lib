@@ -1,8 +1,27 @@
 //! Provider/model pricing table (indicative). Used for defaults and docs.
 //! This scaffold provides a minimal lookup; for production, prefer env/remote config.
+//!
+//! Last updated: 2025-01-27
+//! Sources: Official provider pricing pages (as of update date)
+//! Note: Prices are USD per 1K tokens, subject to change by providers
 
 use crate::client::Provider;
+#[cfg(feature = "routing_mvp")]
 use crate::provider::models::PricingInfo;
+
+#[cfg(not(feature = "routing_mvp"))]
+#[derive(Debug, Clone)]
+pub struct PricingInfo {
+    pub input_cost_per_1k: f64,
+    pub output_cost_per_1k: f64,
+}
+
+#[cfg(not(feature = "routing_mvp"))]
+impl PricingInfo {
+    pub fn new(input_cost_per_1k: f64, output_cost_per_1k: f64) -> Self {
+        Self { input_cost_per_1k, output_cost_per_1k }
+    }
+}
 
 /// Return indicative pricing for a given provider/model, if known.
 /// Values are USD per 1K input/output tokens.
@@ -49,5 +68,3 @@ pub fn get_pricing(provider: Provider, model: &str) -> Option<PricingInfo> {
         | Provider::XaiGrok => None,
     }
 }
-
-

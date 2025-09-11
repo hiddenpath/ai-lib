@@ -1,11 +1,11 @@
 //! Error monitoring and alerting
 
-use crate::types::AiLibError;
 use crate::error_handling::ErrorContext;
 use crate::metrics::Metrics;
+use crate::types::AiLibError;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 
 /// Error monitoring configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,8 +48,10 @@ impl ErrorMonitor {
     pub async fn record_error(&self, error: &AiLibError, context: &ErrorContext) {
         // Record error metrics
         self.metrics.incr_counter("errors.total", 1).await;
-        self.metrics.incr_counter(&format!("errors.{}", self.error_type_name(error)), 1).await;
-        
+        self.metrics
+            .incr_counter(&format!("errors.{}", self.error_type_name(error)), 1)
+            .await;
+
         // Check if we should send an alert
         if self.should_alert(error, context).await {
             self.send_alert(error, context).await;
@@ -60,13 +62,18 @@ impl ErrorMonitor {
     async fn should_alert(&self, error: &AiLibError, _context: &ErrorContext) -> bool {
         // This is a simplified implementation
         // In a real system, you would check error rates, consecutive errors, etc.
-        matches!(error, AiLibError::RateLimitExceeded(_) | AiLibError::ProviderError(_))
+        matches!(
+            error,
+            AiLibError::RateLimitExceeded(_) | AiLibError::ProviderError(_)
+        )
     }
 
     /// Send an alert (placeholder implementation)
     async fn send_alert(&self, error: &AiLibError, context: &ErrorContext) {
         // In a real implementation, this would send alerts via email, Slack, etc.
-        eprintln!("ALERT: Error detected - {:?} in context {:?}", error, context);
+        // Error monitoring: In production, this would send alerts via email, Slack, etc.
+        // For now, we just log the error context
+        let _ = (error, context);
     }
 
     /// Get error type name for metrics

@@ -12,8 +12,8 @@
 
 ai-lib统一了：
 - 跨异构模型厂商的聊天和多模态请求
-- 流式传输（SSE + 模拟）与一致的增量
-- 函数调用语义
+- 统一流式（统一SSE解析器 + JSONL 协议）与一致的增量
+- 函数调用语义（含 OpenAI 风格 tool_calls 对齐）
 - 推理模型支持（结构化、流式、JSON格式）
 - 批处理工作流
 - 可靠性原语（重试、退避、超时、代理、健康检查、负载策略）
@@ -111,7 +111,7 @@ ai-lib统一了：
 ### 安装
 ```toml
 [dependencies]
-ai-lib = "0.3.0"
+ai-lib = "0.3.1"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 ```
@@ -183,12 +183,12 @@ while let Some(chunk) = stream.next().await {
 ## 💡 关键功能集群
 
 1. 统一厂商抽象（无每厂商分支）
-2. 通用流式传输（SSE + 回退模拟）
+2. 通用流式传输（统一SSE解析器 + JSONL；带回退模拟）
 3. 多模态原语（文本/图像/音频）
-4. 函数调用（一致的工具模式）
+4. 函数调用（一致的工具模式；tool_calls 兼容）
 5. 推理模型支持（结构化、流式、JSON格式）
 6. 批处理（顺序/有界并发/智能策略）
-7. 可靠性：重试、错误分类、超时、代理、池
+7. 可靠性：重试、错误分类、超时、代理、池、拦截器管线（特性）
 8. 模型管理：性能/成本/健康/轮询/加权
 9. 可观测性：可插拔指标和计时
 10. 安全性：隔离、无默认内容日志
@@ -229,9 +229,9 @@ let smart = client.chat_completion_batch_smart(requests).await?;
 let msg = Message {
     role: Role::User,
     content: ai_lib::types::common::Content::Image {
-        url: Some("https://example.com/image.jpg".into()),
-        mime: Some("image/jpeg".into()),
-        name: None,
+    url: Some("https://example.com/image.jpg".into()),
+    mime: Some("image/jpeg".into()),
+    name: None,
     },
     function_call: None,
 };
@@ -289,6 +289,8 @@ match client.chat_completion(req).await {
 # API密钥
 export OPENAI_API_KEY=...
 export GROQ_API_KEY=...
+export GEMINI_API_KEY=...
+export ANTHROPIC_API_KEY=...
 export DEEPSEEK_API_KEY=...
 
 # 可选基础URL
@@ -363,6 +365,30 @@ if let Some(p) = ai_lib::provider::pricing::get_pricing(ai_lib::Provider::DeepSe
 | 回退 | 多厂商数组/手动分层 |
 
 ---
+
+### ❗ 错误与重试语义
+
+ai-lib 将厂商与 HTTP 失败统一映射为结构化错误，便于一致处理：
+
+- 认证：401/403 → `AuthenticationError`
+- 限流：429/409/425 → `RateLimitExceeded`
+- 超时：显式超时或 408 → `TimeoutError`
+- 服务器瞬态：5xx → `NetworkError`（可重试）
+- 传输启发式：连接/超时 → `NetworkError`/`TimeoutError`
+- JSON：`DeserializationError`；无效URL/配置：`ConfigurationError`
+
+辅助方法：
+
+```rust
+if err.is_retryable() {
+    tokio::time::sleep(Duration::from_millis(err.retry_delay_ms())).await;
+    // 重试...
+}
+```
+
+厂商说明（仅供了解——均已由 ai-lib 统一处理）：
+- Gemini：通过 `x-goog-api-key` 认证，SSE 流式。ai-lib 已自动设置请求头并标准化事件，无需编写厂商特定代码。参见 `https://ai.google.dev/api`。
+- Anthropic：使用 `x-api-key` 与版本头。ai-lib 已自动设置并标准化增量，无需编写厂商特定代码。参见 `https://docs.anthropic.com/en/api/overview`。
 
 ## 🧭 模型管理与负载均衡
 
@@ -515,7 +541,7 @@ cargo run --features "interceptors unified_sse" --example mistral_features
 | Groq | 配置驱动 | ✅ | 超低延迟 |
 | OpenAI | 独立 | ✅ | 函数调用 |
 | Anthropic (Claude) | 配置驱动 | ✅ | 高质量 |
-| Google Gemini | 独立 | 🔄 (统一) | 多模态焦点 |
+| Google Gemini | 独立 | ✅ | 使用 `x-goog-api-key` 头；SSE 走 `streamGenerateContent` |
 | Mistral | 独立 | ✅ | 欧洲模型 |
 | Cohere | 独立 | ✅ | RAG优化 |
 | HuggingFace | 配置驱动 | ✅ | 开放模型 |
@@ -549,6 +575,34 @@ cargo run --features "interceptors unified_sse" --example mistral_features
 | 多模态 | multimodal_example |
 | 架构演示 | architecture_progress |
 | 专业 | ascii_horse / hello_groq |
+
+补充（流式）：gemini_streaming / anthropic_streaming / mistral_streaming / deepseek_streaming
+
+### 故障排查（Gemini 404）
+
+- 现象：v1beta `generateContent` 调用 `models/gemini-pro` 返回 NOT_FOUND
+- 解决：使用 `gemini-1.5-flash`（当前 v1beta 支持）或先列出模型确认
+- 示例：`cargo run --example gemini_streaming`
+
+### 流式快速运行
+
+```bash
+# Gemini（设置密钥后运行）
+$env:GEMINI_API_KEY="your_key"; cargo run --example gemini_streaming
+
+# Anthropic（设置密钥后运行）
+$env:ANTHROPIC_API_KEY="your_key"; cargo run --example anthropic_streaming
+```
+
+### 请求级覆盖（代理/超时/API Key）
+
+```rust
+use ai_lib::{AiClient, Provider, ConnectionOptions};
+let client = AiClient::with_options(
+    Provider::Groq,
+    ConnectionOptions { proxy: Some("http://localhost:8080".into()), timeout: Some(Duration::from_secs(45)), ..Default::default() }
+)?;
+```
 
 ---
 

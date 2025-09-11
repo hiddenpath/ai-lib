@@ -13,8 +13,8 @@ Eliminate fragmented auth flows, streaming formats, error semantics, model namin
 
 ai-lib unifies:
 - Chat & multimodal requests across heterogeneous model providers
-- Streaming (SSE + emulated) with consistent deltas
-- Function calling semantics
+- Unified streaming (Unified SSE parser + JSONL protocol) with consistent deltas
+- Function calling semantics (incl. OpenAI‑style tool_calls alignment)
 - Reasoning models support (structured, streaming, JSON formats)
 - Batch workflows
 - Reliability primitives (retry, backoff, timeout, proxy, health, load strategies)
@@ -112,7 +112,7 @@ Design principles:
 ### Install
 ```toml
 [dependencies]
-ai-lib = "0.3.0"
+ai-lib = "0.3.1"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 ```
@@ -184,12 +184,12 @@ while let Some(chunk) = stream.next().await {
 ## 💡 Key Feature Clusters
 
 1. Unified provider abstraction (no per-vendor branching)
-2. Universal streaming (SSE + fallback emulation)
+2. Universal streaming (Unified SSE parser + JSONL; fallback emulation)
 3. Multimodal primitives (text/image/audio)
-4. Function calling (consistent tool schema)
+4. Function calling (consistent tool schema; tool_calls compatibility)
 5. Reasoning models support (structured, streaming, JSON formats)
 6. Batch processing (sequential / bounded concurrency / smart strategy)
-7. Reliability: retry, error classification, timeout, proxy, pool
+7. Reliability: retry, error classification, timeout, proxy, pool, interceptor pipeline (feature)
 8. Model management: performance / cost / health / round-robin / weighted
 9. Observability: pluggable metrics & timing
 10. Security: isolation, no default content logging
@@ -230,9 +230,9 @@ let smart = client.chat_completion_batch_smart(requests).await?;
 let msg = Message {
     role: Role::User,
     content: ai_lib::types::common::Content::Image {
-        url: Some("https://example.com/image.jpg".into()),
-        mime: Some("image/jpeg".into()),
-        name: None,
+    url: Some("https://example.com/image.jpg".into()),
+    mime: Some("image/jpeg".into()),
+    name: None,
     },
     function_call: None,
 };
@@ -290,6 +290,8 @@ match client.chat_completion(req).await {
 # API Keys
 export OPENAI_API_KEY=...
 export GROQ_API_KEY=...
+export GEMINI_API_KEY=...
+export ANTHROPIC_API_KEY=...
 export DEEPSEEK_API_KEY=...
 
 # Optional base URLs
@@ -344,6 +346,30 @@ cargo run --example proxy_example
 | Fallback | Multi-provider arrays / manual layering |
 
 ---
+
+### ❗ Errors & Retry Semantics
+
+ai-lib normalizes provider and HTTP failures into structured errors so callers can make consistent decisions:
+
+- Authentication: 401/403 → `AuthenticationError`
+- Rate limiting: 429/409/425 → `RateLimitExceeded`
+- Timeouts: explicit timeouts or 408 → `TimeoutError`
+- Server-side transient issues: 5xx → `NetworkError` (retryable)
+- Transport heuristics: connection/timeout → `NetworkError`/`TimeoutError`
+- JSON issues: `DeserializationError`; invalid URL/config: `ConfigurationError`
+
+Helpers:
+
+```rust
+if err.is_retryable() {
+    tokio::time::sleep(Duration::from_millis(err.retry_delay_ms())).await;
+    // retry...
+}
+```
+
+Provider notes (FYI only — already unified by ai-lib):
+- Gemini: auth via `x-goog-api-key`, streaming via SSE. ai-lib sets headers and normalizes events; no per‑provider code needed. See `https://ai.google.dev/api`.
+- Anthropic: auth via `x-api-key` + version header. ai-lib sets headers and normalizes deltas; no per‑provider handling needed. See `https://docs.anthropic.com/en/api/overview`.
 
 ## 🧭 Model Management & Load Balancing
 
@@ -529,7 +555,7 @@ Notes:
 | Groq | config-driven | ✅ | Ultra-low latency |
 | OpenAI | independent | ✅ | Function calling |
 | Anthropic (Claude) | config-driven | ✅ | High quality |
-| Google Gemini | independent | 🔄 (unified) | Multimodal focus |
+| Google Gemini | independent | ✅ | Uses `x-goog-api-key` header; SSE via `streamGenerateContent` |
 | Mistral | independent | ✅ | European models |
 | Cohere | independent | ✅ | RAG optimized |
 | HuggingFace | config-driven | ✅ | Open models |
@@ -563,6 +589,34 @@ Notes:
 | Multimodal | multimodal_example |
 | Architecture Demo | architecture_progress |
 | Specialized | ascii_horse / hello_groq |
+
+Additional (Streaming): gemini_streaming / anthropic_streaming / mistral_streaming / deepseek_streaming
+
+### Troubleshooting (Gemini 404)
+
+- Symptom: NOT_FOUND for `models/gemini-pro` on v1beta `generateContent`
+- Fix: use `gemini-1.5-flash` (current v1beta supported) or list models first
+- Example: `cargo run --example gemini_streaming`
+
+### Streaming quick run
+
+```bash
+# Gemini (set API key, then run)
+$env:GEMINI_API_KEY="your_key"; cargo run --example gemini_streaming
+
+# Anthropic (set API key, then run)
+$env:ANTHROPIC_API_KEY="your_key"; cargo run --example anthropic_streaming
+```
+
+### Request-scoped overrides (proxy/timeout/api_key)
+
+```rust
+use ai_lib::{AiClient, Provider, ConnectionOptions};
+let client = AiClient::with_options(
+    Provider::Groq,
+    ConnectionOptions { proxy: Some("http://localhost:8080".into()), timeout: Some(Duration::from_secs(45)), ..Default::default() }
+)?;
+```
 
 ---
 

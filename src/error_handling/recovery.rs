@@ -1,13 +1,13 @@
 //! Error recovery strategies and management
 
-use crate::types::AiLibError;
 use crate::error_handling::{ErrorContext, SuggestedAction};
 use crate::metrics::Metrics;
+use crate::types::AiLibError;
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use async_trait::async_trait;
-use serde::{Serialize, Deserialize};
 
 /// Error recovery manager
 pub struct ErrorRecoveryManager {
@@ -22,7 +22,9 @@ pub struct ErrorRecoveryManager {
 }
 
 impl Default for ErrorRecoveryManager {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Error pattern analysis for intelligent recovery
@@ -70,7 +72,7 @@ pub enum ErrorType {
 pub trait RecoveryStrategy: Send + Sync {
     /// Check if this strategy can recover from the given error
     async fn can_recover(&self, error: &AiLibError) -> bool;
-    
+
     /// Attempt to recover from the error
     async fn recover(&self, error: &AiLibError, context: &ErrorContext) -> Result<(), AiLibError>;
 }
@@ -99,24 +101,32 @@ impl ErrorRecoveryManager {
     }
 
     /// Register a recovery strategy for a specific error type
-    pub fn register_strategy(&mut self, error_type: ErrorType, strategy: Box<dyn RecoveryStrategy>) {
+    pub fn register_strategy(
+        &mut self,
+        error_type: ErrorType,
+        strategy: Box<dyn RecoveryStrategy>,
+    ) {
         self.recovery_strategies.insert(error_type, strategy);
     }
 
     /// Handle an error and attempt recovery
-    pub async fn handle_error(&self, error: &AiLibError, context: &ErrorContext) -> Result<(), AiLibError> {
+    pub async fn handle_error(
+        &self,
+        error: &AiLibError,
+        context: &ErrorContext,
+    ) -> Result<(), AiLibError> {
         let error_type = self.classify_error(error);
-        
+
         // Record the error
         self.record_error(error_type.clone(), context.clone()).await;
-        
+
         // Try to find a recovery strategy
         if let Some(strategy) = self.recovery_strategies.get(&error_type) {
             if strategy.can_recover(error).await {
                 return strategy.recover(error, context).await;
             }
         }
-        
+
         Err((*error).clone())
     }
 
@@ -141,7 +151,11 @@ impl ErrorRecoveryManager {
     }
 
     /// Generate intelligent suggested action based on error pattern
-    fn generate_suggested_action(&self, error_type: &ErrorType, pattern: &ErrorPattern) -> SuggestedAction {
+    fn generate_suggested_action(
+        &self,
+        error_type: &ErrorType,
+        pattern: &ErrorPattern,
+    ) -> SuggestedAction {
         match error_type {
             ErrorType::RateLimit => {
                 if pattern.frequency > 10.0 {
@@ -155,36 +169,24 @@ impl ErrorRecoveryManager {
                     }
                 }
             }
-            ErrorType::Network => {
-                SuggestedAction::Retry {
-                    delay_ms: 2000,
-                    max_attempts: 5,
-                }
-            }
-            ErrorType::Authentication => {
-                SuggestedAction::CheckCredentials
-            }
-            ErrorType::Provider => {
-                SuggestedAction::SwitchProvider {
-                    alternative_providers: vec!["openai".to_string(), "groq".to_string()],
-                }
-            }
-            ErrorType::Timeout => {
-                SuggestedAction::Retry {
-                    delay_ms: 5000,
-                    max_attempts: 3,
-                }
-            }
-            ErrorType::ContextLengthExceeded => {
-                SuggestedAction::ReduceRequestSize {
-                    max_tokens: Some(1000),
-                }
-            }
-            ErrorType::ModelNotFound => {
-                SuggestedAction::ContactSupport {
-                    reason: "Model not found - please verify model name".to_string(),
-                }
-            }
+            ErrorType::Network => SuggestedAction::Retry {
+                delay_ms: 2000,
+                max_attempts: 5,
+            },
+            ErrorType::Authentication => SuggestedAction::CheckCredentials,
+            ErrorType::Provider => SuggestedAction::SwitchProvider {
+                alternative_providers: vec!["openai".to_string(), "groq".to_string()],
+            },
+            ErrorType::Timeout => SuggestedAction::Retry {
+                delay_ms: 5000,
+                max_attempts: 3,
+            },
+            ErrorType::ContextLengthExceeded => SuggestedAction::ReduceRequestSize {
+                max_tokens: Some(1000),
+            },
+            ErrorType::ModelNotFound => SuggestedAction::ContactSupport {
+                reason: "Model not found - please verify model name".to_string(),
+            },
             _ => SuggestedAction::NoAction,
         }
     }
@@ -214,12 +216,18 @@ impl ErrorRecoveryManager {
         // Keep only the last 1000 records
         // Record metrics
         if let Some(metrics) = &self.metrics {
-            metrics.incr_counter(&format!("errors.{}", self.error_type_name(&error_type)), 1).await;
+            metrics
+                .incr_counter(&format!("errors.{}", self.error_type_name(&error_type)), 1)
+                .await;
         }
     }
 
     /// Update error pattern analysis
-    async fn update_error_pattern(&self, error_type: &ErrorType, timestamp: chrono::DateTime<chrono::Utc>) {
+    async fn update_error_pattern(
+        &self,
+        error_type: &ErrorType,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    ) {
         let mut patterns = self.error_patterns.lock().unwrap();
         let entry = patterns.entry(error_type.clone());
         use std::collections::hash_map::Entry;
@@ -228,7 +236,9 @@ impl ErrorRecoveryManager {
                 let pattern = occ.get_mut();
                 pattern.count += 1;
                 pattern.last_occurrence = timestamp;
-                let duration = pattern.last_occurrence.signed_duration_since(pattern.first_occurrence);
+                let duration = pattern
+                    .last_occurrence
+                    .signed_duration_since(pattern.first_occurrence);
                 if duration.num_minutes() > 0 {
                     pattern.frequency = pattern.count as f64 / duration.num_minutes() as f64;
                 }
@@ -252,7 +262,10 @@ impl ErrorRecoveryManager {
     /// Get suggested action for a specific error type
     async fn get_suggested_action_for_error(&self, error_type: &ErrorType) -> SuggestedAction {
         let patterns = self.error_patterns.lock().unwrap();
-        patterns.get(error_type).map(|p| p.suggested_action.clone()).unwrap_or(SuggestedAction::NoAction)
+        patterns
+            .get(error_type)
+            .map(|p| p.suggested_action.clone())
+            .unwrap_or(SuggestedAction::NoAction)
     }
 
     /// Get error type name for metrics
@@ -288,7 +301,7 @@ impl ErrorRecoveryManager {
             .values()
             .max_by_key(|p| p.count)
             .map(|p| p.error_type.clone());
-        
+
         ErrorStatistics {
             total_errors,
             unique_error_types: patterns.len(),
@@ -301,7 +314,7 @@ impl ErrorRecoveryManager {
     pub fn reset(&self) {
         let mut history = self.error_history.lock().unwrap();
         history.clear();
-        
+
         let mut patterns = self.error_patterns.lock().unwrap();
         patterns.clear();
     }

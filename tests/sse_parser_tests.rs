@@ -34,10 +34,10 @@ fn test_parse_chunk_data_simple() {
         "choices":[{"delta":{"role":"assistant","content":"Hello"},"finish_reason":null}]
     }"#;
 
-    let chunk = parse_chunk_data(payload).expect("parse ok").expect("some chunk");
+    let chunk = parse_chunk_data(payload)
+        .expect("parse ok")
+        .expect("some chunk");
     assert_eq!(chunk.model, "m");
     assert_eq!(chunk.choices.len(), 1);
     assert_eq!(chunk.choices[0].delta.content.as_deref(), Some("Hello"));
 }
-
-

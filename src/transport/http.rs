@@ -189,7 +189,9 @@ impl HttpTransport {
             }
         }
 
-        let client = client_builder.build().map_err(|e| TransportError::HttpError(e.to_string()))?;
+        let client = client_builder
+            .build()
+            .map_err(|e| TransportError::HttpError(e.to_string()))?;
         Ok(Self {
             client,
             timeout: config.timeout,
@@ -206,7 +208,9 @@ impl HttpTransport {
             client_builder = client_builder.proxy(proxy);
         }
 
-        let client = client_builder.build().map_err(|e| TransportError::HttpError(e.to_string()))?;
+        let client = client_builder
+            .build()
+            .map_err(|e| TransportError::HttpError(e.to_string()))?;
 
         Ok(Self { client, timeout })
     }
@@ -376,10 +380,7 @@ impl DynHttpTransport for HttpTransportBoxed {
             let res: Result<serde_json::Value, TransportError> = self.inner.get(url, headers).await;
             match res {
                 Ok(v) => Ok(v),
-                Err(e) => Err(crate::types::AiLibError::ProviderError(format!(
-                    "Transport error: {}",
-                    e
-                ))),
+                Err(e) => Err(map_transport_error_to_ailib(e)),
             }
         })
     }
@@ -395,10 +396,7 @@ impl DynHttpTransport for HttpTransportBoxed {
                 self.inner.post(url, headers, &body).await;
             match res {
                 Ok(v) => Ok(v),
-                Err(e) => Err(crate::types::AiLibError::ProviderError(format!(
-                    "Transport error: {}",
-                    e
-                ))),
+                Err(e) => Err(map_transport_error_to_ailib(e)),
             }
         })
     }
@@ -428,22 +426,33 @@ impl DynHttpTransport for HttpTransportBoxed {
             req = req.header("Accept", "text/event-stream");
 
             let resp = req.send().await.map_err(|e| {
-                crate::types::AiLibError::ProviderError(format!("Stream request failed: {}", e))
+                if e.is_timeout() {
+                    crate::types::AiLibError::TimeoutError(format!("Stream request timeout: {}", e))
+                } else {
+                    crate::types::AiLibError::NetworkError(format!("Stream request failed: {}", e))
+                }
             })?;
             if !resp.status().is_success() {
+                let status = resp.status();
                 let text = resp.text().await.unwrap_or_default();
-                return Err(crate::types::AiLibError::ProviderError(format!(
-                    "Stream error: {}",
-                    text
-                )));
+                return Err(map_status_to_ailib(status.as_u16(), text));
             }
 
             let byte_stream = resp.bytes_stream().map(|res| match res {
                 Ok(b) => Ok(b),
-                Err(e) => Err(crate::types::AiLibError::ProviderError(format!(
-                    "Stream chunk error: {}",
-                    e
-                ))),
+                Err(e) => {
+                    if e.is_timeout() {
+                        Err(crate::types::AiLibError::TimeoutError(format!(
+                            "Stream chunk timeout: {}",
+                            e
+                        )))
+                    } else {
+                        Err(crate::types::AiLibError::NetworkError(format!(
+                            "Stream chunk error: {}",
+                            e
+                        )))
+                    }
+                }
             });
 
             let boxed_stream: Pin<
@@ -480,17 +489,22 @@ impl DynHttpTransport for HttpTransportBoxed {
             }
 
             let resp = req.send().await.map_err(|e| {
-                crate::types::AiLibError::ProviderError(format!("upload request failed: {}", e))
+                if e.is_timeout() {
+                    crate::types::AiLibError::TimeoutError(format!("upload request timeout: {}", e))
+                } else {
+                    crate::types::AiLibError::NetworkError(format!("upload request failed: {}", e))
+                }
             })?;
             if !resp.status().is_success() {
+                let status = resp.status();
                 let text = resp.text().await.unwrap_or_default();
-                return Err(crate::types::AiLibError::ProviderError(format!(
-                    "upload error: {}",
-                    text
-                )));
+                return Err(map_status_to_ailib(status.as_u16(), text));
             }
             let j: serde_json::Value = resp.json().await.map_err(|e| {
-                crate::types::AiLibError::ProviderError(format!("parse upload response: {}", e))
+                crate::types::AiLibError::DeserializationError(format!(
+                    "parse upload response: {}",
+                    e
+                ))
             })?;
             Ok(j)
         })
@@ -501,5 +515,49 @@ impl HttpTransport {
     /// Produce an Arc-wrapped object-safe transport reference
     pub fn boxed(self) -> DynHttpTransportRef {
         Arc::new(HttpTransportBoxed::new(self))
+    }
+}
+
+// Map TransportError and HTTP status codes to structured AiLibError variants
+fn map_transport_error_to_ailib(e: TransportError) -> crate::types::AiLibError {
+    use crate::types::AiLibError;
+    match e {
+        TransportError::AuthenticationError(msg) => AiLibError::AuthenticationError(msg),
+        TransportError::RateLimitExceeded => {
+            AiLibError::RateLimitExceeded("rate limited".to_string())
+        }
+        TransportError::Timeout(msg) => AiLibError::TimeoutError(msg),
+        TransportError::ServerError { status, message } => {
+            // Treat 5xx as network/retryable provider outage
+            AiLibError::NetworkError(format!("server {}: {}", status, message))
+        }
+        TransportError::ClientError { status, message } => match status {
+            401 | 403 => AiLibError::AuthenticationError(message),
+            408 => AiLibError::TimeoutError(message),
+            409 | 425 | 429 => AiLibError::RateLimitExceeded(message),
+            _ => AiLibError::InvalidRequest(format!("client {}: {}", status, message)),
+        },
+        TransportError::HttpError(msg) => {
+            // Heuristic mapping
+            if msg.contains("timeout") {
+                AiLibError::TimeoutError(msg)
+            } else {
+                AiLibError::NetworkError(msg)
+            }
+        }
+        TransportError::JsonError(msg) => AiLibError::DeserializationError(msg),
+        TransportError::InvalidUrl(msg) => AiLibError::ConfigurationError(msg),
+    }
+}
+
+fn map_status_to_ailib(status: u16, body: String) -> crate::types::AiLibError {
+    use crate::types::AiLibError;
+    match status {
+        401 | 403 => AiLibError::AuthenticationError(body),
+        408 => AiLibError::TimeoutError(body),
+        409 | 425 | 429 => AiLibError::RateLimitExceeded(body),
+        500..=599 => AiLibError::NetworkError(format!("server {}: {}", status, body)),
+        400 => AiLibError::InvalidRequest(body),
+        _ => AiLibError::ProviderError(format!("http {}: {}", status, body)),
     }
 }

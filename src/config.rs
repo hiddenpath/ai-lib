@@ -1,7 +1,7 @@
-use std::time::Duration;
 use crate::circuit_breaker::CircuitBreakerConfig;
-use crate::rate_limiter::RateLimiterConfig;
 use crate::error_handling::ErrorThresholds;
+use crate::rate_limiter::RateLimiterConfig;
+use std::time::Duration;
 
 /// Minimal explicit connection/configuration options.
 ///

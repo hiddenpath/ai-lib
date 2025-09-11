@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2025-01-27
+
+### Added
+- **JSONL Streaming Protocol**: Complete implementation with delta/final types for structured streaming
+- **Incremental JSON Parser**: High-performance streaming content extraction with proper error handling
+- **Enhanced Examples**: Comprehensive examples for all major providers and use cases
+- **Golden Test Cases**: Extensive SSE streaming test coverage with MD5 consistency validation
+- **Unified Transport APIs**: Standardized HTTP client factory and configuration across all providers
+- **Interceptors (feature: `interceptors`)**: Pluggable `InterceptorPipeline` with default/minimal presets; new examples `interceptors_default.rs`, `interceptors_minimal.rs`
+- **Function Calling Compatibility**: Cross-provider support for OpenAI-style `tool_calls` and auto-parse of stringified JSON arguments; added dedicated tests in `tests/function_call_tests.rs`
+- **Configurable Streaming Demos**: `test_streaming.rs` supports model override via `GROQ_MODEL` env var; `jsonl_streaming.rs` demonstrates unified JSONL protocol
+
+### Changed
+- **Architecture**: Simplified direct HTTP client implementation for better performance
+- **Error Handling**: Standardized error model and retry semantics across all providers
+- **Documentation**: Complete API documentation with examples and troubleshooting guides
+- **Unified SSE Core (feature: `unified_sse`)**: All adapters moved to `sse::parser` for event boundary finding and parsing
+- **Unified Transport (feature: `unified_transport`)**: Centralized `reqwest::Client` creation via `transport::client_factory`, enabling consistent timeout/proxy/pool config
+- **Builder UX**: `AiClientBuilder` exposes `enable_default_interceptors()` and `enable_minimal_interceptors()` behind feature flag
+
+### Fixed
+- **Streaming**: Resolved SSE parsing edge cases and improved reliability
+- **Performance**: Eliminated double serialization overhead in HTTP calls
+- **Compatibility**: Enhanced OpenAI-compatible provider support
+- **Metrics API**: Replaced non-existent metrics calls with `record_gauge_with_tags` (fixed E0599)
+- **Clippy Cleanups**: Fixed visibility/`Default` impl issues in interceptors; minor nits (e.g., `.first()` usage in Gemini adapter)
+
+### Documentation & Policy
+- **Support Policy**: Added `SUPPORT_POLICY.md` with compatibility commitment
+- **README/README_CN**: Updated installation to `ai-lib = "0.3.1"` and refreshed examples
+- **PRO Roadmap**: `PRO_FEATURES_ROADMAP.md` clarifies OSS vs PRO; pricing table moved to PRO scope
+
+### Security & Compliance
+- **Licensing**: Confirmed dual license `MIT OR Apache-2.0`
+- **Audit**: `cargo audit` clean for this release
+
+### Milestones (OSS scope delivered in 0.3.1)
+1. 传输层收敛（Unified Transport）
+2. 统一流式解析内核（Unified SSE/JSONL）
+3. 中间件/拦截链（Interceptors, feature-gated）
+4. 函数调用与多模态强化（跨供应商对齐）
+
 ## [0.3.0] - 2025-09-09
 
 ### Added

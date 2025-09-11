@@ -16,16 +16,24 @@ pub trait ConfigWatcher: Send + Sync {
 pub struct ConfigStream;
 
 impl ConfigStream {
-    pub async fn next(&mut self) -> Option<String> { None }
+    pub async fn next(&mut self) -> Option<String> {
+        None
+    }
 }
 
 /// No-op implementations
 pub struct NoopConfigProvider;
 #[async_trait]
-impl ConfigProvider for NoopConfigProvider { async fn load(&self) -> Result<String, String> { Ok(String::new()) } }
+impl ConfigProvider for NoopConfigProvider {
+    async fn load(&self) -> Result<String, String> {
+        Ok(String::new())
+    }
+}
 
 pub struct NoopConfigWatcher;
 #[async_trait]
-impl ConfigWatcher for NoopConfigWatcher { async fn subscribe(&self) -> Result<ConfigStream, String> { Ok(ConfigStream) } }
-
-
+impl ConfigWatcher for NoopConfigWatcher {
+    async fn subscribe(&self) -> Result<ConfigStream, String> {
+        Ok(ConfigStream)
+    }
+}

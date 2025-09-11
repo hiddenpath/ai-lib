@@ -8,6 +8,8 @@ use futures::stream::Stream;
 use std::clone::Clone;
 use std::collections::HashMap;
 use std::sync::Arc;
+#[cfg(feature = "unified_transport")]
+use std::time::Duration;
 
 #[cfg(not(feature = "unified_sse"))]
 fn find_event_boundary(buffer: &[u8]) -> Option<usize> {
@@ -129,6 +131,29 @@ pub struct CohereAdapter {
 }
 
 impl CohereAdapter {
+    fn build_default_timeout_secs() -> u64 {
+        std::env::var("AI_HTTP_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(30)
+    }
+
+    fn build_default_transport() -> Result<DynHttpTransportRef, AiLibError> {
+        #[cfg(feature = "unified_transport")]
+        {
+            let timeout = Duration::from_secs(Self::build_default_timeout_secs());
+            let client = crate::transport::client_factory::build_shared_client()
+                .map_err(|e| AiLibError::NetworkError(format!("Failed to build http client: {}", e)))?;
+            let t = HttpTransport::with_reqwest_client(client, timeout);
+            return Ok(t.boxed());
+        }
+        #[cfg(not(feature = "unified_transport"))]
+        {
+            let t = HttpTransport::new();
+            return Ok(t.boxed());
+        }
+    }
+
     /// Create Cohere adapter. Requires COHERE_API_KEY env var.
     pub fn new() -> Result<Self, AiLibError> {
         let api_key = std::env::var("COHERE_API_KEY").map_err(|_| {
@@ -139,7 +164,7 @@ impl CohereAdapter {
         let base_url = std::env::var("COHERE_BASE_URL")
             .unwrap_or_else(|_| "https://api.cohere.ai".to_string());
         Ok(Self {
-            transport: HttpTransport::new().boxed(),
+            transport: Self::build_default_transport()?,
             api_key,
             base_url,
             metrics: Arc::new(NoopMetrics::new()),
@@ -155,7 +180,7 @@ impl CohereAdapter {
             std::env::var("COHERE_BASE_URL").unwrap_or_else(|_| "https://api.cohere.ai".to_string())
         });
         Ok(Self {
-            transport: HttpTransport::new().boxed(),
+            transport: Self::build_default_transport()?,
             api_key,
             base_url: resolved_base,
             metrics: Arc::new(NoopMetrics::new()),
@@ -217,7 +242,7 @@ impl CohereAdapter {
                 })
             })
             .collect();
-        
+
         let mut chat_body = serde_json::json!({
             "model": request.model,
             "messages": msgs,
@@ -250,9 +275,15 @@ impl CohereAdapter {
         } else if let Some(msg) = response.get("message") {
             // Cohere v2/chat format
             msg.get("content").and_then(|content_array| {
-                content_array.as_array().and_then(|arr| arr.first()).and_then(|content_obj| {
-                    content_obj.get("text").and_then(|t| t.as_str()).map(|text| text.to_string())
-                })
+                content_array
+                    .as_array()
+                    .and_then(|arr| arr.first())
+                    .and_then(|content_obj| {
+                        content_obj
+                            .get("text")
+                            .and_then(|t| t.as_str())
+                            .map(|text| text.to_string())
+                    })
             })
         } else if let Some(gens) = response.get("generations") {
             // Cohere v1 format
@@ -285,6 +316,27 @@ impl CohereAdapter {
                     name,
                     arguments: args,
                 });
+            }
+        } else if let Some(tool_calls) = response.get("tool_calls").and_then(|v| v.as_array()) {
+            if let Some(first) = tool_calls.first() {
+                if let Some(func) = first.get("function").or_else(|| first.get("function_call")) {
+                    if let Some(name) = func.get("name").and_then(|v| v.as_str()) {
+                        let mut args_opt = func.get("arguments").cloned();
+                        if let Some(args_val) = &args_opt {
+                            if args_val.is_string() {
+                                if let Some(s) = args_val.as_str() {
+                                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(s) {
+                                        args_opt = Some(parsed);
+                                    }
+                                }
+                            }
+                        }
+                        function_call = Some(crate::types::function_call::FunctionCall {
+                            name: name.to_string(),
+                            arguments: args_opt,
+                        });
+                    }
+                }
             }
         }
 
@@ -341,30 +393,27 @@ impl ChatApi for CohereAdapter {
         let prompt = request
             .messages
             .iter()
-            .map(|msg| {
-                match msg.role {
-                    Role::System => format!("System: {}", msg.content.as_text()),
-                    Role::User => format!("Human: {}", msg.content.as_text()),
-                    Role::Assistant => format!("Assistant: {}", msg.content.as_text()),
-                }
-                        })
-                        .collect::<Vec<_>>()
+            .map(|msg| match msg.role {
+                Role::System => format!("System: {}", msg.content.as_text()),
+                Role::User => format!("Human: {}", msg.content.as_text()),
+                Role::Assistant => format!("Assistant: {}", msg.content.as_text()),
+            })
+            .collect::<Vec<_>>()
             .join("\n");
 
         let mut generate_body = serde_json::json!({
-                    "model": request.model,
-                    "prompt": prompt,
-                });
+            "model": request.model,
+            "prompt": prompt,
+        });
 
-                if let Some(temp) = request.temperature {
+        if let Some(temp) = request.temperature {
             generate_body["temperature"] =
                 serde_json::Value::Number(serde_json::Number::from_f64(temp.into()).unwrap());
-                }
-                if let Some(max_tokens) = request.max_tokens {
+        }
+        if let Some(max_tokens) = request.max_tokens {
             generate_body["max_tokens"] =
-                        serde_json::Value::Number(serde_json::Number::from(max_tokens));
-                }
-
+                serde_json::Value::Number(serde_json::Number::from(max_tokens));
+        }
 
         // Use unified transport
         let response_json = self
@@ -372,7 +421,9 @@ impl ChatApi for CohereAdapter {
             .post_json(&url_generate, Some(headers), generate_body)
             .await?;
 
-        if let Some(t) = timer { t.stop(); }
+        if let Some(t) = timer {
+            t.stop();
+        }
 
         self.parse_response(response_json)
     }
@@ -411,14 +462,25 @@ impl ChatApi for CohereAdapter {
                             buffer.extend_from_slice(&bytes);
                             #[cfg(feature = "unified_sse")]
                             {
-                                while let Some(boundary) = crate::sse::parser::find_event_boundary(&buffer) {
+                                while let Some(boundary) =
+                                    crate::sse::parser::find_event_boundary(&buffer)
+                                {
                                     let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
                                     if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
-                                        if let Some(parsed) = crate::sse::parser::parse_sse_event(event_text) {
+                                        if let Some(parsed) =
+                                            crate::sse::parser::parse_sse_event(event_text)
+                                        {
                                             match parsed {
-                                                Ok(Some(chunk)) => { if tx.send(Ok(chunk)).is_err() { return; } }
+                                                Ok(Some(chunk)) => {
+                                                    if tx.send(Ok(chunk)).is_err() {
+                                                        return;
+                                                    }
+                                                }
                                                 Ok(None) => return,
-                                                Err(e) => { let _ = tx.send(Err(e)); return; }
+                                                Err(e) => {
+                                                    let _ = tx.send(Err(e));
+                                                    return;
+                                                }
                                             }
                                         }
                                     }
@@ -431,9 +493,16 @@ impl ChatApi for CohereAdapter {
                                     if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
                                         if let Some(parsed) = parse_sse_event(event_text) {
                                             match parsed {
-                                                Ok(Some(chunk)) => { if tx.send(Ok(chunk)).is_err() { return; } }
+                                                Ok(Some(chunk)) => {
+                                                    if tx.send(Ok(chunk)).is_err() {
+                                                        return;
+                                                    }
+                                                }
                                                 Ok(None) => return,
-                                                Err(e) => { let _ = tx.send(Err(e)); return; }
+                                                Err(e) => {
+                                                    let _ = tx.send(Err(e));
+                                                    return;
+                                                }
                                             }
                                         }
                                     }
@@ -441,7 +510,10 @@ impl ChatApi for CohereAdapter {
                             }
                         }
                         Err(e) => {
-                            let _ = tx.send(Err(AiLibError::ProviderError(format!("Stream error: {}", e))));
+                            let _ = tx.send(Err(AiLibError::ProviderError(format!(
+                                "Stream error: {}",
+                                e
+                            ))));
                             break;
                         }
                     }
@@ -501,10 +573,7 @@ impl ChatApi for CohereAdapter {
             format!("Bearer {}", self.api_key),
         );
 
-        let response = self
-            .transport
-            .get_json(&url, Some(headers))
-            .await?;
+        let response = self.transport.get_json(&url, Some(headers)).await?;
 
         Ok(response["models"]
             .as_array()

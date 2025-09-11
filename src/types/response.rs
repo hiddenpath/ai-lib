@@ -15,14 +15,14 @@ impl ChatCompletionResponse {
     /// Get the first textual content from the first choice.
     /// Returns an error if choices are empty or content is non-text.
     pub fn first_text(&self) -> Result<&str, crate::types::AiLibError> {
-        let choice = self
-            .choices
-            .first()
-            .ok_or_else(|| crate::types::AiLibError::InvalidModelResponse("empty choices".into()))?;
+        let choice = self.choices.first().ok_or_else(|| {
+            crate::types::AiLibError::InvalidModelResponse("empty choices".into())
+        })?;
         match &choice.message.content {
             crate::types::common::Content::Text(t) => Ok(t.as_str()),
             other => Err(crate::types::AiLibError::InvalidModelResponse(format!(
-                "expected text content, got {:?}", other
+                "expected text content, got {:?}",
+                other
             ))),
         }
     }

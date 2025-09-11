@@ -188,6 +188,42 @@ async fn generic_adapter_parses_function_call_stringified_arguments() {
     );
 }
 
+#[tokio::test]
+async fn generic_adapter_parses_tool_calls_first_function() {
+    // OpenAI tool_calls format; arguments provided as JSON string
+    let response = json!({
+        "id": "3",
+        "object": "chat.completion",
+        "created": 0,
+        "model": "test-model",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": null,
+                    "tool_calls": [
+                        {"type":"function","function": {"name": "ascii_horse", "arguments": "{\"size\":7}"}}
+                    ]
+                },
+                "finish_reason": null
+            }
+        ],
+        "usage": {"prompt_tokens":0, "completion_tokens":0, "total_tokens":0}
+    });
+
+    let transport = Arc::new(MockTransport::new(response));
+    let config =
+        ProviderConfig::openai_compatible("http://example", "API_KEY", "gpt-3.5-turbo", None);
+    let adapter = GenericAdapter::with_transport_ref(config, transport).expect("create adapter");
+
+    let msg = Message { role: Role::User, content: Content::Text("Hello".to_string()), function_call: None };
+    let req = ChatCompletionRequest::new("test-model".to_string(), vec![msg]);
+    let resp = adapter.chat_completion(req).await.expect("chat completion");
+    let fc = resp.choices[0].message.function_call.as_ref().expect("function_call present");
+    assert_eq!(fc.name, "ascii_horse");
+    assert_eq!(fc.arguments.as_ref().unwrap().get("size").and_then(|v| v.as_i64()), Some(7));
+}
+
 #[test]
 fn chat_request_serializes_functions_field() {
     let tool = Tool {

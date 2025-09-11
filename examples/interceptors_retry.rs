@@ -1,7 +1,7 @@
 #[cfg(feature = "interceptors")]
-use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
-#[cfg(feature = "interceptors")]
 use ai_lib::types::common::Content;
+#[cfg(feature = "interceptors")]
+use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 
 #[cfg(feature = "interceptors")]
 #[tokio::main]
@@ -12,14 +12,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     struct Logger;
     #[async_trait::async_trait]
     impl ai_lib::interceptors::Interceptor for Logger {
-        async fn on_request(&self, ctx: &ai_lib::interceptors::RequestContext, req: &ChatCompletionRequest) {
-            println!("on_request provider={} model={} msgs={}", ctx.provider, ctx.model, req.messages.len());
+        async fn on_request(
+            &self,
+            ctx: &ai_lib::interceptors::RequestContext,
+            req: &ChatCompletionRequest,
+        ) {
+            println!(
+                "on_request provider={} model={} msgs={}",
+                ctx.provider,
+                ctx.model,
+                req.messages.len()
+            );
         }
-        async fn on_response(&self, ctx: &ai_lib::interceptors::RequestContext, _req: &ChatCompletionRequest, _resp: &ai_lib::ChatCompletionResponse) {
+        async fn on_response(
+            &self,
+            ctx: &ai_lib::interceptors::RequestContext,
+            _req: &ChatCompletionRequest,
+            _resp: &ai_lib::ChatCompletionResponse,
+        ) {
             println!("on_response provider={} model={}", ctx.provider, ctx.model);
         }
-        async fn on_error(&self, ctx: &ai_lib::interceptors::RequestContext, _req: &ChatCompletionRequest, err: &ai_lib::AiLibError) {
-            eprintln!("on_error provider={} model={} err={:?}", ctx.provider, ctx.model, err);
+        async fn on_error(
+            &self,
+            ctx: &ai_lib::interceptors::RequestContext,
+            _req: &ChatCompletionRequest,
+            err: &ai_lib::AiLibError,
+        ) {
+            eprintln!(
+                "on_error provider={} model={} err={:?}",
+                ctx.provider, ctx.model, err
+            );
         }
     }
 
@@ -33,33 +55,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Compose pipeline
     let pipeline = ai_lib::interceptors::InterceptorPipeline::new().with(Logger);
-    let ctx = ai_lib::interceptors::RequestContext { provider: format!("{:?}", client.current_provider()), model: default_model.to_string() };
+    let ctx = ai_lib::interceptors::RequestContext {
+        provider: format!("{:?}", client.current_provider()),
+        model: default_model.to_string(),
+    };
 
     let req = ChatCompletionRequest::new(
         default_model.to_string(),
-        vec![Message { role: Role::User, content: Content::new_text("Say hello"), function_call: None }]
+        vec![Message {
+            role: Role::User,
+            content: Content::new_text("Say hello"),
+            function_call: None,
+        }],
     );
 
     // Retry policy with exponential backoff (max 3 attempts)
     let mut last_err: Option<ai_lib::AiLibError> = None;
     for attempt in 1..=3 {
-        let res = pipeline.execute(&ctx, &req, || async {
-            client.chat_completion(req.clone()).await
-        }).await;
+        let res = pipeline
+            .execute(&ctx, &req, || async {
+                client.chat_completion(req.clone()).await
+            })
+            .await;
 
         match res {
             Ok(resp) => {
                 println!("ok on attempt {}: model={}", attempt, resp.model);
-                return Ok(())
+                return Ok(());
             }
             Err(err) => {
                 last_err = Some(err.clone());
                 // Naive retry conditions (network/provider/ratelimit)
                 let retryable = matches!(
                     err,
-                    ai_lib::AiLibError::NetworkError(_) |
-                    ai_lib::AiLibError::ProviderError(_) |
-                    ai_lib::AiLibError::RateLimitExceeded(_)
+                    ai_lib::AiLibError::NetworkError(_)
+                        | ai_lib::AiLibError::ProviderError(_)
+                        | ai_lib::AiLibError::RateLimitExceeded(_)
                 );
                 if attempt == 3 || !retryable {
                     eprintln!("give up after {} attempts: {:?}", attempt, err);
@@ -72,7 +103,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let err = last_err.unwrap_or(ai_lib::AiLibError::ProviderError("retry failed".to_string()));
+    let err = last_err.unwrap_or(ai_lib::AiLibError::ProviderError(
+        "retry failed".to_string(),
+    ));
     Err(Box::<dyn std::error::Error>::from(err))
 }
 
@@ -80,5 +113,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn main() {
     eprintln!("Enable feature: --features interceptors");
 }
-
-
