@@ -5,10 +5,15 @@ use reqwest::{Client, Proxy};
 pub fn build_shared_client() -> Result<Client, String> {
     let mut builder = Client::builder();
 
-    // Timeout: default 30s; allow override via AI_HTTP_TIMEOUT_SECS
+    // Timeout: default 30s; allow override via AI_HTTP_TIMEOUT_SECS or AI_TIMEOUT_SECS (fallback)
     let timeout = std::env::var("AI_HTTP_TIMEOUT_SECS")
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
+        .or_else(|| {
+            std::env::var("AI_TIMEOUT_SECS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+        })
         .unwrap_or(30);
     builder = builder.timeout(std::time::Duration::from_secs(timeout));
 

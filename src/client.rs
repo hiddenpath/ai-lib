@@ -10,6 +10,7 @@ use futures::stream::Stream;
 use futures::Future;
 use std::sync::Arc;
 use tokio::sync::oneshot;
+use crate::rate_limiter::{BackpressureController, BackpressurePermit};
 
 /// Model configuration options for explicit model selection
 #[derive(Debug, Clone)]
@@ -198,6 +199,8 @@ pub struct AiClient {
     // Custom default models (override provider defaults)
     custom_default_chat_model: Option<String>,
     custom_default_multimodal_model: Option<String>,
+    // Optional backpressure controller
+    backpressure: Option<Arc<BackpressureController>>,
     #[cfg(feature = "routing_mvp")]
     routing_array: Option<crate::provider::models::ModelArray>,
 }
@@ -395,6 +398,7 @@ impl AiClient {
                 connection_options: Some(opts),
                 custom_default_chat_model: None,
                 custom_default_multimodal_model: None,
+                backpressure: None,
                 #[cfg(feature = "routing_mvp")]
                 routing_array: None,
                 #[cfg(feature = "interceptors")]
@@ -543,6 +547,7 @@ impl AiClient {
             connection_options: None,
             custom_default_chat_model: None,
             custom_default_multimodal_model: None,
+            backpressure: None,
             #[cfg(feature = "routing_mvp")]
             routing_array: None,
             #[cfg(feature = "interceptors")]
@@ -567,6 +572,19 @@ impl AiClient {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
+        // Acquire backpressure permit if configured
+        let _bp_permit: Option<BackpressurePermit> = if let Some(ctrl) = &self.backpressure {
+            match ctrl.acquire_permit().await {
+                Ok(p) => Some(p),
+                Err(_) => {
+                    return Err(AiLibError::RateLimitExceeded(
+                        "Backpressure: no permits available".to_string(),
+                    ))
+                }
+            }
+        } else {
+            None
+        };
         #[cfg(feature = "routing_mvp")]
         {
             // If request.model equals a sentinel like "__route__", pick from routing array
@@ -639,6 +657,19 @@ impl AiClient {
         AiLibError,
     > {
         request.stream = Some(true);
+        // Acquire backpressure permit if configured and hold it for the lifetime of the stream
+        let bp_permit: Option<BackpressurePermit> = if let Some(ctrl) = &self.backpressure {
+            match ctrl.acquire_permit().await {
+                Ok(p) => Some(p),
+                Err(_) => {
+                    return Err(AiLibError::RateLimitExceeded(
+                        "Backpressure: no permits available".to_string(),
+                    ))
+                }
+            }
+        } else {
+            None
+        };
         #[cfg(feature = "interceptors")]
         if let Some(p) = &self.interceptor_pipeline {
             let ctx = crate::interceptors::RequestContext {
@@ -650,10 +681,13 @@ impl AiClient {
             for ic in &p.interceptors {
                 ic.on_request(&ctx, &request).await;
             }
-            return self.adapter.chat_completion_stream(request).await;
+            let inner = self.adapter.chat_completion_stream(request).await?;
+            let cs = ControlledStream::new_with_bp(inner, None, bp_permit);
+            return Ok(Box::new(cs));
         }
-
-        self.adapter.chat_completion_stream(request).await
+        let inner = self.adapter.chat_completion_stream(request).await?;
+        let cs = ControlledStream::new_with_bp(inner, None, bp_permit);
+        Ok(Box::new(cs))
     }
 
     /// Streaming chat completion request with cancel control
@@ -674,13 +708,26 @@ impl AiClient {
         AiLibError,
     > {
         request.stream = Some(true);
+        // Acquire backpressure permit if configured and hold it for the lifetime of the stream
+        let bp_permit: Option<BackpressurePermit> = if let Some(ctrl) = &self.backpressure {
+            match ctrl.acquire_permit().await {
+                Ok(p) => Some(p),
+                Err(_) => {
+                    return Err(AiLibError::RateLimitExceeded(
+                        "Backpressure: no permits available".to_string(),
+                    ))
+                }
+            }
+        } else {
+            None
+        };
         let stream = self.adapter.chat_completion_stream(request).await?;
         let (cancel_tx, cancel_rx) = oneshot::channel();
         let cancel_handle = CancelHandle {
             sender: Some(cancel_tx),
         };
 
-        let controlled_stream = ControlledStream::new(stream, cancel_rx);
+        let controlled_stream = ControlledStream::new_with_bp(stream, Some(cancel_rx), bp_permit);
         Ok((Box::new(controlled_stream), cancel_handle))
     }
 
@@ -1423,6 +1470,17 @@ impl AiClientBuilder {
         self
     }
 
+    /// Configure a simple max concurrent requests backpressure guard
+    ///
+    /// This provides a convenient way to set a global concurrency cap using a semaphore.
+    /// It is equivalent于设置 `ResilienceConfig.backpressure.max_concurrent_requests`。
+    pub fn with_max_concurrency(mut self, max_concurrent_requests: usize) -> Self {
+        let mut cfg = self.resilience_config.clone();
+        cfg.backpressure = Some(crate::config::BackpressureConfig { max_concurrent_requests });
+        self.resilience_config = cfg;
+        self
+    }
+
     /// Set custom resilience configuration
     ///
     /// # Arguments
@@ -1482,7 +1540,14 @@ impl AiClientBuilder {
             }
         };
 
-        // 7. Create AiClient
+        // 5. Build backpressure controller if configured
+        let bp_ctrl: Option<Arc<BackpressureController>> = self
+            .resilience_config
+            .backpressure
+            .as_ref()
+            .map(|cfg| Arc::new(BackpressureController::new(cfg.max_concurrent_requests)));
+
+        // 6. Create AiClient
         let client = AiClient {
             provider: self.provider,
             adapter,
@@ -1490,6 +1555,7 @@ impl AiClientBuilder {
             connection_options: None,
             custom_default_chat_model: self.default_chat_model,
             custom_default_multimodal_model: self.default_multimodal_model,
+            backpressure: bp_ctrl,
             #[cfg(feature = "routing_mvp")]
             routing_array: self.routing_array,
             #[cfg(feature = "interceptors")]
@@ -1614,17 +1680,17 @@ impl AiClientBuilder {
 struct ControlledStream {
     inner: Box<dyn Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin>,
     cancel_rx: Option<oneshot::Receiver<()>>,
+    // Hold a backpressure permit for the lifetime of the stream if present
+    _bp_permit: Option<BackpressurePermit>,
 }
 
 impl ControlledStream {
-    fn new(
+    fn new_with_bp(
         inner: Box<dyn Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin>,
-        cancel_rx: oneshot::Receiver<()>,
+        cancel_rx: Option<oneshot::Receiver<()>>,
+        bp_permit: Option<BackpressurePermit>,
     ) -> Self {
-        Self {
-            inner,
-            cancel_rx: Some(cancel_rx),
-        }
+        Self { inner, cancel_rx, _bp_permit: bp_permit }
     }
 }
 

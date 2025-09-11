@@ -61,3 +61,8 @@ build/
 *.bak
 *.orig
 *.rej
+
+# Internal or non-public docs (prevent accidental publish)
+docs/internal/
+PRO_FEATURES_ROADMAP.md
+详细评估结果.txt

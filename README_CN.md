@@ -6,7 +6,7 @@
 消除分散的认证流程、流式格式、错误语义、模型命名差异和不一致的函数调用。从一行脚本扩展到多区域、多厂商系统，无需重写集成代码。
 
 ---
-[Website](https://www.ailib.info/)
+[官方网站](https://www.ailib.info/)
 
 ## 🚀 核心价值（TL;DR）
 
@@ -305,6 +305,12 @@ export AI_TIMEOUT_SECS=30
 # 可选：成本指标（启用 `cost_metrics` 特性时生效）
 export COST_INPUT_PER_1K=0.5
 export COST_OUTPUT_PER_1K=1.5
+
+# 可选：HTTP 连接池参数（默认已启用连接池）
+# 每主机最大空闲连接数
+export AI_HTTP_POOL_MAX_IDLE_PER_HOST=32
+# 空闲连接超时（毫秒）
+export AI_HTTP_POOL_IDLE_TIMEOUT_MS=90000
 ```
 
 ### 显式覆盖
@@ -495,7 +501,26 @@ let client = AiClientBuilder::new(Provider::Groq)
 - `cost_metrics`：基于环境变量的最小成本核算（见上方 COST_* 配置）
 - `routing_mvp`：启用 `ModelArray` 路由；将请求的 model 设为 "__route__" 触发路由
 
-企业说明：在 ai-lib PRO 中，上述成本与路由配置可通过外部配置中心统一管理并热更新。
+这些功能通过环境变量进行配置，适合大多数使用场景。
+
+### 企业级功能
+
+对于高级企业级功能，请考虑 [ai-lib-pro]：
+
+- **高级路由**: 策略驱动路由、健康监控、自动故障转移
+- **企业可观测性**: 结构化日志、指标、分布式追踪
+- **成本管理**: 集中定价表和预算跟踪
+- **配额管理**: 租户/组织配额和速率限制
+- **审计与合规**: 带脱敏的综合审计跟踪
+- **安全性**: 信封加密和密钥管理
+- **配置**: 热重载配置管理
+
+ai-lib-pro在开源ai-lib基础上构建，无破坏性更改，为企业用户提供无缝升级路径。
+
+### 分层：OSS 与 PRO
+
+- **OSS（本仓库）**：统一接口、流式、重试/超时/代理、可配置连接池、轻量限流与背压、批处理并发控制。偏向环境变量驱动，零外部中台依赖，开箱即可用。
+- **PRO**：多租户配额与优先级、自适应并发/限流、策略驱动路由、集中配置与热更新、深度可观测性与导出、审计/合规、集中价目与预算护栏。无需改业务代码即可平滑升级。
 
 #### 本地验证矩阵
 ```bash
@@ -567,7 +592,7 @@ cargo run --features "interceptors unified_sse" --example mistral_features
 | 入门 | quickstart / basic_usage / builder_pattern |
 | 配置 | explicit_config / proxy_example / custom_transport_config |
 | 流式 | test_streaming / cohere_stream |
-| 可靠性 | custom_transport |
+| 可靠性 | custom_transport / concurrency_best_practices |
 | 多厂商 | config_driven_example / model_override_demo |
 | 模型管理 | model_management |
 | 批处理 | batch_processing |
@@ -643,6 +668,25 @@ cargo run --example bench_mock_throughput -- --concurrency 512 --duration 15s
 # 流式解析成本
 cargo bench --bench stream_parse
 ```
+
+### 背压与并发上限（可选）
+
+- 简单做法：在批量接口上设置并发上限 `concurrency_limit`
+- 全局做法：使用 Builder 提供的最大并发门闸（信号量）
+
+```rust
+use ai_lib::{AiClientBuilder, Provider};
+
+// 为当前客户端设置全局最大并发（例如 64）
+let client = AiClientBuilder::new(Provider::Groq)
+    .with_max_concurrency(64)
+    .for_production() // 可选：加载生产预设（包含保守的限流/熔断/背压）
+    .build()?;
+```
+
+说明：
+- 该门闸在 `chat_completion` 与流式接口中获取许可，直到调用完成/流结束自动释放。
+- 若无可用许可，将返回 `RateLimitExceeded`，可配合重试/排队策略使用。
 
 计划的基准布局（即将推出）：
 ```

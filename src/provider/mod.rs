@@ -7,6 +7,8 @@ pub mod generic;
 pub mod mistral;
 #[cfg(feature = "routing_mvp")]
 pub mod models;
+#[cfg(feature = "routing_mvp")]
+pub use models::*;
 pub mod openai;
 pub mod pricing;
 pub mod utils;
