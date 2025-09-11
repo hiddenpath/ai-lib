@@ -75,7 +75,7 @@ ai-lib统一了：
         AiClient / Builder   ←  模型管理/指标/批处理/工具
                 │
         ┌────────── 统一抽象层 ────────────┐
-        │  厂商适配器（混合：配置+独立）    │
+        │  厂商适配器（混合：配置+独立）       │
         └──────┬────────────┬────────────┬────────────────┘
                │            │            │
         OpenAI / Groq   Gemini / Mistral  Ollama / 区域/其他
@@ -111,7 +111,7 @@ ai-lib统一了：
 ### 安装
 ```toml
 [dependencies]
-ai-lib = "0.3.1"
+ai-lib = "0.3.2"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 ```

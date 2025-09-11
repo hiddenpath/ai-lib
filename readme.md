@@ -6,7 +6,7 @@ A production-grade, provider-agnostic SDK that provides a unified Rust API for 1
 Eliminates fragmented authentication flows, streaming formats, error semantics, model naming differences, and inconsistent function calling. Scale from one-liner scripts to multi-region, multi-provider systems without rewriting integration code.
 
 ---
-[Website](https://www.ailib.info/)
+[Official Website](https://www.ailib.info/)
 
 ## 🚀 Core Value (TL;DR)
 
@@ -28,7 +28,7 @@ You focus on product logic; ai-lib handles infrastructure friction.
 ### Installation
 ```toml
 [dependencies]
-ai-lib = "0.3.1"
+ai-lib = "0.3.2"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 ```
@@ -305,9 +305,9 @@ We value: clarity, test coverage, minimal surface area creep, incremental compos
 ```bibtex
 @software{ai-lib,
     title = {ai-lib: A Unified AI SDK for Rust},
-    author = {ai-lib Contributors},
+    author = {Luqiang Wang},
     url = {https://github.com/hiddenpath/ai-lib},
-    year = {2024}
+    year = {2025}
 }
 ```
 
