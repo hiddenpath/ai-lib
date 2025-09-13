@@ -87,3 +87,20 @@ pub struct Usage {
     pub completion_tokens: u32,
     pub total_tokens: u32,
 }
+
+/// Indicates the reliability and source of usage data
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum UsageStatus {
+    /// Usage data is accurate and finalized from the provider
+    #[serde(rename = "finalized")]
+    Finalized,
+    /// Usage data is estimated (e.g., using tokenizer approximation)
+    #[serde(rename = "estimated")]
+    Estimated,
+    /// Usage data is not yet available (e.g., streaming in progress)
+    #[serde(rename = "pending")]
+    Pending,
+    /// Provider doesn't support usage tracking
+    #[serde(rename = "unsupported")]
+    Unsupported,
+}

@@ -2,7 +2,7 @@ use crate::api::{ChatApi, ChatCompletionChunk, ModelInfo, ModelPermission};
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::transport::{DynHttpTransportRef, HttpTransport};
 use crate::types::{
-    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
+    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage, UsageStatus,
 };
 use futures::stream::Stream;
 use futures::StreamExt;
@@ -252,6 +252,7 @@ impl GeminiAdapter {
             model: model.to_string(),
             choices: choices?,
             usage,
+            usage_status: UsageStatus::Finalized, // Gemini provides accurate usage data
         })
     }
 }

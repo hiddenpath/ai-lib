@@ -2,26 +2,23 @@
 
 > A unified, reliable, high-performance multi-provider AI SDK for Rust
 
-A production-grade, provider-agnostic SDK that provides a unified Rust API for 17+ AI platforms (OpenAI, Groq, Anthropic, Gemini, Mistral, Cohere, Azure OpenAI, Ollama, DeepSeek, Qwen, Baidu ERNIE, Tencent Hunyuan, iFlytek Spark, Kimi, HuggingFace, TogetherAI, xAI Grok, etc.).  
-Eliminates fragmented authentication flows, streaming formats, error semantics, model naming differences, and inconsistent function calling. Scale from one-liner scripts to multi-region, multi-provider systems without rewriting integration code.
+A production-grade, provider-agnostic SDK that provides a unified Rust API for 17+ AI platforms and growing (OpenAI, Groq, Anthropic, Gemini, Mistral, Cohere, Azure OpenAI, Ollama, DeepSeek, Qwen, Baidu ERNIE, Tencent Hunyuan, iFlytek Spark, Kimi, HuggingFace, TogetherAI, xAI Grok, and more).  
+Eliminates fragmented authentication flows, streaming formats, error semantics, model naming differences, and inconsistent function calling. Scale from one-liner scripts to production systems without rewriting integration code.
 
 ---
 [Official Website](https://www.ailib.info/)
 
-## 🚀 Core Value (TL;DR)
+## 🚀 Core Value
 
-ai-lib unifies:
-- Chat and multimodal requests across heterogeneous model providers
-- Unified streaming (unified SSE parser + JSONL protocol) with consistent deltas
-- Function calling semantics (including OpenAI-style tool_calls alignment)
-- Reasoning model support (structured, streaming, JSON formats)
-- Batch processing workflows
-- Reliability primitives (retry, backoff, timeout, proxy, health checks, load strategies)
-- Model selection (cost/performance/health/weighted)
-- Observability hooks
-- Progressive configuration (env vars → builder → explicit injection → custom transport)
+ai-lib unifies AI provider complexity into a single, ergonomic Rust interface:
 
-You focus on product logic; ai-lib handles infrastructure friction.
+- **Universal API**: Chat, multimodal, and function calling across all providers
+- **Unified Streaming**: Consistent SSE/JSONL parsing with real-time deltas
+- **Reliability**: Built-in retry, timeout, circuit breaker, and error classification
+- **Flexible Configuration**: Environment variables, builder pattern, or explicit overrides
+- **Production Ready**: Connection pooling, proxy support, observability hooks
+
+**Result**: Focus on your product logic while ai-lib handles provider integration friction.
 
 ## ⚙️ Quick Start
 
@@ -33,19 +30,19 @@ tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 ```
 
-### Fastest Way
+### One-liner Chat
 ```rust
 use ai_lib::Provider;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let reply = ai_lib::AiClient::quick_chat_text(Provider::Groq, "Ping?").await?;
+    let reply = ai_lib::AiClient::quick_chat_text(Provider::Groq, "Hello!").await?;
     println!("Reply: {reply}");
     Ok(())
 }
 ```
 
-### Standard Chat
+### Standard Usage
 ```rust
 use ai_lib::{AiClient, Provider, Message, Role, Content, ChatCompletionRequest};
 
@@ -84,91 +81,90 @@ while let Some(chunk) = stream.next().await {
 
 | Concept | Purpose |
 |--------|---------|
-| Provider | Enumerates all supported providers |
-| AiClient / Builder | Main entry point; configuration encapsulation |
-| ChatCompletionRequest | Unified request payload |
-| Message / Content | Text/image/audio/(future structured) |
-| Function / Tool | Unified function calling semantics |
-| Streaming Event | Provider-standardized delta streams |
-| ModelManager / ModelArray | Strategy-driven model orchestration |
-| ConnectionOptions | Explicit runtime overrides |
-| Metrics Trait | Custom observability integration |
-| Transport | Injectable HTTP + streaming implementation |
+| **Provider** | Enumerates all supported AI providers |
+| **AiClient** | Main entry point with unified interface |
+| **ChatCompletionRequest** | Standardized request payload |
+| **Message / Content** | Text, image, audio content types |
+| **Streaming Event** | Provider-standardized delta streams |
+| **ConnectionOptions** | Runtime configuration overrides |
+| **Metrics Trait** | Custom observability integration |
+| **Transport** | Injectable HTTP + streaming layer |
 
 ---
 
-## 💡 Key Feature Clusters
+## 💡 Key Features
 
-1. Unified provider abstraction (no per-provider branching)
-2. Universal streaming (unified SSE parser + JSONL; with fallback simulation)
-3. Multimodal primitives (text/image/audio)
-4. Function calling (consistent tool patterns; tool_calls compatibility)
-5. Reasoning model support (structured, streaming, JSON formats)
-6. Batch processing (sequential/bounded concurrency/smart strategies)
-7. Reliability: retry, error classification, timeout, proxy, pooling, interceptor pipeline (features)
-8. Model management: performance/cost/health/round-robin/weighted
-9. Observability: pluggable metrics and timing
-10. Security: isolation, no default content logging
-11. Extensibility: custom transport, metrics, strategy injection
+### Core Capabilities
+- **Unified Provider Abstraction**: Single API across all providers
+- **Universal Streaming**: Consistent SSE/JSONL parsing with real-time deltas
+- **Multimodal Support**: Text, image, and audio content handling
+- **Function Calling**: Consistent tool patterns and OpenAI compatibility
+- **Batch Processing**: Sequential and concurrent processing strategies
 
----
-
-## 🌍 Supported Providers (Snapshot)
-
-| Provider | Adapter Type | Streaming | Notes |
-|----------|--------------|-----------|-------|
-| Groq | Config-driven | ✅ | Ultra-low latency |
-| OpenAI | Independent | ✅ | Function calling |
-| Anthropic (Claude) | Config-driven | ✅ | High quality |
-| Google Gemini | Independent | ✅ | Uses `x-goog-api-key` header |
-| Mistral | Independent | ✅ | European models |
-| Cohere | Independent | ✅ | RAG-optimized |
-| HuggingFace | Config-driven | ✅ | Open models |
-| TogetherAI | Config-driven | ✅ | Cost-effective |
-| DeepSeek | Config-driven | ✅ | Reasoning models |
-| Qwen | Config-driven | ✅ | Chinese ecosystem |
-| Baidu ERNIE | Config-driven | ✅ | Enterprise CN |
-| Tencent Hunyuan | Config-driven | ✅ | Cloud integration |
-| iFlytek Spark | Config-driven | ✅ | Voice + multimodal |
-| Moonshot Kimi | Config-driven | ✅ | Long context |
-| Azure OpenAI | Config-driven | ✅ | Enterprise compliance |
-| Ollama | Config-driven | ✅ | Local/air-gapped |
-| xAI Grok | Config-driven | ✅ | Real-time oriented |
+### Reliability & Production
+- **Built-in Resilience**: Retry with exponential backoff, circuit breakers
+- **Error Classification**: Distinguish transient vs permanent failures
+- **Connection Management**: Pooling, timeouts, proxy support
+- **Observability**: Pluggable metrics and tracing integration
+- **Security**: No sensitive content logging by default
 
 ---
 
-## 🔑 Configuration & Diagnostics
+## 🌍 Supported Providers
 
-### Environment Variables (Convention-based)
+*17+ providers and growing* - We continuously add new AI platforms to support the evolving ecosystem.
+
+| Provider | Streaming | Highlights |
+|----------|-----------|------------|
+| **Groq** | ✅ | Ultra-low latency inference |
+| **OpenAI** | ✅ | GPT models, function calling |
+| **Anthropic** | ✅ | Claude models, high quality |
+| **Google Gemini** | ✅ | Multimodal capabilities |
+| **Mistral** | ✅ | European models |
+| **Cohere** | ✅ | RAG-optimized |
+| **HuggingFace** | ✅ | Open source models |
+| **TogetherAI** | ✅ | Cost-effective inference |
+| **DeepSeek** | ✅ | Reasoning models |
+| **Qwen** | ✅ | Chinese ecosystem |
+| **Baidu ERNIE** | ✅ | Enterprise China |
+| **Tencent Hunyuan** | ✅ | Cloud integration |
+| **iFlytek Spark** | ✅ | Voice + multimodal |
+| **Moonshot Kimi** | ✅ | Long context |
+| **Azure OpenAI** | ✅ | Enterprise compliance |
+| **Ollama** | ✅ | Local/air-gapped |
+| **xAI Grok** | ✅ | Real-time oriented |
+
+*See [examples/](examples/) for provider-specific usage patterns.*
+
+---
+
+## 🔑 Configuration
+
+### Environment Variables
 ```bash
-# API Keys
+# API Keys (convention-based)
 export OPENAI_API_KEY=...
 export GROQ_API_KEY=...
 export GEMINI_API_KEY=...
 export ANTHROPIC_API_KEY=...
-export DEEPSEEK_API_KEY=...
 
-# Optional Base URLs
+# Optional: Custom endpoints
 export GROQ_BASE_URL=https://custom.groq.com
 
-# Proxy
+# Optional: Proxy and timeouts
 export AI_PROXY_URL=http://proxy.internal:8080
-
-# Global Timeout (seconds)
 export AI_TIMEOUT_SECS=30
 
-# Optional: HTTP connection pool (enabled by default)
+# Optional: Connection pooling (enabled by default)
 export AI_HTTP_POOL_MAX_IDLE_PER_HOST=32
 export AI_HTTP_POOL_IDLE_TIMEOUT_MS=90000
-
-# Optional: Cost Metrics (when `cost_metrics` feature enabled)
-export COST_INPUT_PER_1K=0.5
-export COST_OUTPUT_PER_1K=1.5
 ```
 
-### Explicit Overrides
+### Programmatic Configuration
 ```rust
 use ai_lib::{AiClient, Provider, ConnectionOptions};
+use std::time::Duration;
+
 let client = AiClient::with_options(
     Provider::Groq,
     ConnectionOptions {
@@ -181,11 +177,7 @@ let client = AiClient::with_options(
 )?;
 ```
 
-### Backpressure & Concurrency Cap (Optional)
-
-- Simple: use `concurrency_limit` in batch APIs
-- Global: set a max concurrency gate via Builder
-
+### Concurrency Control
 ```rust
 use ai_lib::{AiClientBuilder, Provider};
 
@@ -195,31 +187,25 @@ let client = AiClientBuilder::new(Provider::Groq)
     .build()?;
 ```
 
-Notes:
-- The gate acquires a permit for `chat_completion` and streaming calls and releases it when finished.
-- If no permits are available, `RateLimitExceeded` is returned; combine with retry/queueing if needed.
-
 ---
 
 ## 🛡️ Reliability & Resilience
 
-| Aspect | Capability |
-|--------|------------|
-| Retry | Exponential backoff + classification |
-| Errors | Distinguish transient vs permanent |
-| Timeout | Per-request configurable |
-| Proxy | Global/per-connection/disable |
-| Connection Pool | Tunable size + lifecycle |
-| Health Checks | Endpoint status + policy-based avoidance |
-| Load Strategies | Round-robin/weighted/health/performance/cost |
-| Fallback | Multi-provider arrays/manual layering |
+| Feature | Description |
+|---------|-------------|
+| **Retry Logic** | Exponential backoff with intelligent error classification |
+| **Error Handling** | Distinguish transient vs permanent failures |
+| **Timeouts** | Configurable per-request and global timeouts |
+| **Proxy Support** | Global, per-connection, or disabled proxy handling |
+| **Connection Pooling** | Tunable pool size and connection lifecycle |
+| **Health Checks** | Endpoint monitoring and policy-based routing |
+| **Fallback Strategies** | Multi-provider arrays and manual failover |
 
 ---
 
 ## 📊 Observability & Metrics
 
-Implement `Metrics` trait to bridge Prometheus, OpenTelemetry, StatsD, etc.
-
+### Custom Metrics Integration
 ```rust
 struct CustomMetrics;
 #[async_trait::async_trait]
@@ -230,73 +216,58 @@ impl ai_lib::metrics::Metrics for CustomMetrics {
 let client = AiClient::new_with_metrics(Provider::Groq, Arc::new(CustomMetrics))?;
 ```
 
-### Feature Flags (Optional)
+### Usage Tracking
+```rust
+match response.usage_status {
+    UsageStatus::Finalized => println!("Accurate token counts: {:?}", response.usage),
+    UsageStatus::Estimated => println!("Estimated tokens: {:?}", response.usage),
+    UsageStatus::Pending => println!("Usage data not yet available"),
+    UsageStatus::Unsupported => println!("Provider doesn't support usage tracking"),
+}
+```
 
-- `interceptors`: Interceptor trait & pipeline
-- `unified_sse`: Common SSE parser
-- `unified_transport`: Shared reqwest client factory
-- `cost_metrics`: Minimal cost accounting via env vars
-- `routing_mvp`: Enable `ModelArray` routing
-
-### Enterprise Features
-
-For advanced enterprise capabilities, consider [ai-lib-pro]:
-
-- **Advanced Routing**: Policy-driven routing, health monitoring, automatic failover
-- **Enterprise Observability**: Structured logging, metrics, distributed tracing
-- **Cost Management**: Centralized pricing tables and budget tracking
-- **Quota Management**: Tenant/organization quotas and rate limiting
-- **Audit & Compliance**: Comprehensive audit trails with redaction
-- **Security**: Envelope encryption and key management
-- **Configuration**: Hot-reload configuration management
-
-ai-lib-pro layers on top of the open-source ai-lib without breaking changes, providing a seamless upgrade path for enterprise users.
-
-### Tiering: OSS vs PRO
-
-- **OSS (this crate)**: unified API, streaming, retries/timeouts/proxy, configurable pool, lightweight rate limiting and backpressure, batch concurrency controls. Simple env-driven setup; zero external services required.
-- **PRO**: multi-tenant quotas & priorities, adaptive concurrency/limits, policy-driven routing, centralized config and hot-reload, deep observability/exporters, audit/compliance, cost catalog and budget guardrails. Drop-in upgrade without code changes.
+### Optional Features
+- `interceptors`: Retry, timeout, circuit breaker pipeline
+- `unified_sse`: Common SSE parser for all providers
+- `unified_transport`: Shared HTTP client factory
+- `cost_metrics`: Basic cost accounting via environment variables
+- `routing_mvp`: Model selection and routing capabilities
 
 ---
 
-## 🗂️ Examples Directory (in /examples)
+## 🗂️ Examples
 
 | Category | Examples |
 |----------|----------|
-| Getting Started | quickstart / basic_usage / builder_pattern |
-| Configuration | explicit_config / proxy_example / custom_transport_config |
-| Streaming | test_streaming / cohere_stream |
-| Reliability | custom_transport |
-| Multi-Provider | config_driven_example / model_override_demo |
-| Model Management | model_management |
-| Batch Processing | batch_processing |
-| Function Calling | function_call_openai / function_call_exec |
-| Multimodal | multimodal_example |
-| Architecture Demo | architecture_progress |
-| Professional | ascii_horse / hello_groq |
+| **Getting Started** | `quickstart`, `basic_usage`, `builder_pattern` |
+| **Configuration** | `explicit_config`, `proxy_example`, `custom_transport_config` |
+| **Streaming** | `test_streaming`, `cohere_stream` |
+| **Reliability** | `custom_transport`, `resilience_example` |
+| **Multi-Provider** | `config_driven_example`, `model_override_demo` |
+| **Model Management** | `model_management`, `routing_modelarray` |
+| **Batch Processing** | `batch_processing` |
+| **Function Calling** | `function_call_openai`, `function_call_exec` |
+| **Multimodal** | `multimodal_example` |
+| **Advanced** | `architecture_progress`, `reasoning_best_practices` |
 
 ---
 
 ## 📄 License
 
-Dual-licensed:
-- MIT
-- Apache License (Version 2.0)
-
-You may choose the license that best fits your project.
+Dual-licensed under MIT or Apache License 2.0 - choose what works best for your project.
 
 ---
 
-## 🤝 Contributing Guide
+## 🤝 Contributing
 
-1. Fork & clone repository  
-2. Create feature branch: `git checkout -b feature/your-feature`  
-3. Run tests: `cargo test`  
-4. Add examples if introducing new features  
-5. Follow adapter layering (prefer config-driven before custom)  
-6. Open PR with rationale + benchmarks (if performance impact)  
+1. Fork & clone repository
+2. Create feature branch: `git checkout -b feature/your-feature`
+3. Run tests: `cargo test`
+4. Add examples for new features
+5. Follow adapter patterns (prefer config-driven over custom)
+6. Open PR with rationale + benchmarks (if performance impact)
 
-We value: clarity, test coverage, minimal surface area creep, incremental composability.
+**We value**: clarity, test coverage, minimal surface area, incremental composability.
 
 ---
 

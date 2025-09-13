@@ -2,7 +2,7 @@ use crate::api::{ChatApi, ChatCompletionChunk, ModelInfo, ModelPermission};
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::transport::{DynHttpTransportRef, HttpTransport};
 use crate::types::{
-    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
+    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage, UsageStatus,
 };
 use futures::stream::{self, Stream};
 use std::collections::HashMap;
@@ -345,6 +345,7 @@ impl OpenAiAdapter {
             model: response["model"].as_str().unwrap_or("").to_string(),
             choices,
             usage,
+            usage_status: UsageStatus::Finalized, // OpenAI provides accurate usage data
         })
     }
 }

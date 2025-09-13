@@ -19,10 +19,10 @@
 - **Breaking changes** only in major version bumps
 - **Deprecation warnings** provided 6+ months before removal
 
-### Rust Version Support
-- **Minimum Rust version**: 1.70
-- **Target Rust version**: Latest stable
-- **MSRV policy**: Updated with each major release
+### Rust Version Support (MSRV)
+- **Minimum Supported Rust Version (MSRV)**: 1.70
+- **Policy**: MSRV bumps are not considered breaking changes. We aim to bump at most once per year and announce in release notes.
+- **Toolchain**: We regularly test with the latest stable release.
 
 ### Provider Compatibility
 - **Core providers** (OpenAI, Anthropic, Google): Full support

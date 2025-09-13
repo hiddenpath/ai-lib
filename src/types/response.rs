@@ -1,4 +1,4 @@
-use crate::types::{Choice, Usage};
+use crate::types::{Choice, Usage, UsageStatus};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -9,6 +9,8 @@ pub struct ChatCompletionResponse {
     pub model: String,
     pub choices: Vec<Choice>,
     pub usage: Usage,
+    /// Indicates the reliability and source of usage data
+    pub usage_status: UsageStatus,
 }
 
 impl ChatCompletionResponse {

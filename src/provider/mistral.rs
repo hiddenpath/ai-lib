@@ -4,7 +4,7 @@ use crate::api::{
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::transport::{DynHttpTransportRef, HttpTransport};
 use crate::types::{
-    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
+    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage, UsageStatus,
 };
 use futures::stream::Stream;
 use futures::StreamExt;
@@ -255,6 +255,7 @@ impl MistralAdapter {
             model: response["model"].as_str().unwrap_or_default().to_string(),
             choices,
             usage,
+            usage_status: UsageStatus::Finalized, // Mistral provides accurate usage data
         })
     }
 }

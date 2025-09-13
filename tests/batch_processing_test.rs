@@ -226,6 +226,7 @@ mod tests {
                 completion_tokens: 5,
                 total_tokens: 15,
             },
+            usage_status: ai_lib::types::UsageStatus::Finalized,
         };
 
         batch_result.add_success(mock_response.clone());

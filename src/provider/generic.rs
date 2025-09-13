@@ -5,7 +5,7 @@ use crate::api::{
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::transport::{DynHttpTransportRef, HttpTransport};
 use crate::types::{
-    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
+    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage, UsageStatus,
 };
 use futures::stream::{Stream, StreamExt};
 use std::env;
@@ -567,6 +567,7 @@ impl GenericAdapter {
             model: response["model"].as_str().unwrap_or("").to_string(),
             choices,
             usage,
+            usage_status: UsageStatus::Finalized, // Generic adapter assumes OpenAI-compatible format
         })
     }
 }

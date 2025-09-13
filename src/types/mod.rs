@@ -9,7 +9,7 @@ pub mod response;
 pub use request::ChatCompletionRequest;
 pub use response::ChatCompletionResponse;
 pub mod function_call;
-pub use common::{Choice, Message, Role, Usage};
+pub use common::{Choice, Message, Role, Usage, UsageStatus};
 pub use error::AiLibError;
 pub use function_call::{FunctionCall, FunctionCallPolicy, Tool};
 

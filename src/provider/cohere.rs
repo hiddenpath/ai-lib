@@ -2,7 +2,7 @@ use crate::api::{ChatApi, ChatCompletionChunk, ModelInfo, ModelPermission};
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::transport::{DynHttpTransportRef, HttpTransport};
 use crate::types::{
-    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
+    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage, UsageStatus,
 };
 use futures::stream::Stream;
 use std::clone::Clone;
@@ -412,6 +412,7 @@ impl CohereAdapter {
             model: response["model"].as_str().unwrap_or_default().to_string(),
             choices: vec![choice],
             usage,
+            usage_status: UsageStatus::Unsupported, // Cohere doesn't provide usage data in this format
         })
     }
 }

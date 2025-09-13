@@ -102,7 +102,7 @@ pub use transport::{
 };
 // Re-export minimal configuration type
 pub use config::ConnectionOptions;
-pub use types::common::Content;
+pub use types::common::{Content, UsageStatus};
 
 // Re-export configuration types
 pub use provider::config::{FieldMapping, ProviderConfig};
