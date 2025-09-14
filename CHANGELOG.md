@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.1] - 2025-01-27
 
+## [0.3.3] - 2025-09-14
+
+### Developer Experience
+- Root-level exports for `Tool`, `FunctionCallPolicy`, `FunctionCall` to simplify imports
+- Docs and website unified to prefer `use ai_lib::Content` over deep `types::common` path
+- Added feature alias presets in Cargo features for ergonomics:
+  - `resilience` → `interceptors`
+  - `streaming` → `unified_sse`
+  - `transport` → `unified_transport`
+  - `hot_reload` → `config_hot_reload`
+  - `all` → enables most OSS features
+
+### Documentation
+- Added dedicated Features guide (EN/ZH) on `ailib.info` placed after Intro
+- Updated README/README_CN to reflect root imports and feature aliases
+- Synced FAQ to state production readiness and list implemented reliability primitives
+
+### Compatibility
+- Non-breaking, additive changes only. Existing code continues to work.
+
+### Notes
+- As usual, ensure you enable only the features you need to keep binary size and compile times small.
+
 ### Added
 - **JSONL Streaming Protocol**: Complete implementation with delta/final types for structured streaming
 - **Incremental JSON Parser**: High-performance streaming content extraction with proper error handling

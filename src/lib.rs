@@ -91,6 +91,7 @@ pub use api::ChatApi;
 pub use client::{AiClient, AiClientBuilder, ModelOptions, Provider};
 pub use types::{
     AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
+    FunctionCall, FunctionCallPolicy, Tool,
 };
 // Convenience re-exports: make the most-used types available from the crate root so
 // users don't need deep imports for common flows.

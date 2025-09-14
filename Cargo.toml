@@ -1,6 +1,6 @@
 [package]
 name = "ai-lib"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 authors = ["AI-lib Contributors"]
 description = "A unified AI SDK for Rust providing a single interface for multiple AI providers with hybrid architecture"
@@ -13,13 +13,18 @@ keywords = ["ai", "llm", "api", "agent", "unify"]
 categories = ["api-bindings", "web-programming::http-client"]
 include = [
     "src/**/*",
-    "examples/*",
+    "examples/*.rs",
     "Cargo.toml",
     "readme.md",
     "README_CN.md",
     "LICENSE-MIT",
     "LICENSE-APACHE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs/USING_WITH_OPENAI_COMPATIBLE_GATEWAYS.md",
+    "docs/REASONING_MODELS.md",
+    "docs/UPGRADE_0.2.0.md",
+    "docs/UPGRADE_0.3.0.md",
+    "docs/RELEASE_NOTES_0.3.0-rc.1.md"
 ]
 rust-version = "1.70"
 
@@ -27,8 +32,8 @@ rust-version = "1.70"
 
 [dependencies]
 async-trait = "0.1"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { version = "1.0.221", features = ["derive"] }
+serde_json = "1.0.144"
 tokio = { version = "1.0", features = ["full"] }
 thiserror = "2.0.16"
 reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
@@ -68,3 +73,19 @@ observability = []
 
 # Config hot-reload traits (ConfigProvider/Watcher)
 config_hot_reload = []
+
+# Convenience alias features for developer ergonomics
+# These do not add code, just enable existing granular features in groups
+streaming = ["unified_sse"]
+transport = ["unified_transport"]
+resilience = ["interceptors"]
+hot_reload = ["config_hot_reload"]
+all = [
+    "interceptors",
+    "unified_transport",
+    "unified_sse",
+    "cost_metrics",
+    "routing_mvp",
+    "observability",
+    "config_hot_reload",
+]

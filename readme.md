@@ -25,7 +25,7 @@ ai-lib unifies AI provider complexity into a single, ergonomic Rust interface:
 ### Installation
 ```toml
 [dependencies]
-ai-lib = "0.3.2"
+ai-lib = "0.3.3"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 ```
@@ -53,12 +53,12 @@ async fn main() -> anyhow::Result<()> {
         client.default_chat_model(),
         vec![Message {
             role: Role::User,
-            content: Content::new_text("Explain Rust ownership in one sentence."),
+            content: Content::Text("Explain Rust ownership in one sentence.".to_string()),
             function_call: None,
         }]
     );
     let resp = client.chat_completion(req).await?;
-    println!("Answer: {}", resp.first_text()?);
+    println!("Answer: {}", resp.choices[0].message.content.as_text());
     Ok(())
 }
 ```
