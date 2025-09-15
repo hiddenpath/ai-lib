@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Show Mistral-specific features
     println!("\n🔍 Mistral Provider Information:");
-    println!("   • Provider Type: Independent (uses MistralAdapter)");
+    println!("   • Provider Type: Independent (selected via Provider::Mistral)");
     println!("   • Base URL: https://api.mistral.ai");
     println!("   • API Key: MISTRAL_API_KEY environment variable");
     println!(

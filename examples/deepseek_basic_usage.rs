@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Show DeepSeek-specific features
     println!("\n🔍 DeepSeek Provider Information:");
-    println!("   • Provider Type: Config-driven (uses GenericAdapter)");
+    println!("   • Provider Type: Config-driven (selected via Provider::DeepSeek)");
     println!("   • Base URL: https://api.deepseek.com/v1");
     println!("   • API Key: DEEPSEEK_API_KEY environment variable");
     println!("   • Supported Models: deepseek-chat, deepseek-coder");

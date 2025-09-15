@@ -2,8 +2,8 @@ use crate::api::{ChatApi, ChatCompletionChunk};
 use crate::config::{ConnectionOptions, ResilienceConfig};
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::provider::{
-    classification::ProviderClassification, CohereAdapter, GeminiAdapter, GenericAdapter,
-    MistralAdapter, OpenAiAdapter, ProviderConfigs,
+    classification::ProviderClassification, AI21Adapter, CohereAdapter, GeminiAdapter, GenericAdapter,
+    MistralAdapter, OpenAiAdapter, PerplexityAdapter, ProviderConfigs,
 };
 use crate::types::{AiLibError, ChatCompletionRequest, ChatCompletionResponse};
 use futures::stream::Stream;
@@ -11,6 +11,9 @@ use futures::Future;
 use std::sync::Arc;
 use tokio::sync::oneshot;
 use crate::rate_limiter::{BackpressureController, BackpressurePermit};
+
+// Note: Some variables are marked as `mut` because they are modified within conditional compilation
+// blocks (`#[cfg(feature = "routing_mvp")]`). The linter may not detect these modifications.
 
 /// Model configuration options for explicit model selection
 #[derive(Debug, Clone)]
@@ -92,17 +95,23 @@ pub enum Provider {
     AzureOpenAI,
     HuggingFace,
     TogetherAI,
+    OpenRouter,
+    Replicate,
     // Chinese providers (OpenAI-compatible or config-driven)
     BaiduWenxin,
     TencentHunyuan,
     IflytekSpark,
     Moonshot,
+    ZhipuAI,
+    MiniMax,
     // Independent adapters
     OpenAI,
     Qwen,
     Gemini,
     Mistral,
     Cohere,
+    Perplexity,
+    AI21,
     // Bedrock removed (deferred)
 }
 
@@ -119,15 +128,21 @@ impl Provider {
             Provider::AzureOpenAI => "gpt-35-turbo",
             Provider::HuggingFace => "microsoft/DialoGPT-medium",
             Provider::TogetherAI => "meta-llama/Llama-3-8b-chat-hf",
+            Provider::OpenRouter => "openai/gpt-3.5-turbo",
+            Provider::Replicate => "meta/llama-2-7b-chat",
             Provider::BaiduWenxin => "ernie-3.5",
             Provider::TencentHunyuan => "hunyuan-standard",
             Provider::IflytekSpark => "spark-v3.0",
             Provider::Moonshot => "moonshot-v1-8k",
+            Provider::ZhipuAI => "glm-4",
+            Provider::MiniMax => "abab6.5-chat",
             Provider::OpenAI => "gpt-3.5-turbo",
             Provider::Qwen => "qwen-turbo",
             Provider::Gemini => "gemini-1.5-flash", // current v1beta-supported chat model
             Provider::Mistral => "mistral-small",   // generic default
             Provider::Cohere => "command-r",        // chat-capable model
+            Provider::Perplexity => "llama-3.1-sonar-small-128k-online",
+            Provider::AI21 => "j2-ultra",
         }
     }
 
@@ -140,6 +155,12 @@ impl Provider {
             Provider::Groq => None, // No multimodal model currently available
             Provider::Gemini => Some("gemini-1.5-flash"),
             Provider::Cohere => Some("command-r-plus"),
+            Provider::OpenRouter => Some("openai/gpt-4o"),
+            Provider::Replicate => Some("meta/llama-2-7b-chat"),
+            Provider::ZhipuAI => Some("glm-4v"),
+            Provider::MiniMax => Some("abab6.5-chat"),
+            Provider::Perplexity => Some("llama-3.1-sonar-small-128k-online"),
+            Provider::AI21 => Some("j2-ultra"),
             // Others presently have no clearly documented multimodal endpoint or are not yet wired.
             _ => None,
         }
@@ -201,6 +222,9 @@ pub struct AiClient {
     custom_default_multimodal_model: Option<String>,
     // Optional backpressure controller
     backpressure: Option<Arc<BackpressureController>>,
+    // Optional basic failover providers (OSS): if a request fails with a retryable error,
+    // we will try providers in this list in order.
+    failover_providers: Option<Vec<Provider>>,
     #[cfg(feature = "routing_mvp")]
     routing_array: Option<crate::provider::models::ModelArray>,
 }
@@ -232,6 +256,65 @@ impl AiClient {
         let mut c = AiClientBuilder::new(provider).build()?;
         c.connection_options = None;
         Ok(c)
+    }
+
+    /// Configure a basic failover chain for automatic provider switching on failures.
+    ///
+    /// When a request fails with a retryable error (network, timeout, rate limit, 5xx),
+    /// the client will automatically attempt subsequent providers in the specified order.
+    ///
+    /// ## Execution Behavior
+    /// - **Error Types**: Only retryable errors trigger failover (network, timeout, rate limit, 5xx)
+    /// - **Order**: Providers are tried in the exact order specified in the vector
+    /// - **Skip Current**: The current provider is automatically skipped if it appears in the chain
+    /// - **State Preservation**: Routing selections and request modifications are preserved during failover
+    ///
+    /// ## Integration with Other Features
+    /// - **Routing**: When used with `with_routing_array()`, the selected model is preserved
+    ///   across failover attempts. Failover providers will use the same model selection.
+    /// - **Interceptors**: Failover happens after interceptor processing, so interceptors
+    ///   can modify requests before failover attempts.
+    /// - **Metrics**: Failover attempts are tracked with `failover.attempts`, `failover.success`,
+    ///   and `failover.error` metrics.
+    ///
+    /// ## Examples
+    /// ```rust
+    /// use ai_lib::{AiClient, Provider};
+    ///
+    /// // Basic failover configuration
+    /// let client = AiClient::new(Provider::OpenAI)?
+    ///     .with_failover(vec![Provider::Anthropic, Provider::Groq]);
+    ///
+    /// // Combined with routing (requires routing_mvp feature)
+    /// #[cfg(feature = "routing_mvp")]
+    /// {
+    ///     let mut array = ai_lib::provider::models::ModelArray::new("production");
+    ///     // ... configure array
+    ///     let client = client
+    ///         .with_routing_array(array)
+    ///         .with_failover(vec![Provider::Anthropic, Provider::Groq]);
+    /// }
+    ///
+    /// // Empty vector disables failover
+    /// let client = client.with_failover(vec![]);
+    /// # Ok::<(), ai_lib::AiLibError>(())
+    /// ```
+    ///
+    /// ## Limitations (OSS)
+    /// This is a lightweight OSS feature. For advanced capabilities, consider ai-lib-pro:
+    /// - Weighted failover based on provider performance
+    /// - SLO-aware failover policies
+    /// - Cost-based failover decisions
+    /// - Advanced health checking and circuit breaking
+    ///
+    /// # Arguments
+    /// * `providers` - Ordered list of fallback providers. Empty vector disables failover.
+    ///
+    /// # Returns
+    /// * `Self` - Client instance with failover configuration
+    pub fn with_failover(mut self, providers: Vec<Provider>) -> Self {
+        self.failover_providers = if providers.is_empty() { None } else { Some(providers) };
+        self
     }
 
     #[cfg(feature = "routing_mvp")]
@@ -399,6 +482,7 @@ impl AiClient {
                 custom_default_chat_model: None,
                 custom_default_multimodal_model: None,
                 backpressure: None,
+                failover_providers: None,
                 #[cfg(feature = "routing_mvp")]
                 routing_array: None,
                 #[cfg(feature = "interceptors")]
@@ -534,10 +618,16 @@ impl AiClient {
             }
             Provider::HuggingFace => Box::new(GenericAdapter::new(ProviderConfigs::huggingface())?),
             Provider::TogetherAI => Box::new(GenericAdapter::new(ProviderConfigs::together_ai())?),
+            Provider::OpenRouter => Box::new(GenericAdapter::new(ProviderConfigs::openrouter())?),
+            Provider::Replicate => Box::new(GenericAdapter::new(ProviderConfigs::replicate())?),
+            Provider::ZhipuAI => Box::new(GenericAdapter::new(ProviderConfigs::zhipu_ai())?),
+            Provider::MiniMax => Box::new(GenericAdapter::new(ProviderConfigs::minimax())?),
             Provider::OpenAI => Box::new(OpenAiAdapter::new()?),
             Provider::Gemini => Box::new(GeminiAdapter::new()?),
             Provider::Mistral => Box::new(MistralAdapter::new()?),
             Provider::Cohere => Box::new(CohereAdapter::new()?),
+            Provider::Perplexity => Box::new(PerplexityAdapter::new()?),
+            Provider::AI21 => Box::new(AI21Adapter::new()?),
         };
 
         Ok(Self {
@@ -548,6 +638,7 @@ impl AiClient {
             custom_default_chat_model: None,
             custom_default_multimodal_model: None,
             backpressure: None,
+            failover_providers: None,
             #[cfg(feature = "routing_mvp")]
             routing_array: None,
             #[cfg(feature = "interceptors")]
@@ -563,11 +654,58 @@ impl AiClient {
 
     /// Send chat completion request
     ///
+    /// This method supports multiple routing and failover strategies that work together:
+    ///
+    /// ## Execution Flow
+    /// 1. **Routing (if enabled)**: If `request.model == "__route__"` and `routing_mvp` feature is enabled,
+    ///    the client will select the best available model from the configured `ModelArray` based on
+    ///    health checks and load balancing strategy.
+    /// 2. **Request Execution**: The request is sent to the current provider with the selected model.
+    /// 3. **Failover (if enabled)**: If the request fails with a retryable error (network, timeout, 
+    ///    rate limit, 5xx), the client will automatically try the configured failover providers
+    ///    in order, preserving the routing selection.
+    ///
+    /// ## Feature Interaction
+    /// - **Routing + Failover**: When both are configured, routing selection is preserved during
+    ///   failover attempts. The failover providers will use the same model selection.
+    /// - **Interceptors**: Applied after routing but before failover, allowing for request/response
+    ///   modification and monitoring.
+    ///
+    /// ## Examples
+    /// ```rust
+    /// use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
+    /// use ai_lib::types::common::Content;
+    ///
+    /// // Basic usage with failover
+    /// let client = AiClient::new(Provider::OpenAI)?
+    ///     .with_failover(vec![Provider::Anthropic, Provider::Groq]);
+    ///
+    /// // With routing (requires routing_mvp feature)
+    /// #[cfg(feature = "routing_mvp")]
+    /// {
+    ///     let mut array = ai_lib::provider::models::ModelArray::new("production");
+    ///     // ... configure array with endpoints
+    ///     let client = client.with_routing_array(array);
+    /// }
+    ///
+    /// // Request with routing (will select best model from array)
+    /// let request = ChatCompletionRequest::new(
+    ///     "__route__".to_string(),  // Special sentinel for routing
+    ///     vec![Message {
+    ///         role: Role::User,
+    ///         content: Content::Text("Hello".to_string()),
+    ///         function_call: None,
+    ///     }],
+    /// );
+    /// # Ok::<(), ai_lib::AiLibError>(())
+    /// ```
+    ///
     /// # Arguments
     /// * `request` - Chat completion request
     ///
     /// # Returns
     /// * `Result<ChatCompletionResponse, AiLibError>` - Response on success, error on failure
+    #[allow(unused_mut)]
     pub async fn chat_completion(
         &self,
         request: ChatCompletionRequest,
@@ -585,12 +723,14 @@ impl AiClient {
         } else {
             None
         };
+        // Step 1: Apply routing if configured and model is "__route__"
+        // Note: processed_request needs to be mut because we modify it in the routing_mvp block
+        let mut processed_request = request;
         #[cfg(feature = "routing_mvp")]
         {
-            // If request.model equals a sentinel like "__route__", pick from routing array
-            if request.model == "__route__" {
+            if processed_request.model == "__route__" {
                 let _ = self.metrics.incr_counter("routing_mvp.request", 1).await;
-                let mut chosen = self.provider.default_chat_model().to_string();
+                let chosen = self.provider.default_chat_model().to_string();
                 if let Some(arr) = &self.routing_array {
                     let mut arr_clone = arr.clone();
                     if let Some(ep) = arr_clone.select_endpoint() {
@@ -623,32 +763,138 @@ impl AiClient {
                         .incr_counter("routing_mvp.missing_array", 1)
                         .await;
                 }
-                let mut req2 = request;
-                req2.model = chosen;
-                return self.adapter.chat_completion(req2).await;
+                processed_request.model = chosen;
             }
         }
+
+        // Step 2: Execute request with potential failover
+        let execute_request = || async {
         #[cfg(feature = "interceptors")]
         if let Some(p) = &self.interceptor_pipeline {
             let ctx = crate::interceptors::RequestContext {
                 provider: format!("{:?}", self.provider).to_lowercase(),
-                model: request.model.clone(),
+                    model: processed_request.model.clone(),
             };
             return p
-                .execute(&ctx, &request, || self.adapter.chat_completion(request.clone()))
+                    .execute(&ctx, &processed_request, || self.adapter.chat_completion(processed_request.clone()))
                 .await;
         }
+            self.adapter.chat_completion(processed_request.clone()).await
+        };
 
-        self.adapter.chat_completion(request).await
+        match execute_request().await {
+            Ok(resp) => Ok(resp),
+            Err(e) => {
+                // Step 3: Try failover if configured and error is retryable
+                if let Some(chain) = &self.failover_providers {
+                    if e.is_retryable() || matches!(e, AiLibError::TimeoutError(_)) {
+                        for p in chain {
+                            // Skip if same as current
+                            if *p == self.provider { continue; }
+                            let _ = self.metrics.incr_counter("failover.attempts", 1).await;
+                            
+                            // Create failover client with same configuration
+                            let failover_client = AiClient::new_with_metrics(*p, self.metrics.clone())?;
+                            
+                            // Apply same routing logic to failover request if needed
+                            let mut failover_request = processed_request.clone();
+                            #[cfg(feature = "routing_mvp")]
+                            {
+                                // For failover, we don't re-apply routing since the model was already chosen
+                                // or we use the failover provider's default model
+                                if failover_request.model == "__route__" {
+                                    failover_request.model = p.default_chat_model().to_string();
+                                }
+                            }
+                            
+                            match failover_client.adapter.chat_completion(failover_request).await {
+                                Ok(r) => {
+                                    let _ = self.metrics.incr_counter("failover.success", 1).await;
+                                    return Ok(r);
+                                }
+                                Err(e2) => {
+                                    let _ = self.metrics.incr_counter("failover.error", 1).await;
+                                    // Continue to next provider on retryable
+                                    if !(e2.is_retryable() || matches!(e2, AiLibError::TimeoutError(_))) {
+                                        return Err(e2);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e)
+            }
+        }
     }
 
     /// Streaming chat completion request
+    ///
+    /// This method provides the same routing and failover capabilities as `chat_completion()`,
+    /// but returns a streaming response for real-time processing.
+    ///
+    /// ## Execution Flow
+    /// 1. **Routing (if enabled)**: If `request.model == "__route__"` and `routing_mvp` feature is enabled,
+    ///    the client will select the best available model from the configured `ModelArray` based on
+    ///    health checks and load balancing strategy.
+    /// 2. **Stream Request Execution**: The streaming request is sent to the current provider with the selected model.
+    /// 3. **Failover (if enabled)**: If the stream request fails with a retryable error (network, timeout, 
+    ///    rate limit, 5xx), the client will automatically try the configured failover providers
+    ///    in order, preserving the routing selection.
+    ///
+    /// ## Feature Interaction
+    /// - **Routing + Failover**: When both are configured, routing selection is preserved during
+    ///   failover attempts. The failover providers will use the same model selection.
+    /// - **Interceptors**: Applied after routing but before failover, allowing for request/response
+    ///   modification and monitoring.
+    /// - **Backpressure**: The configured backpressure controller is applied to the final stream.
+    ///
+    /// ## Examples
+    /// ```rust
+    /// use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
+    /// use ai_lib::types::common::Content;
+    /// use futures::stream::StreamExt;
+    ///
+    /// # async fn example() -> Result<(), ai_lib::AiLibError> {
+    /// // Basic usage with failover
+    /// let client = AiClient::new(Provider::OpenAI)?
+    ///     .with_failover(vec![Provider::Anthropic, Provider::Groq]);
+    ///
+    /// // With routing (requires routing_mvp feature)
+    /// #[cfg(feature = "routing_mvp")]
+    /// {
+    ///     let mut array = ai_lib::provider::models::ModelArray::new("production");
+    ///     // ... configure array with endpoints
+    ///     let client = client.with_routing_array(array);
+    /// }
+    ///
+    /// // Streaming request with routing (will select best model from array)
+    /// let request = ChatCompletionRequest::new(
+    ///     "__route__".to_string(),  // Special sentinel for routing
+    ///     vec![Message {
+    ///         role: Role::User,
+    ///         content: Content::Text("Hello".to_string()),
+    ///         function_call: None,
+    ///     }],
+    /// );
+    ///
+    /// let mut stream = client.chat_completion_stream(request).await?;
+    /// while let Some(chunk) = stream.next().await {
+    ///     match chunk {
+    ///         Ok(chunk) => println!("Received: {:?}", chunk),
+    ///         Err(e) => eprintln!("Stream error: {}", e),
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Arguments
     /// * `request` - Chat completion request
     ///
     /// # Returns
     /// * `Result<impl Stream<Item = Result<ChatCompletionChunk, AiLibError>>, AiLibError>` - Stream response on success
+    #[allow(unused_mut)]
     pub async fn chat_completion_stream(
         &self,
         mut request: ChatCompletionRequest,
@@ -670,24 +916,113 @@ impl AiClient {
         } else {
             None
         };
+        // Step 1: Apply routing if configured and model is "__route__"
+        // Note: processed_request needs to be mut because we modify it in the routing_mvp block
+        let mut processed_request = request;
+        #[cfg(feature = "routing_mvp")]
+        {
+            if processed_request.model == "__route__" {
+                let _ = self.metrics.incr_counter("routing_mvp.request", 1).await;
+                let chosen = self.provider.default_chat_model().to_string();
+                if let Some(arr) = &self.routing_array {
+                    let mut arr_clone = arr.clone();
+                    if let Some(ep) = arr_clone.select_endpoint() {
+                        match crate::provider::utils::health_check(&ep.url).await {
+                            Ok(()) => {
+                                let _ = self.metrics.incr_counter("routing_mvp.selected", 1).await;
+                                chosen = ep.model_name.clone();
+                            }
+                            Err(_) => {
+                                let _ = self
+                                    .metrics
+                                    .incr_counter("routing_mvp.health_fail", 1)
+                                    .await;
+                                chosen = self.provider.default_chat_model().to_string();
+                                let _ = self
+                                    .metrics
+                                    .incr_counter("routing_mvp.fallback_default", 1)
+                                    .await;
+                            }
+                        }
+                    } else {
+                        let _ = self
+                            .metrics
+                            .incr_counter("routing_mvp.no_endpoint", 1)
+                            .await;
+                    }
+                } else {
+                    let _ = self
+                        .metrics
+                        .incr_counter("routing_mvp.missing_array", 1)
+                        .await;
+                }
+                processed_request.model = chosen;
+            }
+        }
+
+        // Step 2: Execute stream request with potential failover
+        let execute_stream = || async {
         #[cfg(feature = "interceptors")]
         if let Some(p) = &self.interceptor_pipeline {
             let ctx = crate::interceptors::RequestContext {
                 provider: format!("{:?}", self.provider).to_lowercase(),
-                model: request.model.clone(),
+                    model: processed_request.model.clone(),
             };
-            // Wrap stream request by executing core first and then mapping events (interceptors receive only request/response hooks here)
-            // For simplicity, we only run on_request and then delegate to adapter for streaming.
+                // Wrap stream request by executing core first and then mapping events
             for ic in &p.interceptors {
-                ic.on_request(&ctx, &request).await;
+                    ic.on_request(&ctx, &processed_request).await;
+                }
+                return self.adapter.chat_completion_stream(processed_request).await;
             }
-            let inner = self.adapter.chat_completion_stream(request).await?;
-            let cs = ControlledStream::new_with_bp(inner, None, bp_permit);
-            return Ok(Box::new(cs));
-        }
-        let inner = self.adapter.chat_completion_stream(request).await?;
+            self.adapter.chat_completion_stream(processed_request.clone()).await
+        };
+
+        match execute_stream().await {
+            Ok(inner) => {
         let cs = ControlledStream::new_with_bp(inner, None, bp_permit);
         Ok(Box::new(cs))
+            }
+            Err(e) => {
+                // Step 3: Try failover if configured and error is retryable
+                if let Some(chain) = &self.failover_providers {
+                    if e.is_retryable() || matches!(e, AiLibError::TimeoutError(_)) {
+                        for p in chain {
+                            if *p == self.provider { continue; }
+                            let _ = self.metrics.incr_counter("failover.attempts", 1).await;
+                            
+                            // Create failover client with same configuration
+                            let failover_client = AiClient::new_with_metrics(*p, self.metrics.clone())?;
+                            
+                            // Apply same routing logic to failover request if needed
+                            let mut failover_request = processed_request.clone();
+                            #[cfg(feature = "routing_mvp")]
+                            {
+                                // For failover, we don't re-apply routing since the model was already chosen
+                                // or we use the failover provider's default model
+                                if failover_request.model == "__route__" {
+                                    failover_request.model = p.default_chat_model().to_string();
+                                }
+                            }
+                            
+                            match failover_client.adapter.chat_completion_stream(failover_request).await {
+                                Ok(inner) => {
+                                    let _ = self.metrics.incr_counter("failover.success", 1).await;
+                                    let cs = ControlledStream::new_with_bp(inner, None, bp_permit);
+                                    return Ok(Box::new(cs));
+                                }
+                                Err(e2) => {
+                                    let _ = self.metrics.incr_counter("failover.error", 1).await;
+                                    if !(e2.is_retryable() || matches!(e2, AiLibError::TimeoutError(_))) {
+                                        return Err(e2);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e)
+            }
+        }
     }
 
     /// Streaming chat completion request with cancel control
@@ -909,8 +1244,14 @@ impl AiClient {
             }
             Provider::HuggingFace => Box::new(GenericAdapter::new(ProviderConfigs::huggingface())?),
             Provider::TogetherAI => Box::new(GenericAdapter::new(ProviderConfigs::together_ai())?),
+            Provider::OpenRouter => Box::new(GenericAdapter::new(ProviderConfigs::openrouter())?),
+            Provider::Replicate => Box::new(GenericAdapter::new(ProviderConfigs::replicate())?),
+            Provider::ZhipuAI => Box::new(GenericAdapter::new(ProviderConfigs::zhipu_ai())?),
+            Provider::MiniMax => Box::new(GenericAdapter::new(ProviderConfigs::minimax())?),
             Provider::Mistral => Box::new(MistralAdapter::new()?),
             Provider::Cohere => Box::new(CohereAdapter::new()?),
+            Provider::Perplexity => Box::new(PerplexityAdapter::new()?),
+            Provider::AI21 => Box::new(AI21Adapter::new()?),
             // Provider::Bedrock => Box::new(BedrockAdapter::new()?),
         };
 
@@ -1556,6 +1897,7 @@ impl AiClientBuilder {
             custom_default_chat_model: self.default_chat_model,
             custom_default_multimodal_model: self.default_multimodal_model,
             backpressure: bp_ctrl,
+            failover_providers: None,
             #[cfg(feature = "routing_mvp")]
             routing_array: self.routing_array,
             #[cfg(feature = "interceptors")]
@@ -1627,6 +1969,12 @@ impl AiClientBuilder {
             Provider::AzureOpenAI => "AZURE_OPENAI_BASE_URL".to_string(),
             Provider::HuggingFace => "HUGGINGFACE_BASE_URL".to_string(),
             Provider::TogetherAI => "TOGETHER_BASE_URL".to_string(),
+            Provider::OpenRouter => "OPENROUTER_BASE_URL".to_string(),
+            Provider::Replicate => "REPLICATE_BASE_URL".to_string(),
+            Provider::ZhipuAI => "ZHIPU_BASE_URL".to_string(),
+            Provider::MiniMax => "MINIMAX_BASE_URL".to_string(),
+            Provider::Perplexity => "PERPLEXITY_BASE_URL".to_string(),
+            Provider::AI21 => "AI21_BASE_URL".to_string(),
             // These providers don't support custom base_url
             Provider::OpenAI | Provider::Gemini | Provider::Mistral | Provider::Cohere => {
                 "".to_string()

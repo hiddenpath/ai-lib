@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Show OpenAI-specific features
     println!("\n🔍 OpenAI Provider Information:");
-    println!("   • Provider Type: Independent (uses OpenAiAdapter)");
+    println!("   • Provider Type: Independent (selected via Provider::OpenAI)");
     println!("   • Base URL: https://api.openai.com");
     println!("   • API Key: OPENAI_API_KEY environment variable");
     println!("   • Supported Models: gpt-3.5-turbo, gpt-4, gpt-4o");

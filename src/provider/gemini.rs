@@ -30,6 +30,7 @@ pub struct GeminiAdapter {
 }
 
 impl GeminiAdapter {
+    #[allow(dead_code)]
     fn build_default_timeout_secs() -> u64 {
         std::env::var("AI_HTTP_TIMEOUT_SECS")
             .ok()

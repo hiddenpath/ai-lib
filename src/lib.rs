@@ -1,3 +1,4 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
 //! AI-lib: A Unified AI SDK for Rust
 //!
 //! This library provides a single, consistent interface for interacting with multiple AI model providers.
@@ -5,8 +6,9 @@
 //! # Quick Start
 //!
 //! ```rust
-//! use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role};
-//! use ai_lib::types::common::Content;
+//! use ai_lib::{AiClient, Provider, ChatCompletionRequest, Message, Role, Content};
+//! // Or in applications, prefer the minimal prelude:
+//! // use ai_lib::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -28,6 +30,12 @@
 //!     Ok(())
 //! }
 //! ```
+//!
+//! ## Import guidance
+//! - For application code, prefer `use ai_lib::prelude::*;` to get the minimal common set.
+//! - Library authors can import explicitly from domain modules for fine-grained control.
+//!
+//! See the module tree and import patterns guide for details: [docs/MODULE_TREE_AND_IMPORTS.md](docs/MODULE_TREE_AND_IMPORTS.md)
 //!
 //! # Proxy Support
 //!
@@ -90,7 +98,7 @@ pub mod error_handling;
 pub use api::ChatApi;
 pub use client::{AiClient, AiClientBuilder, ModelOptions, Provider};
 pub use types::{
-    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
+    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role,
     FunctionCall, FunctionCallPolicy, Tool,
 };
 // Convenience re-exports: make the most-used types available from the crate root so
@@ -103,13 +111,16 @@ pub use transport::{
 };
 // Re-export minimal configuration type
 pub use config::ConnectionOptions;
-pub use types::common::{Content, UsageStatus};
+// Export response metadata (Usage/UsageStatus) and common Content from canonical modules
+pub use types::response::{Usage, UsageStatus};
+pub use types::common::Content;
 
 // Re-export configuration types
 pub use provider::config::{FieldMapping, ProviderConfig};
 pub use provider::configs::ProviderConfigs;
 
 // Re-export model management tools (feature-gated)
+#[cfg_attr(docsrs, doc(cfg(feature = "routing_mvp")))]
 #[cfg(feature = "routing_mvp")]
 pub use provider::models::{
     CustomModelManager, LoadBalancingStrategy, ModelArray, ModelCapabilities, ModelEndpoint,
@@ -125,3 +136,21 @@ pub use utils::file::{
     is_file_size_acceptable, is_image_file, is_text_file, is_video_file, read_file, remove_file,
     save_temp_file, validate_file,
 };
+
+
+/// Prelude with the minimal commonly used items for applications.
+///
+/// Prefer `use ai_lib::prelude::*;` in application code for better ergonomics.
+/// Library authors may prefer importing explicit items from their modules.
+pub mod prelude {
+    pub use crate::{AiClient, AiClientBuilder, Provider};
+    pub use crate::types::{ChatCompletionRequest, ChatCompletionResponse, Choice};
+    pub use crate::types::common::{Content, Message, Role};
+    pub use crate::types::response::{Usage, UsageStatus};
+    pub use crate::types::error::AiLibError;
+}
+
+// Module tree and import guidance:
+// - Prefer the `prelude` for the minimal usable set in apps
+// - Top-level re-exports expose the most common types
+// - Provider-specific modules are internal in OSS; use `Provider` enum and `AiClient` to select providers

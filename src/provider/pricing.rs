@@ -59,6 +59,12 @@ pub fn get_pricing(provider: Provider, model: &str) -> Option<PricingInfo> {
         | Provider::Anthropic
         | Provider::HuggingFace
         | Provider::TogetherAI
+        | Provider::OpenRouter
+        | Provider::Replicate
+        | Provider::ZhipuAI
+        | Provider::MiniMax
+        | Provider::Perplexity
+        | Provider::AI21
         | Provider::Qwen
         | Provider::BaiduWenxin
         | Provider::TencentHunyuan

@@ -2,7 +2,7 @@
 
 > A unified, reliable, high-performance multi-provider AI SDK for Rust
 
-A production-grade, provider-agnostic SDK that provides a unified Rust API for 17+ AI platforms and growing (OpenAI, Groq, Anthropic, Gemini, Mistral, Cohere, Azure OpenAI, Ollama, DeepSeek, Qwen, Baidu ERNIE, Tencent Hunyuan, iFlytek Spark, Kimi, HuggingFace, TogetherAI, xAI Grok, and more).  
+A production-grade, provider-agnostic SDK that provides a unified Rust API for 20+ AI platforms and growing (OpenAI, Groq, Anthropic, Gemini, Mistral, Cohere, Azure OpenAI, Ollama, DeepSeek, Qwen, Baidu ERNIE, Tencent Hunyuan, iFlytek Spark, Kimi, HuggingFace, TogetherAI, xAI Grok, OpenRouter, Replicate, Perplexity, AI21, ZhipuAI, MiniMax, and more).  
 Eliminates fragmented authentication flows, streaming formats, error semantics, model naming differences, and inconsistent function calling. Scale from one-liner scripts to production systems without rewriting integration code.
 
 ---
@@ -13,6 +13,7 @@ Eliminates fragmented authentication flows, streaming formats, error semantics, 
 ai-lib unifies AI provider complexity into a single, ergonomic Rust interface:
 
 - **Universal API**: Chat, multimodal, and function calling across all providers
+- **Multimodal Content**: Easy image and audio content creation with `Content::from_image_file()` and `Content::from_audio_file()`
 - **Unified Streaming**: Consistent SSE/JSONL parsing with real-time deltas
 - **Reliability**: Built-in retry, timeout, circuit breaker, and error classification
 - **Flexible Configuration**: Environment variables, builder pattern, or explicit overrides
@@ -20,12 +21,14 @@ ai-lib unifies AI provider complexity into a single, ergonomic Rust interface:
 
 **Result**: Focus on your product logic while ai-lib handles provider integration friction.
 
+> Import guidance: In application code, prefer `use ai_lib::prelude::*;` for a minimal set of common items. Library authors may use explicit imports by domain. See the module tree and import patterns guide: `docs/MODULE_TREE_AND_IMPORTS.md`.
+
 ## ⚙️ Quick Start
 
 ### Installation
 ```toml
 [dependencies]
-ai-lib = "0.3.3"
+ai-lib = "0.3.4"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 ```
@@ -44,7 +47,8 @@ async fn main() -> anyhow::Result<()> {
 
 ### Standard Usage
 ```rust
-use ai_lib::{AiClient, Provider, Message, Role, Content, ChatCompletionRequest};
+// Application code can also use the prelude for minimal imports
+use ai_lib::prelude::*;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -89,6 +93,7 @@ while let Some(chunk) = stream.next().await {
 | **ConnectionOptions** | Runtime configuration overrides |
 | **Metrics Trait** | Custom observability integration |
 | **Transport** | Injectable HTTP + streaming layer |
+| **Usage / UsageStatus** | Response-level usage metadata (tokens + status). Import from `ai_lib::Usage` or `ai_lib::types::response::Usage` |
 
 ---
 
@@ -103,6 +108,7 @@ while let Some(chunk) = stream.next().await {
 
 ### Reliability & Production
 - **Built-in Resilience**: Retry with exponential backoff, circuit breakers
+- **Basic Failover (OSS)**: `AiClient::with_failover([...])` to switch providers on retryable errors
 - **Error Classification**: Distinguish transient vs permanent failures
 - **Connection Management**: Pooling, timeouts, proxy support
 - **Observability**: Pluggable metrics and tracing integration
@@ -124,6 +130,8 @@ while let Some(chunk) = stream.next().await {
 | **Cohere** | ✅ | RAG-optimized |
 | **HuggingFace** | ✅ | Open source models |
 | **TogetherAI** | ✅ | Cost-effective inference |
+| **OpenRouter** | ✅ | Gateway; provider/model routing |
+| **Replicate** | ✅ | Hosted OSS models |
 | **DeepSeek** | ✅ | Reasoning models |
 | **Qwen** | ✅ | Chinese ecosystem |
 | **Baidu ERNIE** | ✅ | Enterprise China |
@@ -133,6 +141,10 @@ while let Some(chunk) = stream.next().await {
 | **Azure OpenAI** | ✅ | Enterprise compliance |
 | **Ollama** | ✅ | Local/air-gapped |
 | **xAI Grok** | ✅ | Real-time oriented |
+| **Perplexity** | ✅ | Search-augmented chat |
+| **AI21** | ✅ | Jurassic models |
+| **ZhipuAI (GLM)** | ✅ | China GLM series |
+| **MiniMax** | ✅ | China multimodal |
 
 *See [examples/](examples/) for provider-specific usage patterns.*
 
@@ -147,6 +159,12 @@ export OPENAI_API_KEY=...
 export GROQ_API_KEY=...
 export GEMINI_API_KEY=...
 export ANTHROPIC_API_KEY=...
+export OPENROUTER_API_KEY=...
+export REPLICATE_API_TOKEN=...
+export PERPLEXITY_API_KEY=...
+export AI21_API_KEY=...
+export ZHIPU_API_KEY=...
+export MINIMAX_API_KEY=...
 
 # Optional: Custom endpoints
 export GROQ_BASE_URL=https://custom.groq.com
@@ -189,6 +207,19 @@ let client = AiClientBuilder::new(Provider::Groq)
 
 ---
 
+## 🔁 Failover (OSS)
+
+Use `with_failover` to define an ordered fallback chain when a request fails with a retryable error (network/timeout/rate-limit/5xx).
+
+```rust
+use ai_lib::{AiClient, Provider};
+
+let client = AiClient::new(Provider::OpenAI)?
+    .with_failover(vec![Provider::Anthropic, Provider::Groq]);
+```
+
+When combined with routing features, the model selection is preserved across failover attempts.
+
 ## 🛡️ Reliability & Resilience
 
 | Feature | Description |
@@ -225,6 +256,7 @@ match response.usage_status {
     UsageStatus::Unsupported => println!("Provider doesn't support usage tracking"),
 }
 ```
+Migration: `Usage`/`UsageStatus` are defined in `ai_lib::types::response` and re-exported at the root. Old imports from `types::common` are deprecated and will be removed before 1.0.
 
 ### Optional Features
 - `interceptors`: Retry, timeout, circuit breaker pipeline

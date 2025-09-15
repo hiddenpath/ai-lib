@@ -1,5 +1,37 @@
-use crate::types::{Choice, Usage, UsageStatus};
+use crate::types::Choice;
 use serde::{Deserialize, Serialize};
+
+/// Usage token counts returned by providers as part of chat response.
+///
+/// Semantically this is response metadata (per-request usage info) and therefore
+/// lives in the `types::response` module. For convenience this type is also
+/// re-exported at the crate root as `ai_lib::Usage`.
+#[doc(alias = "token_usage")]
+#[doc(alias = "usage_info")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Usage {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+}
+
+/// Indicates the reliability and source of usage data
+#[doc(alias = "usage_status")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum UsageStatus {
+    /// Usage data is accurate and finalized from the provider
+    #[serde(rename = "finalized")]
+    Finalized,
+    /// Usage data is estimated (e.g., using tokenizer approximation)
+    #[serde(rename = "estimated")]
+    Estimated,
+    /// Usage data is not yet available (e.g., streaming in progress)
+    #[serde(rename = "pending")]
+    Pending,
+    /// Provider doesn't support usage tracking
+    #[serde(rename = "unsupported")]
+    Unsupported,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionResponse {

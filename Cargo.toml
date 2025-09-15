@@ -1,6 +1,6 @@
 [package]
 name = "ai-lib"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 authors = ["AI-lib Contributors"]
 description = "A unified AI SDK for Rust providing a single interface for multiple AI providers with hybrid architecture"
@@ -52,6 +52,8 @@ md5 = "0.8.0"
 [features]
 # No default features to keep OSS core lean; opt-in progressive complexity
 default = []
+# Enable adapter modules for internal/testing usage only. Not recommended for application code.
+internal_adapters = []
 
 # Interceptor pipeline (retry, rate limiters, circuit breaker wiring lives behind this)
 interceptors = []

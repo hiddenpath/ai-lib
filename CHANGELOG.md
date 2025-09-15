@@ -1,11 +1,54 @@
-# Changelog
+## v0.3.4 - 2025-09-15
 
-All notable changes to this project will be documented in this file.
+### Added
+- **Provider Failover Support**: New `with_failover(Vec<Provider>)` method in OSS
+    - Enables basic provider failover on retryable errors (network/timeout/rate limit/5xx)
+    - Non-breaking and opt-in feature
+    - Advanced routing, weighted failover, SLO/cost-aware policies remain in ai-lib-pro
+- **Major Provider Expansion**: Added support for 6 new AI providers
+    - **OpenRouter** (OpenAI-compatible): Unified gateway for multiple AI models
+    - **Replicate** (OpenAI-compatible): Access to various AI models  
+    - **智谱AI (GLM)** (OpenAI-compatible): GLM series models from China
+    - **MiniMax** (OpenAI-compatible): AI models from China
+    - **Perplexity** (Independent): Search-enhanced AI with custom API
+    - **AI21** (Independent): Jurassic series models
+    - All providers include proper API endpoints, authentication, and default models
+    - Comprehensive rustdoc documentation for all new providers
+- **New Import System**: Complete module tree restructuring with improved ergonomics
+    - Top-level re-exports and minimal `prelude` for common items
+    - Recommended for apps: `use ai_lib::prelude::*;`
+    - Core top-level exports: `AiClient`, `Provider`, `ChatCompletionRequest`, `ChatCompletionResponse`, `Content`, `Message`, `Role`, `Usage`, `UsageStatus`, `Choice`
+    - Comprehensive module tree and import patterns guide (`docs/MODULE_TREE_AND_IMPORTS.md`)
+- **Enhanced Multimodal Content Creation**: Convenient `Content` methods for file handling
+    - `Content::from_image_file()` and `Content::from_audio_file()` for automatic file processing
+    - `Content::from_data_url()` for direct data URL usage
+    - Automatic MIME type detection and file size handling
+    - Support for multiple image formats: PNG, JPEG, GIF, WebP, SVG
+    - Support for multiple audio formats: MP3, WAV, OGG, M4A, FLAC
+- **Documentation Improvements**:
+    - `#[cfg_attr(docsrs, doc(cfg(...)))]` annotations for feature-gated APIs to improve docs discoverability
+    - Updated README with multimodal content creation guidance
+    - Module tree consistency across all documentation
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+### Changed
+- **BREAKING**: Moved `Usage` and `UsageStatus` into `src/types/response.rs` (they are now part of response metadata)
+    - Rationale: `Usage` and `UsageStatus` are response-specific metadata and belong next to `ChatCompletionResponse`
+    - Migration: Existing imports like `use ai_lib::types::common::Usage` will continue to work for now but are deprecated. Please update to `use ai_lib::types::response::Usage` or `use ai_lib::Usage`
+    - Deprecation policy: Deprecated aliases in `types::common` will be removed before 1.0. Please migrate promptly
+- **BREAKING**: `provider::utils` module is now internal (`pub(crate)`) - use public `Content` methods instead
+- **API Surface Cleanup**: Provider-specific modules are now internal by default in OSS builds
+    - Reduces public surface and avoids tight coupling
+    - Select providers via the `Provider` enum with `AiClient`
+    - Multimodal functionality encapsulated within `AiClient` and `Content` types
+    - File upload and processing handled automatically by the client
+    - Cleaner public API with internal implementation details hidden
 
-## [0.3.1] - 2025-01-27
+### Fixed
+- Fixed doctest compilation issues in `chat_completion_stream` documentation
+- Fixed test failures in upload functionality tests
+- Improved module tree consistency across all documentation
+
+
 
 ## [0.3.3] - 2025-09-14
 

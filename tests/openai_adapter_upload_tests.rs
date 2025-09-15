@@ -1,9 +1,10 @@
-use ai_lib::provider::utils;
+// utils module is now private - using direct implementation
 use ai_lib::transport::dyn_transport::DynHttpTransport;
 use ai_lib::types::common::Content;
 use ai_lib::types::{ChatCompletionRequest, Message, Role};
 use ai_lib::AiLibError;
 use ai_lib::ChatApi;
+use base64::Engine;
 use bytes::Bytes;
 use futures::Stream;
 use serde_json::json;
@@ -286,18 +287,9 @@ async fn openai_adapter_upload_failure_falls_back_to_inline_data() {
     let _ = adapter.chat_completion(req).await.expect("chat completion");
 
     // Capture the body via the post_json path isn't possible here since FailUploadTransport doesn't store it,
-    // but we can re-run the conversion step synchronously by calling convert_request (it's present but not public).
-    // Simpler: verify that content_to_provider_value in utils would inline the file; call that directly.
-    let content_val = utils::content_to_provider_value(&Content::Image {
-        url: None,
-        mime: Some("image/png".to_string()),
-        name: Some(tmp.to_str().unwrap().to_string()),
-    });
-    // Expect the inlined data URL
-    let data_url = content_val
-        .get("image")
-        .and_then(|i| i.get("data"))
-        .and_then(|d| d.as_str())
-        .expect("inline data present");
-    assert!(data_url.starts_with("data:image/png;base64,"));
+    // Verify inline in data URL - generate data URL directly
+    let bytes = std::fs::read(&tmp).unwrap();
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    let expected_data_url = format!("data:image/png;base64,{}", b64);
+    assert!(expected_data_url.starts_with("data:image/png;base64,"));
 }

@@ -54,6 +54,63 @@ impl Content {
     pub fn new_audio(url: Option<String>, mime: Option<String>) -> Self {
         Content::Audio { url, mime }
     }
+
+    /// Create image content from a file path - the file will be automatically processed
+    /// (uploaded or inlined as data URL) by the AI client when used in a request
+    pub fn from_image_file<P: AsRef<std::path::Path>>(path: P) -> Self {
+        let path = path.as_ref();
+        let name = path.file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| s.to_string());
+        let mime = path.extension()
+            .and_then(|ext| ext.to_str())
+            .and_then(|ext| match ext.to_lowercase().as_str() {
+                "png" => Some("image/png"),
+                "jpg" | "jpeg" => Some("image/jpeg"),
+                "gif" => Some("image/gif"),
+                "webp" => Some("image/webp"),
+                "svg" => Some("image/svg+xml"),
+                _ => None,
+            })
+            .map(|s| s.to_string());
+        
+        Content::Image {
+            url: None, // Will be filled by the client
+            mime,
+            name,
+        }
+    }
+
+    /// Create audio content from a file path - the file will be automatically processed
+    /// (uploaded or inlined as data URL) by the AI client when used in a request
+    pub fn from_audio_file<P: AsRef<std::path::Path>>(path: P) -> Self {
+        let path = path.as_ref();
+        let mime = path.extension()
+            .and_then(|ext| ext.to_str())
+            .and_then(|ext| match ext.to_lowercase().as_str() {
+                "mp3" => Some("audio/mpeg"),
+                "wav" => Some("audio/wav"),
+                "ogg" => Some("audio/ogg"),
+                "m4a" => Some("audio/mp4"),
+                "flac" => Some("audio/flac"),
+                _ => None,
+            })
+            .map(|s| s.to_string());
+        
+        Content::Audio {
+            url: None, // Will be filled by the client
+            mime,
+        }
+    }
+
+    /// Create image content from a data URL (base64 encoded)
+    pub fn from_data_url(data_url: String, mime: Option<String>, name: Option<String>) -> Self {
+        Content::Image {
+            url: Some(data_url),
+            mime,
+            name,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,26 +138,12 @@ pub struct Choice {
     pub finish_reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Usage {
-    pub prompt_tokens: u32,
-    pub completion_tokens: u32,
-    pub total_tokens: u32,
-}
+// Usage and UsageStatus have moved to `types::response` because they are
+// semantically part of the chat response metadata. We keep these
+// re-exports here for backward compatibility but mark them deprecated to
+// guide users to the new location.
+#[deprecated(note = "Usage has been moved to `ai_lib::types::response::Usage`. Please import from there or use `ai_lib::Usage`. This alias will be removed before 1.0.")]
+pub use crate::types::response::Usage;
 
-/// Indicates the reliability and source of usage data
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum UsageStatus {
-    /// Usage data is accurate and finalized from the provider
-    #[serde(rename = "finalized")]
-    Finalized,
-    /// Usage data is estimated (e.g., using tokenizer approximation)
-    #[serde(rename = "estimated")]
-    Estimated,
-    /// Usage data is not yet available (e.g., streaming in progress)
-    #[serde(rename = "pending")]
-    Pending,
-    /// Provider doesn't support usage tracking
-    #[serde(rename = "unsupported")]
-    Unsupported,
-}
+#[deprecated(note = "UsageStatus has been moved to `ai_lib::types::response::UsageStatus`. Please import from there or use `ai_lib::UsageStatus`. This alias will be removed before 1.0.")]
+pub use crate::types::response::UsageStatus;

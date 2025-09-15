@@ -9,7 +9,10 @@ pub mod response;
 pub use request::ChatCompletionRequest;
 pub use response::ChatCompletionResponse;
 pub mod function_call;
-pub use common::{Choice, Message, Role, Usage, UsageStatus};
+pub use common::{Choice, Message, Role};
+/// Usage and UsageStatus are response-level metadata; prefer importing from
+/// `ai_lib::types::response::{Usage, UsageStatus}` or the crate root re-exports.
+pub use response::{Usage, UsageStatus};
 pub use error::AiLibError;
 pub use function_call::{FunctionCall, FunctionCallPolicy, Tool};
 

@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Show Cohere-specific features
     println!("\n🔍 Cohere Provider Information:");
-    println!("   • Provider Type: Independent (uses CohereAdapter)");
+    println!("   • Provider Type: Independent (selected via Provider::Cohere)");
     println!("   • Base URL: https://api.cohere.ai");
     println!("   • API Key: COHERE_API_KEY environment variable");
     println!("   • Supported Models: command, command-light, command-nightly");

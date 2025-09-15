@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 #[cfg(not(feature = "unified_sse"))]
+#[allow(dead_code)]
 fn find_event_boundary(buffer: &[u8]) -> Option<usize> {
     let mut i = 0;
     while i < buffer.len().saturating_sub(1) {
@@ -32,6 +33,7 @@ fn find_event_boundary(buffer: &[u8]) -> Option<usize> {
 }
 
 #[cfg(not(feature = "unified_sse"))]
+#[allow(dead_code)]
 fn parse_sse_event(event_text: &str) -> Option<Result<Option<ChatCompletionChunk>, AiLibError>> {
     for line in event_text.lines() {
         let line = line.trim();
@@ -180,6 +182,7 @@ pub struct CohereAdapter {
 }
 
 impl CohereAdapter {
+    #[allow(dead_code)]
     fn build_default_timeout_secs() -> u64 {
         std::env::var("AI_HTTP_TIMEOUT_SECS")
             .ok()

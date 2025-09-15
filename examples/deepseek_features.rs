@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Config-driven provider (GenericAdapter)
+    // Config-driven provider (selected via Provider::DeepSeek)
     let client = AiClient::new(Provider::DeepSeek)?;
     let model = client.default_chat_model();
 

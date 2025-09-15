@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Independent provider (MistralAdapter)
+    // Independent provider (selected via Provider::Mistral)
     let client = AiClient::new(Provider::Mistral)?;
     let model = client.default_chat_model();
 

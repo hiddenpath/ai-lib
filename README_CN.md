@@ -2,7 +2,7 @@
 
 > 面向 Rust 的统一、可靠、高性能多厂商 AI SDK
 
-一个生产级、厂商无关的 SDK，提供面向 17+ 家且持续增加 的 AI 平台的统一 Rust API（OpenAI、Groq、Anthropic、Gemini、Mistral、Cohere、Azure OpenAI、Ollama、DeepSeek、Qwen、百度文心、腾讯混元、讯飞星火、Kimi、HuggingFace、TogetherAI、xAI Grok 等）。  
+一个生产级、厂商无关的 SDK，提供面向 20+ 家且持续增加 的 AI 平台的统一 Rust API（OpenAI、Groq、Anthropic、Gemini、Mistral、Cohere、Azure OpenAI、Ollama、DeepSeek、Qwen、百度文心、腾讯混元、讯飞星火、Kimi、HuggingFace、TogetherAI、xAI Grok、OpenRouter、Replicate、Perplexity、AI21、智谱AI、MiniMax 等）。  
 它消除了分散的认证流程、流式格式、错误语义、模型命名差异和不一致的函数调用。无需重写集成代码，即可从一行脚本扩展到生产系统。
 
 ---
@@ -13,6 +13,7 @@
 a i-lib 将多家 AI 厂商的复杂性统一为一个简洁的人体工学 Rust 接口：
 
 - **通用 API**：在所有厂商上统一的聊天、多模态与函数调用
+- **多模态内容**：便捷的图像和音频内容创建，支持 `Content::from_image_file()` 和 `Content::from_audio_file()`
 - **统一流式**：一致的 SSE/JSONL 解析与实时增量
 - **可靠性**：内置重试、超时、熔断与错误分类
 - **灵活配置**：环境变量、Builder 模式或显式覆盖
@@ -20,12 +21,14 @@ a i-lib 将多家 AI 厂商的复杂性统一为一个简洁的人体工学 Rust
 
 **结果**：你专注产品逻辑，ai-lib 处理供应商集成的繁琐工作。
 
+> 导入建议：应用层优先使用 `use ai_lib::prelude::*;` 获取最小常用集；库作者建议按领域显式导入。参见模块树与导入模式指南：`docs/MODULE_TREE_AND_IMPORTS.md`。
+
 ## ⚙️ 快速开始
 
 ### 安装
 ```toml
 [dependencies]
-ai-lib = "0.3.3"
+ai-lib = "0.3.4"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 ```
@@ -44,7 +47,8 @@ async fn main() -> anyhow::Result<()> {
 
 ### 标准用法
 ```rust
-use ai_lib::{AiClient, Provider, Message, Role, Content, ChatCompletionRequest};
+// 应用层可以使用 prelude 来最小化导入
+use ai_lib::prelude::*;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -89,6 +93,7 @@ while let Some(chunk) = stream.next().await {
 | **ConnectionOptions** | 运行时配置覆盖 |
 | **Metrics Trait** | 自定义可观测性集成 |
 | **Transport** | 可注入的 HTTP + 流式层 |
+| **Usage / UsageStatus** | 响应级使用量元数据（令牌 + 状态），从 `ai_lib::Usage` 或 `ai_lib::types::response::Usage` 导入 |
 
 ---
 
@@ -103,6 +108,7 @@ while let Some(chunk) = stream.next().await {
 
 ### 可靠性与生产
 - **内置弹性**：指数退避重试、熔断器
+- **基础故障转移（OSS）**：使用 `AiClient::with_failover([...])` 在可重试错误时切换厂商
 - **错误分类**：区分瞬态与永久失败
 - **连接管理**：池化、超时、代理支持
 - **可观测性**：可插拔指标与追踪集成
@@ -124,6 +130,8 @@ while let Some(chunk) = stream.next().await {
 | **Cohere** | ✅ | RAG 优化 |
 | **HuggingFace** | ✅ | 开源模型 |
 | **TogetherAI** | ✅ | 性价比高 |
+| **OpenRouter** | ✅ | 网关；支持 provider/model 路由 |
+| **Replicate** | ✅ | 托管开源模型 |
 | **DeepSeek** | ✅ | 推理模型 |
 | **Qwen** | ✅ | 中文生态 |
 | **百度文心** | ✅ | 企业级中国市场 |
@@ -133,6 +141,10 @@ while let Some(chunk) = stream.next().await {
 | **Azure OpenAI** | ✅ | 企业合规 |
 | **Ollama** | ✅ | 本地/气隙环境 |
 | **xAI Grok** | ✅ | 实时导向 |
+| **Perplexity** | ✅ | 搜索增强对话 |
+| **AI21** | ✅ | Jurassic 系列 |
+| **智谱AI (GLM)** | ✅ | 国产 GLM 系列 |
+| **MiniMax** | ✅ | 国产多模态 |
 
 *更多用法参见 [examples/](examples/)。*
 
@@ -147,6 +159,12 @@ export OPENAI_API_KEY=...
 export GROQ_API_KEY=...
 export GEMINI_API_KEY=...
 export ANTHROPIC_API_KEY=...
+export OPENROUTER_API_KEY=...
+export REPLICATE_API_TOKEN=...
+export PERPLEXITY_API_KEY=...
+export AI21_API_KEY=...
+export ZHIPU_API_KEY=...
+export MINIMAX_API_KEY=...
 
 # 可选：自定义 Endpoint
 export GROQ_BASE_URL=https://custom.groq.com
@@ -188,6 +206,19 @@ let client = AiClientBuilder::new(Provider::Groq)
 ```
 
 ---
+
+## 🔁 故障转移（OSS）
+
+在网络错误、超时、限流或 5xx 等可重试错误出现时，通过 `with_failover` 定义有序的备用厂商链：
+
+```rust
+use ai_lib::{AiClient, Provider};
+
+let client = AiClient::new(Provider::OpenAI)?
+    .with_failover(vec![Provider::Anthropic, Provider::Groq]);
+```
+
+如与路由能力同时使用，模型选择会在故障转移过程中被保留。
 
 ## 🛡️ 可靠性与弹性
 

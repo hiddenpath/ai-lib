@@ -2,7 +2,7 @@
 
 > INTERNAL DRAFT — NOT FOR PUBLICATION
 
-This guide shows how to route ai-lib traffic through an OpenAI-compatible gateway (e.g., Helicone AI Gateway) while keeping your Rust code unchanged at the application layer.
+This guide shows how to route ai-lib traffic through an OpenAI-compatible gateway (e.g., OpenRouter, Helicone AI Gateway) while keeping your Rust code unchanged at the application layer.
 
 > Scope: client-side configuration only. No changes to ai-lib modules are required.
 
@@ -35,13 +35,13 @@ let client = AiClient::with_options(
 )?;
 ```
 
-2) Use provider-prefixed model identifiers when required by the gateway
+2) Use provider-prefixed model identifiers when required by the gateway (e.g., OpenRouter)
 
 ```rust
 use ai_lib::{ChatCompletionRequest, Message, Role, Content};
 
 let req = ChatCompletionRequest::new(
-    // examples: "openai/gpt-4o-mini", "anthropic/claude-3-5-sonnet"
+    // examples: "openai/gpt-4o-mini", "anthropic/claude-3-5-sonnet", "mistral/mistral-small"
     "openai/gpt-4o-mini".to_string(),
     vec![Message {
         role: Role::User,

@@ -59,9 +59,14 @@ impl ProviderClassification for Provider {
             Provider::AzureOpenAI => Ok(ProviderConfigs::azure_openai()),
             Provider::HuggingFace => Ok(ProviderConfigs::huggingface()),
             Provider::TogetherAI => Ok(ProviderConfigs::together_ai()),
+            Provider::OpenRouter => Ok(ProviderConfigs::openrouter()),
+            Provider::Replicate => Ok(ProviderConfigs::replicate()),
+            Provider::ZhipuAI => Ok(ProviderConfigs::zhipu_ai()),
+            Provider::MiniMax => Ok(ProviderConfigs::minimax()),
 
             // Independent providers don't support custom configuration
-            Provider::OpenAI | Provider::Gemini | Provider::Mistral | Provider::Cohere => {
+            Provider::OpenAI | Provider::Gemini | Provider::Mistral | Provider::Cohere | 
+            Provider::Perplexity | Provider::AI21 => {
                 Err(crate::types::AiLibError::ConfigurationError(
                     "This provider does not support custom configuration".to_string(),
                 ))
@@ -84,12 +89,16 @@ pub const CONFIG_DRIVEN_PROVIDERS: &[Provider] = &[
     Provider::AzureOpenAI,
     Provider::HuggingFace,
     Provider::TogetherAI,
+    Provider::OpenRouter,
+    Provider::Replicate,
     // Chinese providers (config-driven)
     Provider::BaiduWenxin,
     Provider::TencentHunyuan,
     Provider::IflytekSpark,
     Provider::Moonshot,
     Provider::Qwen,
+    Provider::ZhipuAI,
+    Provider::MiniMax,
 ];
 
 /// Providers that use independent adapters
@@ -98,6 +107,8 @@ pub const INDEPENDENT_PROVIDERS: &[Provider] = &[
     Provider::Gemini,
     Provider::Mistral,
     Provider::Cohere,
+    Provider::Perplexity,
+    Provider::AI21,
 ];
 
 /// All supported providers
@@ -111,17 +122,23 @@ pub const ALL_PROVIDERS: &[Provider] = &[
     Provider::AzureOpenAI,
     Provider::HuggingFace,
     Provider::TogetherAI,
+    Provider::OpenRouter,
+    Provider::Replicate,
     // Chinese providers
     Provider::BaiduWenxin,
     Provider::TencentHunyuan,
     Provider::IflytekSpark,
     Provider::Moonshot,
     Provider::Qwen,
+    Provider::ZhipuAI,
+    Provider::MiniMax,
     // Independent providers
     Provider::OpenAI,
     Provider::Gemini,
     Provider::Mistral,
     Provider::Cohere,
+    Provider::Perplexity,
+    Provider::AI21,
 ];
 
 /// Helper functions for provider classification
