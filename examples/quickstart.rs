@@ -1,6 +1,5 @@
 /// AI-lib quickstart example
-use ai_lib::types::common::Content;
-use ai_lib::{AiClient, AiClientBuilder, ChatCompletionRequest, Message, Provider, Role};
+use ai_lib::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -26,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "llama3-8b-8192".to_string(), // Model name
         vec![Message {
             role: Role::User,
-            content: Content::Text("Hello! How are you?".to_string()),
+            content: Content::new_text("Hello! How are you?"),
             function_call: None,
         }],
     );

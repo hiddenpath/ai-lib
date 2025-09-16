@@ -130,8 +130,8 @@ while let Some(chunk) = stream.next().await {
 | **Cohere** | ✅ | RAG-optimized |
 | **HuggingFace** | ✅ | Open source models |
 | **TogetherAI** | ✅ | Cost-effective inference |
-| **OpenRouter** | ✅ | Gateway; provider/model routing |
-| **Replicate** | ✅ | Hosted OSS models |
+| **OpenRouter** | ✅ | Unified gateway, multi-provider model routing |
+| **Replicate** | ✅ | Hosted OSS models gateway |
 | **DeepSeek** | ✅ | Reasoning models |
 | **Qwen** | ✅ | Chinese ecosystem |
 | **Baidu ERNIE** | ✅ | Enterprise China |
@@ -147,6 +147,9 @@ while let Some(chunk) = stream.next().await {
 | **MiniMax** | ✅ | China multimodal |
 
 *See [examples/](examples/) for provider-specific usage patterns.*
+
+### Gateway Providers
+ai-lib supports gateway providers like OpenRouter and Replicate that provide unified access to multiple AI models. Gateway platforms use `provider/model` format for model naming (e.g., `openai/gpt-4o`), while direct providers use original model names (e.g., `gpt-4o`).
 
 ---
 

@@ -130,8 +130,8 @@ while let Some(chunk) = stream.next().await {
 | **Cohere** | ✅ | RAG 优化 |
 | **HuggingFace** | ✅ | 开源模型 |
 | **TogetherAI** | ✅ | 性价比高 |
-| **OpenRouter** | ✅ | 网关；支持 provider/model 路由 |
-| **Replicate** | ✅ | 托管开源模型 |
+| **OpenRouter** | ✅ | 统一网关，支持多提供商模型路由 |
+| **Replicate** | ✅ | 托管开源模型网关 |
 | **DeepSeek** | ✅ | 推理模型 |
 | **Qwen** | ✅ | 中文生态 |
 | **百度文心** | ✅ | 企业级中国市场 |
@@ -147,6 +147,9 @@ while let Some(chunk) = stream.next().await {
 | **MiniMax** | ✅ | 国产多模态 |
 
 *更多用法参见 [examples/](examples/)。*
+
+### 网关型提供商
+ai-lib 支持 OpenRouter、Replicate 等网关型提供商，通过统一接口访问多个 AI 模型。网关平台使用 `provider/model` 格式的模型命名（如 `openai/gpt-4o`），而直接提供商使用原始模型名（如 `gpt-4o`）。
 
 ---
 
