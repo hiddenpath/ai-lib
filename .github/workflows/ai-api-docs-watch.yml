@@ -42,6 +42,16 @@ jobs:
             echo "No snapshot changes to commit."
           fi
 
+      - name: Ensure 'docs-watch' label exists
+        run: |
+          if ! gh label view "docs-watch" >/dev/null 2>&1; then
+            gh label create "docs-watch" \
+              --color "0E8A16" \
+              --description "AI Provider API 文档变更监测"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create / Update daily issue
         run: |
           if [ ! -f changes_out.json ]; then
