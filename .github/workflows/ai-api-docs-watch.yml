@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   issues: write
+  metadata: write
 
 jobs:
   watch:
@@ -41,6 +42,18 @@ jobs:
           else
             echo "No snapshot changes to commit."
           fi
+
+      - name: Ensure docs-watch label exists
+        run: |
+          # Check if 'docs-watch' label exists
+          if ! gh label list --json name | jq -e '.[] | select(.name == "docs-watch")' > /dev/null; then
+            echo "Creating 'docs-watch' label..."
+            gh label create "docs-watch" --description "Issues tracking AI API documentation changes" --color "0052CC"
+          else
+            echo "'docs-watch' label already exists."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create / Update daily issue
         run: |
