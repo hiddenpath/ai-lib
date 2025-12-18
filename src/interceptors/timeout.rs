@@ -15,14 +15,10 @@ impl TimeoutInterceptor {
     pub fn new(timeout_duration: Duration) -> Self {
         Self { timeout_duration }
     }
-
-    /// Create with default timeout (30 seconds)
-    pub fn default() -> Self {
-        Self::new(Duration::from_secs(30))
-    }
 }
 
 impl Default for TimeoutInterceptor {
+    /// Create with default timeout (30 seconds)
     fn default() -> Self {
         Self::new(Duration::from_secs(30))
     }
@@ -46,8 +42,10 @@ impl TimeoutWrapper {
     pub fn new(interceptor: TimeoutInterceptor) -> Self {
         Self { interceptor }
     }
+}
 
-    pub fn default() -> Self {
+impl Default for TimeoutWrapper {
+    fn default() -> Self {
         Self::new(TimeoutInterceptor::default())
     }
 }

@@ -65,4 +65,10 @@ build/
 # Internal or non-public docs (prevent accidental publish)
 docs/internal/
 PRO_FEATURES_ROADMAP.md
-详细评估结果.txt
+
+# Internal planning and work status documents (v0.4.0 cleanup)
+docs/action_*.md
+docs/work_status_*.md
+docs/implementation_plan.md
+docs/action_completed_and_status_audited.md
+docs/UPGRADE_1.0.0.md

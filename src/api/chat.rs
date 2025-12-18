@@ -2,14 +2,16 @@ use crate::types::{AiLibError, ChatCompletionRequest, ChatCompletionResponse};
 use async_trait::async_trait;
 use futures::stream::Stream;
 
-/// Chat API module
+/// Unified chat provider trait exposed to the rest of the crate.
 ///
-/// Generic chat API interface
-///
-/// This trait defines the core capabilities that all AI services should have,
-/// without depending on any specific model implementation details
+/// This supersedes the legacy `ChatApi` naming so that downstream consumers
+/// can implement a single trait (`ChatProvider`) whether they are composing
+/// routing strategies or writing bespoke adapters.
 #[async_trait]
-pub trait ChatApi: Send + Sync {
+pub trait ChatProvider: Send + Sync {
+    /// Human readable provider name (used in logs/metrics/strategies).
+    fn name(&self) -> &str;
+
     /// Send chat completion request
     ///
     /// # Arguments
@@ -17,7 +19,7 @@ pub trait ChatApi: Send + Sync {
     ///
     /// # Returns
     /// * `Result<ChatCompletionResponse, AiLibError>` - Returns response on success, error on failure
-    async fn chat_completion(
+    async fn chat(
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError>;
@@ -29,7 +31,7 @@ pub trait ChatApi: Send + Sync {
     ///
     /// # Returns
     /// * `Result<impl Stream<Item = Result<ChatCompletionChunk, AiLibError>>, AiLibError>` - Returns streaming response on success
-    async fn chat_completion_stream(
+    async fn stream(
         &self,
         request: ChatCompletionRequest,
     ) -> Result<
@@ -60,7 +62,7 @@ pub trait ChatApi: Send + Sync {
     ///
     /// # Returns
     /// * `Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError>` - Returns vector of results
-    async fn chat_completion_batch(
+    async fn batch(
         &self,
         requests: Vec<ChatCompletionRequest>,
         concurrency_limit: Option<usize>,
@@ -68,6 +70,9 @@ pub trait ChatApi: Send + Sync {
         batch_utils::process_batch_concurrent(self, requests, concurrency_limit).await
     }
 }
+
+/// Backwards compatibility alias for the legacy `ChatApi` name.
+pub use ChatProvider as ChatApi;
 
 /// Streaming response data chunk
 #[derive(Debug, Clone)]
@@ -183,7 +188,7 @@ pub mod batch_utils {
     use tokio::sync::Semaphore;
 
     /// Default implementation for concurrent batch processing
-    pub async fn process_batch_concurrent<T: ChatApi + ?Sized>(
+    pub async fn process_batch_concurrent<T: ChatProvider + ?Sized>(
         api: &T,
         requests: Vec<ChatCompletionRequest>,
         concurrency_limit: Option<usize>,
@@ -217,7 +222,7 @@ pub mod batch_utils {
                 };
 
                 // Process the request
-                let result = api_ref.chat_completion(request).await;
+                let result = api_ref.chat(request).await;
 
                 // Return result with index for ordering
                 (index, result)
@@ -243,14 +248,14 @@ pub mod batch_utils {
     }
 
     /// Sequential batch processing implementation
-    pub async fn process_batch_sequential<T: ChatApi + ?Sized>(
+    pub async fn process_batch_sequential<T: ChatProvider + ?Sized>(
         api: &T,
         requests: Vec<ChatCompletionRequest>,
     ) -> Result<Vec<Result<ChatCompletionResponse, AiLibError>>, AiLibError> {
         let mut results = Vec::with_capacity(requests.len());
 
         for request in requests {
-            let result = api.chat_completion(request).await;
+            let result = api.chat(request).await;
             results.push(result);
         }
 
@@ -258,7 +263,7 @@ pub mod batch_utils {
     }
 
     /// Smart batch processing: automatically choose processing strategy based on request type and size
-    pub async fn process_batch_smart<T: ChatApi + ?Sized>(
+    pub async fn process_batch_smart<T: ChatProvider + ?Sized>(
         api: &T,
         requests: Vec<ChatCompletionRequest>,
         concurrency_limit: Option<usize>,

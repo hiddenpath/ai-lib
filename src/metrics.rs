@@ -1,7 +1,14 @@
-use async_trait::async_trait;
+//! 指标收集模块，提供可插拔的性能监控和统计功能
+//!
+//! Metrics collection module providing pluggable performance monitoring and statistics.
+//!
+//! This module defines the `Metrics` trait for collecting performance data,
+//! usage statistics, and error rates from AI provider interactions.
+//!
+//! Simple, injectable metrics trait used by adapters/clients.
+//! Keep the surface minimal: counters, gauges and a timer RAII helper.
 
-/// Simple, injectable metrics trait used by adapters/clients.
-/// Keep the surface minimal: counters, gauges and a timer RAII helper.
+use async_trait::async_trait;
 #[async_trait]
 pub trait Metrics: Send + Sync + 'static {
     /// Increment a named counter by `value`.

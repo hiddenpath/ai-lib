@@ -28,7 +28,7 @@ async fn main() -> Result<(), AiLibError> {
         "gpt-4".to_string(),
         vec![Message {
             role: Role::User,
-            content: Content::from_text("Hello, world!"),
+            content: Content::new_text("Hello, world!"),
             function_call: None,
         }],
     );
@@ -124,7 +124,7 @@ use ai_lib::prelude::*;
 let messages = vec![
     Message {
         role: Role::User,
-        content: Content::from_text("请分析这张图片"),
+        content: Content::new_text("请分析这张图片"),
         function_call: None,
     },
     Message {
@@ -145,9 +145,10 @@ use ai_lib::prelude::*;
 // 单个提供商
 let client = AiClient::new(Provider::OpenAI)?;
 
-// 带故障转移
-let client = AiClient::new(Provider::OpenAI)?
-    .with_failover(vec![Provider::Anthropic, Provider::Groq]);
+// 预先组合路由/故障转移
+let client = ai_lib::client::AiClientBuilder::new(Provider::OpenAI)
+    .with_failover_chain(vec![Provider::Anthropic, Provider::Groq])?
+    .build()?;
 ```
 
 ### 可用提供商
@@ -215,7 +216,7 @@ async fn main() -> Result<(), AiLibError> {
         "gpt-4".to_string(),
         vec![Message {
             role: Role::User,
-            content: Content::from_text("给我讲个故事"),
+            content: Content::new_text("给我讲个故事"),
             function_call: None,
         }],
     );
@@ -286,7 +287,7 @@ let content = Content::from_image_file("path/to/image.png");
 ## 进一步阅读
 
 - [模块树和导入模式](MODULE_TREE_AND_IMPORTS.md) - 详细模块结构指南
-- [API 参考](https://docs.rs/ai-lib/0.3.4) - 完整 API 文档
+- [API 参考](https://docs.rs/ai-lib/0.4.0) - 完整 API 文档
 - [示例](../examples/) - 实用用法示例
 
 

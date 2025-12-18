@@ -106,22 +106,22 @@ impl ReasoningUtils {
 
         // Add reasoning configuration
         request = request
-            .with_provider_specific(
+            .with_extension(
                 "reasoning_format",
                 serde_json::Value::String(format!("{:?}", config.format).to_lowercase()),
             )
-            .with_provider_specific(
+            .with_extension(
                 "reasoning_effort",
                 serde_json::Value::String(format!("{:?}", config.effort).to_lowercase()),
             );
 
         if let Some(parallel) = config.parallel_tool_calls {
-            request = request
-                .with_provider_specific("parallel_tool_calls", serde_json::Value::Bool(parallel));
+            request =
+                request.with_extension("parallel_tool_calls", serde_json::Value::Bool(parallel));
         }
 
         if let Some(tier) = config.service_tier {
-            request = request.with_provider_specific(
+            request = request.with_extension(
                 "service_tier",
                 serde_json::Value::String(format!("{:?}", tier).to_lowercase()),
             );

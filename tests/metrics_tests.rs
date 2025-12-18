@@ -9,7 +9,7 @@ mod utils {
     include!("utils/mock_transport.rs");
 }
 
-use ai_lib::ChatApi;
+use ai_lib::ChatProvider;
 use std::sync::{Mutex, OnceLock};
 
 static TIMER_STORE: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
@@ -109,7 +109,7 @@ async fn generic_adapter_calls_metrics() -> Result<(), AiLibError> {
     };
     let req = ChatCompletionRequest::new("m".to_string(), vec![msg]);
 
-    let _ = adapter.chat_completion(req).await?;
+    let _ = ChatProvider::chat(&adapter, req).await?;
 
     let calls = metrics_arc.take_calls().await;
     assert!(calls
@@ -163,7 +163,7 @@ async fn openai_adapter_calls_metrics() -> Result<(), AiLibError> {
     };
     let req = ChatCompletionRequest::new("m".to_string(), vec![msg]);
 
-    let _ = adapter.chat_completion(req).await?;
+    let _ = ChatProvider::chat(&adapter, req).await?;
 
     let calls = metrics_arc.take_calls().await;
     assert!(calls

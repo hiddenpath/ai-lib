@@ -9,9 +9,9 @@ use crate::types::{AiLibError, ChatCompletionRequest, ChatCompletionResponse};
 /// Circuit breaker states
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CircuitState {
-    Closed,    // Normal operation
-    Open,      // Circuit is open, requests fail fast
-    HalfOpen,  // Testing if service is back
+    Closed,   // Normal operation
+    Open,     // Circuit is open, requests fail fast
+    HalfOpen, // Testing if service is back
 }
 
 /// Circuit breaker interceptor
@@ -34,14 +34,10 @@ impl CircuitBreakerInterceptor {
             last_failure_time: Arc::new(AtomicU64::new(0)),
         }
     }
-
-    /// Create with default settings (5 failures, 60s recovery)
-    pub fn default() -> Self {
-        Self::new(5, Duration::from_secs(60))
-    }
 }
 
 impl Default for CircuitBreakerInterceptor {
+    /// Create with default settings (5 failures, 60s recovery)
     fn default() -> Self {
         Self::new(5, Duration::from_secs(60))
     }
@@ -96,7 +92,7 @@ impl CircuitBreakerInterceptor {
                     .unwrap()
                     .as_secs();
                 let last_failure = self.last_failure_time.load(Ordering::Relaxed);
-                
+
                 if now - last_failure >= self.recovery_timeout.as_secs() {
                     self.set_state(CircuitState::HalfOpen);
                     true
@@ -157,8 +153,10 @@ impl CircuitBreakerWrapper {
     pub fn new(interceptor: CircuitBreakerInterceptor) -> Self {
         Self { interceptor }
     }
+}
 
-    pub fn default() -> Self {
+impl Default for CircuitBreakerWrapper {
+    fn default() -> Self {
         Self::new(CircuitBreakerInterceptor::default())
     }
 }

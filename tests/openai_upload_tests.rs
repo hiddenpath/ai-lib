@@ -2,11 +2,11 @@
 mod tests_utils {
     include!("./utils/mock_transport.rs");
 }
+use ai_lib::transport::DynHttpTransport;
 use serde_json::json;
 use std::sync::Arc;
 use tests_utils::MockTransport;
 use tests_utils::MockTransportRef;
-use ai_lib::transport::DynHttpTransport;
 
 #[tokio::test]
 async fn upload_returns_url() {
@@ -20,7 +20,10 @@ async fn upload_returns_url() {
     // Direct upload implementation since utils is private
     let bytes = std::fs::read(&tmp).unwrap();
     let file_name = tmp.file_name().unwrap().to_str().unwrap();
-    let res = mock_ref.upload_multipart(upload_url, None, "file", file_name, bytes).await.unwrap();
+    let res = mock_ref
+        .upload_multipart(upload_url, None, "file", file_name, bytes)
+        .await
+        .unwrap();
     let url = res.get("url").and_then(|v| v.as_str()).unwrap();
     assert_eq!(url, "https://cdn.example.com/uploaded.png");
 }
@@ -37,7 +40,10 @@ async fn upload_returns_id() {
     // Direct upload implementation since utils is private
     let bytes = std::fs::read(&tmp).unwrap();
     let file_name = tmp.file_name().unwrap().to_str().unwrap();
-    let res = mock_ref.upload_multipart(upload_url, None, "file", file_name, bytes).await.unwrap();
+    let res = mock_ref
+        .upload_multipart(upload_url, None, "file", file_name, bytes)
+        .await
+        .unwrap();
     let id = res.get("id").and_then(|v| v.as_str()).unwrap();
     assert_eq!(id, "file_abc123");
 }
@@ -55,7 +61,10 @@ async fn upload_missing_url_or_id_returns_error() {
     // Direct upload implementation since utils is private
     let bytes = std::fs::read(&tmp).unwrap();
     let file_name = tmp.file_name().unwrap().to_str().unwrap();
-    let res = mock_ref.upload_multipart(upload_url, None, "file", file_name, bytes).await.unwrap();
+    let res = mock_ref
+        .upload_multipart(upload_url, None, "file", file_name, bytes)
+        .await
+        .unwrap();
     // Check that the response is missing url/id fields
     assert!(res.get("url").is_none());
     assert!(res.get("id").is_none());
@@ -84,6 +93,8 @@ async fn upload_transport_failure_propagates() {
     // Direct upload implementation since utils is private
     let bytes = std::fs::read(&tmp).unwrap();
     let file_name = tmp.file_name().unwrap().to_str().unwrap();
-    let res = mock_ref.upload_multipart(upload_url, None, "file", file_name, bytes).await;
+    let res = mock_ref
+        .upload_multipart(upload_url, None, "file", file_name, bytes)
+        .await;
     assert!(res.is_err());
 }

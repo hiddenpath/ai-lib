@@ -26,21 +26,44 @@ ai-lib unifies AI provider complexity into a single, ergonomic Rust interface:
 ## ⚙️ Quick Start
 
 ### Installation
+
+Basic installation (core features):
 ```toml
 [dependencies]
-ai-lib = "0.3.4"
+ai-lib = "0.4.0"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 ```
 
-### One-liner Chat
+For streaming support, enable the `streaming` feature:
+```toml
+[dependencies]
+ai-lib = { version = "0.4.0", features = ["streaming"] }
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+```
+
+For full functionality (streaming, resilience, routing):
+```toml
+[dependencies]
+ai-lib = { version = "0.4.0", features = ["all"] }
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+```
+
+### Simple Usage
 ```rust
-use ai_lib::Provider;
+use ai_lib::prelude::*;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let reply = ai_lib::AiClient::quick_chat_text(Provider::Groq, "Hello!").await?;
-    println!("Reply: {reply}");
+    let client = AiClient::new(Provider::Groq)?;
+    let req = ChatCompletionRequest::new(
+        "llama3-8b-8192".to_string(),
+        vec![Message::user("Hello!")]
+    );
+    let reply = client.chat_completion(req).await?;
+    println!("Reply: {}", reply.first_text().unwrap_or_default());
     Ok(())
 }
 ```
@@ -54,13 +77,15 @@ use ai_lib::prelude::*;
 async fn main() -> anyhow::Result<()> {
     let client = AiClient::new(Provider::OpenAI)?;
     let req = ChatCompletionRequest::new(
-        client.default_chat_model(),
+        "gpt-3.5-turbo".to_string(), // Explicit model or use client.default_chat_model()
         vec![Message {
             role: Role::User,
             content: Content::Text("Explain Rust ownership in one sentence.".to_string()),
             function_call: None,
-        }]
+        }],
     );
+    // .with_extension("parallel_tool_calls", serde_json::json!(true)); // Optional extensions
+
     let resp = client.chat_completion(req).await?;
     println!("Answer: {}", resp.choices[0].message.content.as_text());
     Ok(())
@@ -68,14 +93,29 @@ async fn main() -> anyhow::Result<()> {
 ```
 
 ### Streaming
+
+> **Note:** Streaming requires the `streaming` feature (or `all` feature) to be enabled.
+
 ```rust
+use ai_lib::prelude::*;
 use futures::StreamExt;
-let mut stream = client.chat_completion_stream(req).await?;
-while let Some(chunk) = stream.next().await {
-    let c = chunk?;
-    if let Some(delta) = c.choices[0].delta.content.clone() {
-        print!("{delta}");
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let client = AiClient::new(Provider::OpenAI)?;
+    let req = ChatCompletionRequest::new(
+        "gpt-3.5-turbo".to_string(),
+        vec![Message::user("Tell me a short story")]
+    );
+
+    let mut stream = client.chat_completion_stream(req).await?;
+    while let Some(chunk) = stream.next().await {
+        let c = chunk?;
+        if let Some(delta) = c.choices.get(0).and_then(|ch| ch.delta.content.clone()) {
+            print!("{delta}");
+        }
     }
+    Ok(())
 }
 ```
 
@@ -108,7 +148,7 @@ while let Some(chunk) = stream.next().await {
 
 ### Reliability & Production
 - **Built-in Resilience**: Retry with exponential backoff, circuit breakers
-- **Basic Failover (OSS)**: `AiClient::with_failover([...])` to switch providers on retryable errors
+- **Strategy Builders**: `AiClientBuilder::with_round_robin_chain` / `with_failover_chain` compose routing before runtime
 - **Error Classification**: Distinguish transient vs permanent failures
 - **Connection Management**: Pooling, timeouts, proxy support
 - **Observability**: Pluggable metrics and tracing integration
@@ -179,7 +219,28 @@ export AI_TIMEOUT_SECS=30
 # Optional: Connection pooling (enabled by default)
 export AI_HTTP_POOL_MAX_IDLE_PER_HOST=32
 export AI_HTTP_POOL_IDLE_TIMEOUT_MS=90000
+
+# Optional: Override default models per provider
+export GROQ_MODEL=llama-3.1-8b-instant
+export MISTRAL_MODEL=mistral-small-latest
+export DEFAULT_AI_MODEL=gpt-4o-mini
 ```
+
+### Model Selection & Fallbacks
+
+- **Auto defaults**: Pass `"auto"` (case-insensitive) or an empty string as the model when
+  constructing `ChatCompletionRequest` and ai-lib will inject the provider’s preferred
+  model (or your `AiClientBuilder::with_default_chat_model` override).
+- **Env overrides**: Set `*_MODEL` environment variables (e.g. `GROQ_MODEL`, `OPENAI_MODEL`)
+  to change defaults without touching code. These overrides feed the new `ModelResolver`
+  and apply across builders, streaming, and batch flows.
+- **Invalid-model recovery**: When a provider rejects a request with
+  `invalid_model`/`model_not_found`, ai-lib now retries with documented fallbacks and
+  surfaces actionable hints (including links such as [Groq Models](https://console.groq.com/docs/models))
+  in the returned `AiLibError::ModelNotFound`.
+- **Per-provider context**: Call `client.default_chat_model()` to inspect the effective
+  model string that will be used for the next request—handy when composing multi-provider
+  strategies like failover chains.
 
 ### Programmatic Configuration
 ```rust
@@ -198,6 +259,55 @@ let client = AiClient::with_options(
 )?;
 ```
 
+## 🔌 Bring Your Own Provider
+
+Use `CustomProviderBuilder` + `AiClientBuilder::with_strategy` to plug in
+OpenAI-compatible gateways (self-hosted or vendor previews) without editing the
+`Provider` enum. See `examples/custom_provider_injection.rs` for a full demo.
+
+```rust
+use ai_lib::{
+    client::{AiClientBuilder, Provider},
+    provider::builders::CustomProviderBuilder,
+    types::{ChatCompletionRequest, Message, Role, Content},
+};
+
+let labs_gateway = CustomProviderBuilder::new("labs-gateway")
+    .with_base_url("https://labs.example.com/v1")
+    .with_api_key_env("LABS_GATEWAY_TOKEN")
+    .with_default_chat_model("labs-gpt-35")
+    .build_provider()?;
+
+let client = AiClientBuilder::new(Provider::OpenAI) // Enum ignored when strategy is provided
+    .with_strategy(labs_gateway)
+    .build()?;
+
+let resp = client
+    .chat_completion(ChatCompletionRequest::new(
+        "labs-gpt-35".to_string(),
+        vec![Message {
+            role: Role::User,
+            content: Content::Text("Hello labs!".to_string()),
+            function_call: None,
+        }],
+    ))
+    .await?;
+println!("labs> {}", resp.first_text().unwrap_or_default());
+```
+
+### Per-provider Builders
+
+Prefer builder wrappers (e.g., `GroqBuilder`, `OpenAiBuilder`) when you want clearer configuration or when composing strategies.
+
+```rust
+use ai_lib::provider::GroqBuilder;
+
+let client = GroqBuilder::new()
+    .with_base_url("https://api.groq.com")
+    .with_proxy(Some("http://proxy.internal:8080"))
+    .build()?; // returns AiClient
+```
+
 ### Concurrency Control
 ```rust
 use ai_lib::{AiClientBuilder, Provider};
@@ -210,18 +320,19 @@ let client = AiClientBuilder::new(Provider::Groq)
 
 ---
 
-## 🔁 Failover (OSS)
+## 🔁 Routing & Failover (OSS)
 
-Use `with_failover` to define an ordered fallback chain when a request fails with a retryable error (network/timeout/rate-limit/5xx).
+Use `with_failover_chain` or `with_round_robin_chain` to wire strategies before the client sends requests.
 
 ```rust
-use ai_lib::{AiClient, Provider};
+use ai_lib::{client::AiClientBuilder, Provider};
 
-let client = AiClient::new(Provider::OpenAI)?
-    .with_failover(vec![Provider::Anthropic, Provider::Groq]);
+let client = AiClientBuilder::new(Provider::OpenAI)
+    .with_failover_chain(vec![Provider::Anthropic, Provider::Groq])?
+    .build()?;
 ```
 
-When combined with routing features, the model selection is preserved across failover attempts.
+Combine with `with_round_robin_chain` or `RoutingStrategyBuilder` for weighted/round-robin routing. Strategy composition now happens during client construction—no sentinel models or runtime branching required.
 
 ## 🛡️ Reliability & Resilience
 
@@ -262,11 +373,24 @@ match response.usage_status {
 Migration: `Usage`/`UsageStatus` are defined in `ai_lib::types::response` and re-exported at the root. Old imports from `types::common` are deprecated and will be removed before 1.0.
 
 ### Optional Features
-- `interceptors`: Retry, timeout, circuit breaker pipeline
-- `unified_sse`: Common SSE parser for all providers
-- `unified_transport`: Shared HTTP client factory
-- `cost_metrics`: Basic cost accounting via environment variables
-- `routing_mvp`: Model selection and routing capabilities
+
+By default, ai-lib ships with a minimal feature set. Enable features as needed:
+
+| Feature | Description | Alias |
+|---------|-------------|-------|
+| `unified_sse` | Common SSE parser for streaming | `streaming` |
+| `interceptors` | Retry, timeout, circuit breaker pipeline | `resilience` |
+| `unified_transport` | Shared HTTP client factory | `transport` |
+| `config_hot_reload` | Config hot-reload traits | `hot_reload` |
+| `cost_metrics` | Basic cost accounting via environment variables | - |
+| `routing_mvp` | Model selection and routing capabilities | - |
+| `observability` | Tracer and AuditSink interfaces | - |
+| `all` | Enable all features above | - |
+
+**Recommended for most applications:**
+```toml
+ai-lib = { version = "0.4.0", features = ["streaming", "resilience"] }
+```
 
 ---
 
@@ -278,7 +402,7 @@ Migration: `Usage`/`UsageStatus` are defined in `ai_lib::types::response` and re
 | **Configuration** | `explicit_config`, `proxy_example`, `custom_transport_config` |
 | **Streaming** | `test_streaming`, `cohere_stream` |
 | **Reliability** | `custom_transport`, `resilience_example` |
-| **Multi-Provider** | `config_driven_example`, `model_override_demo` |
+| **Multi-Provider** | `config_driven_example`, `model_override_demo`, `custom_provider_injection`, `routing_modelarray` |
 | **Model Management** | `model_management`, `routing_modelarray` |
 | **Batch Processing** | `batch_processing` |
 | **Function Calling** | `function_call_openai`, `function_call_exec` |

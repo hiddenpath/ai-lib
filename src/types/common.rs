@@ -59,10 +59,12 @@ impl Content {
     /// (uploaded or inlined as data URL) by the AI client when used in a request
     pub fn from_image_file<P: AsRef<std::path::Path>>(path: P) -> Self {
         let path = path.as_ref();
-        let name = path.file_name()
+        let name = path
+            .file_name()
             .and_then(|n| n.to_str())
             .map(|s| s.to_string());
-        let mime = path.extension()
+        let mime = path
+            .extension()
             .and_then(|ext| ext.to_str())
             .and_then(|ext| match ext.to_lowercase().as_str() {
                 "png" => Some("image/png"),
@@ -73,7 +75,7 @@ impl Content {
                 _ => None,
             })
             .map(|s| s.to_string());
-        
+
         Content::Image {
             url: None, // Will be filled by the client
             mime,
@@ -85,7 +87,8 @@ impl Content {
     /// (uploaded or inlined as data URL) by the AI client when used in a request
     pub fn from_audio_file<P: AsRef<std::path::Path>>(path: P) -> Self {
         let path = path.as_ref();
-        let mime = path.extension()
+        let mime = path
+            .extension()
             .and_then(|ext| ext.to_str())
             .and_then(|ext| match ext.to_lowercase().as_str() {
                 "mp3" => Some("audio/mpeg"),
@@ -96,7 +99,7 @@ impl Content {
                 _ => None,
             })
             .map(|s| s.to_string());
-        
+
         Content::Audio {
             url: None, // Will be filled by the client
             mime,
@@ -121,6 +124,110 @@ pub struct Message {
     pub function_call: Option<crate::types::function_call::FunctionCall>,
 }
 
+impl Message {
+    /// Create a new message with the specified role and content.
+    pub fn new(role: Role, content: impl Into<Content>) -> Self {
+        Self {
+            role,
+            content: content.into(),
+            function_call: None,
+        }
+    }
+
+    /// Create a user message with text content.
+    ///
+    /// # Example
+    /// ```rust
+    /// use ai_lib::prelude::*;
+    ///
+    /// let msg = Message::user("Hello, how are you?");
+    /// assert!(matches!(msg.role, Role::User));
+    /// ```
+    pub fn user<S: Into<String>>(text: S) -> Self {
+        Self {
+            role: Role::User,
+            content: Content::Text(text.into()),
+            function_call: None,
+        }
+    }
+
+    /// Create an assistant message with text content.
+    ///
+    /// # Example
+    /// ```rust
+    /// use ai_lib::prelude::*;
+    ///
+    /// let msg = Message::assistant("I'm doing well, thank you!");
+    /// assert!(matches!(msg.role, Role::Assistant));
+    /// ```
+    pub fn assistant<S: Into<String>>(text: S) -> Self {
+        Self {
+            role: Role::Assistant,
+            content: Content::Text(text.into()),
+            function_call: None,
+        }
+    }
+
+    /// Create a system message with text content.
+    ///
+    /// # Example
+    /// ```rust
+    /// use ai_lib::prelude::*;
+    ///
+    /// let msg = Message::system("You are a helpful assistant.");
+    /// assert!(matches!(msg.role, Role::System));
+    /// ```
+    pub fn system<S: Into<String>>(text: S) -> Self {
+        Self {
+            role: Role::System,
+            content: Content::Text(text.into()),
+            function_call: None,
+        }
+    }
+
+    /// Create a user message with custom content (text, image, audio, etc.).
+    ///
+    /// # Example
+    /// ```rust
+    /// use ai_lib::prelude::*;
+    ///
+    /// let msg = Message::user_with_content(Content::from_image_file("photo.jpg"));
+    /// ```
+    pub fn user_with_content(content: Content) -> Self {
+        Self {
+            role: Role::User,
+            content,
+            function_call: None,
+        }
+    }
+
+    /// Create an assistant message with a function call.
+    pub fn assistant_with_function_call(
+        text: impl Into<String>,
+        function_call: crate::types::function_call::FunctionCall,
+    ) -> Self {
+        Self {
+            role: Role::Assistant,
+            content: Content::Text(text.into()),
+            function_call: Some(function_call),
+        }
+    }
+}
+
+/// Allow `Into<Content>` for `String` to enable ergonomic `Message::new(Role::User, "hello")`
+impl From<String> for Content {
+    fn from(s: String) -> Self {
+        Content::Text(s)
+    }
+}
+
+/// Allow `Into<Content>` for `&str` to enable ergonomic `Message::new(Role::User, "hello")`
+impl From<&str> for Content {
+    fn from(s: &str) -> Self {
+        Content::Text(s.to_string())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Role {
     #[serde(rename = "system")]
@@ -138,12 +245,5 @@ pub struct Choice {
     pub finish_reason: Option<String>,
 }
 
-// Usage and UsageStatus have moved to `types::response` because they are
-// semantically part of the chat response metadata. We keep these
-// re-exports here for backward compatibility but mark them deprecated to
-// guide users to the new location.
-#[deprecated(note = "Usage has been moved to `ai_lib::types::response::Usage`. Please import from there or use `ai_lib::Usage`. This alias will be removed before 1.0.")]
-pub use crate::types::response::Usage;
-
-#[deprecated(note = "UsageStatus has been moved to `ai_lib::types::response::UsageStatus`. Please import from there or use `ai_lib::UsageStatus`. This alias will be removed before 1.0.")]
-pub use crate::types::response::UsageStatus;
+// Note: Usage and UsageStatus have been moved to `types::response` as of 1.0.
+// Import from `ai_lib::Usage` / `ai_lib::UsageStatus` or `ai_lib::types::response::{Usage, UsageStatus}`.

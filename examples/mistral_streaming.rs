@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = client.chat_completion_stream(req).await?;
     while let Some(chunk) = stream.next().await {
         let c = chunk?;
-        if let Some(delta) = c.choices.get(0).and_then(|d| d.delta.content.clone()) {
+        if let Some(delta) = c.choices.first().and_then(|d| d.delta.content.clone()) {
             print!("{}", delta);
         }
     }

@@ -1,6 +1,4 @@
-/// AI client builder pattern example
-use ai_lib::types::common::Content;
-use ai_lib::{AiClient, AiClientBuilder, ChatCompletionRequest, Message, Provider, Role};
+use ai_lib::{AiClient, AiClientBuilder, Provider};
 use std::time::Duration;
 
 #[tokio::main]
@@ -15,14 +13,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = AiClientBuilder::new(Provider::Groq).build()?;
     println!(
         "✅ Client created successfully, provider: {:?}",
-        client.current_provider()
+        client.provider_name()
     );
 
     // Example 2: Custom base_url
     println!("\n📋 Example 2: Custom base_url");
     println!("   Use custom Groq server address");
 
-    let client = AiClientBuilder::new(Provider::Groq)
+    let _client = AiClientBuilder::new(Provider::Groq)
         .with_base_url("https://custom.groq.com")
         .build()?;
     println!("✅ Client created successfully with custom base_url");
@@ -31,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📋 Example 3: Custom base_url and proxy");
     println!("   Use custom server and proxy");
 
-    let client = AiClientBuilder::new(Provider::Groq)
+    let _client = AiClientBuilder::new(Provider::Groq)
         .with_base_url("https://custom.groq.com")
         .with_proxy(Some("http://proxy.example.com:8080"))
         .build()?;
@@ -41,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📋 Example 4: Full custom configuration");
     println!("   Custom timeout, connection pool and other advanced configurations");
 
-    let client = AiClientBuilder::new(Provider::Groq)
+    let _client = AiClientBuilder::new(Provider::Groq)
         .with_base_url("https://custom.groq.com")
         .with_proxy(Some("http://proxy.example.com:8080"))
         .with_timeout(Duration::from_secs(60))
@@ -53,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📋 Example 5: Use convenient builder method");
     println!("   Create builder through AiClient::builder()");
 
-    let client = AiClient::builder(Provider::Groq)
+    let _client = AiClient::builder(Provider::Groq)
         .with_base_url("https://custom.groq.com")
         .with_proxy(Some("http://proxy.example.com:8080"))
         .build()?;
@@ -68,11 +66,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::env::set_var("AI_PROXY_URL", "http://env.proxy.com:8080");
 
     // Don't set any custom configuration, should use environment variables
-    let client = AiClientBuilder::new(Provider::Groq).build()?;
+    let _client = AiClientBuilder::new(Provider::Groq).build()?;
     println!("✅ Client created successfully using environment variable configuration");
 
     // Explicit settings override environment variables
-    let client = AiClientBuilder::new(Provider::Groq)
+    let _client = AiClientBuilder::new(Provider::Groq)
         .with_base_url("https://explicit.groq.com")
         .with_proxy(Some("http://explicit.proxy.com:8080"))
         .build()?;
@@ -84,20 +82,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📋 Example 7: Different provider configurations");
 
     // Groq
-    let groq_client = AiClientBuilder::new(Provider::Groq)
+    let _groq_client = AiClientBuilder::new(Provider::Groq)
         .with_base_url("https://custom.groq.com")
         .build()?;
     println!("✅ Groq client created successfully");
 
     // DeepSeek
-    let deepseek_client = AiClientBuilder::new(Provider::DeepSeek)
+    let _deepseek_client = AiClientBuilder::new(Provider::DeepSeek)
         .with_base_url("https://custom.deepseek.com")
         .with_proxy(Some("http://proxy.example.com:8080"))
         .build()?;
     println!("✅ DeepSeek client created successfully");
 
     // Ollama (local deployment)
-    let ollama_client = AiClientBuilder::new(Provider::Ollama)
+    let _ollama_client = AiClientBuilder::new(Provider::Ollama)
         .with_base_url("http://localhost:11434")
         .build()?;
     println!("✅ Ollama client created successfully");

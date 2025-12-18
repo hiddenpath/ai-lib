@@ -1,6 +1,5 @@
 /// AI-lib basic usage example
-use ai_lib::types::common::Content;
-use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
+use ai_lib::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -11,21 +10,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = AiClient::new(Provider::Groq)?;
     println!(
         "✅ Created client with provider: {:?}",
-        client.current_provider()
+        client.provider_name()
     );
 
     // Get list of supported models
     let models = client.list_models().await?;
     println!("📋 Available models: {:?}", models);
 
-    // Create chat request
+    // Create chat request using convenient Message::user() constructor
     let request = ChatCompletionRequest::new(
         "llama-3.1-8b-instant".to_string(),
-        vec![Message {
-            role: Role::User,
-            content: Content::Text("Hello! Please introduce yourself briefly.".to_string()),
-            function_call: None,
-        }],
+        vec![Message::user("Hello! Please introduce yourself briefly.")],
     )
     .with_temperature(0.7)
     .with_max_tokens(100);

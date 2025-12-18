@@ -113,7 +113,11 @@ impl HttpTransport {
         let timeout_secs = env::var("AI_HTTP_TIMEOUT_SECS")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
-            .or_else(|| env::var("AI_TIMEOUT_SECS").ok().and_then(|s| s.parse::<u64>().ok()))
+            .or_else(|| {
+                env::var("AI_TIMEOUT_SECS")
+                    .ok()
+                    .and_then(|s| s.parse::<u64>().ok())
+            })
             .unwrap_or(30);
         Self::with_timeout(Duration::from_secs(timeout_secs))
     }
@@ -126,7 +130,11 @@ impl HttpTransport {
         let timeout_secs = env::var("AI_HTTP_TIMEOUT_SECS")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
-            .or_else(|| env::var("AI_TIMEOUT_SECS").ok().and_then(|s| s.parse::<u64>().ok()))
+            .or_else(|| {
+                env::var("AI_TIMEOUT_SECS")
+                    .ok()
+                    .and_then(|s| s.parse::<u64>().ok())
+            })
             .unwrap_or(30);
         Self::with_timeout_without_proxy(Duration::from_secs(timeout_secs))
     }

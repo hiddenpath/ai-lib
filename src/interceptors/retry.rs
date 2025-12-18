@@ -21,14 +21,10 @@ impl RetryInterceptor {
             max_delay,
         }
     }
-
-    /// Create with default settings (3 retries, 1s base delay, 10s max delay)
-    pub fn default() -> Self {
-        Self::new(3, Duration::from_secs(1), Duration::from_secs(10))
-    }
 }
 
 impl Default for RetryInterceptor {
+    /// Create with default settings (3 retries, 1s base delay, 10s max delay)
     fn default() -> Self {
         Self::new(3, Duration::from_secs(1), Duration::from_secs(10))
     }
@@ -37,7 +33,13 @@ impl Default for RetryInterceptor {
 impl RetryInterceptor {
     /// Check if an error is retryable
     fn is_retryable_error(&self, error: &AiLibError) -> bool {
-        matches!(error, AiLibError::NetworkError(_) | AiLibError::TimeoutError(_) | AiLibError::RateLimitExceeded(_) | AiLibError::ProviderError(_))
+        matches!(
+            error,
+            AiLibError::NetworkError(_)
+                | AiLibError::TimeoutError(_)
+                | AiLibError::RateLimitExceeded(_)
+                | AiLibError::ProviderError(_)
+        )
     }
 
     /// Calculate delay with exponential backoff
@@ -50,12 +52,7 @@ impl RetryInterceptor {
 
 #[async_trait]
 impl Interceptor for RetryInterceptor {
-    async fn on_error(
-        &self,
-        ctx: &RequestContext,
-        _req: &ChatCompletionRequest,
-        err: &AiLibError,
-    ) {
+    async fn on_error(&self, ctx: &RequestContext, _req: &ChatCompletionRequest, err: &AiLibError) {
         if self.is_retryable_error(err) {
             // Log retry attempt (in a real implementation, you'd use proper logging)
             // Retry attempt: In production, this would be logged to metrics
@@ -73,11 +70,15 @@ impl RetryWrapper {
     pub fn new(interceptor: RetryInterceptor) -> Self {
         Self { interceptor }
     }
+}
 
-    pub fn default() -> Self {
+impl Default for RetryWrapper {
+    fn default() -> Self {
         Self::new(RetryInterceptor::default())
     }
+}
 
+impl RetryWrapper {
     /// Execute a function with retry logic
     pub async fn execute<F, Fut>(
         &self,
@@ -96,9 +97,9 @@ impl RetryWrapper {
                 Ok(response) => return Ok(response),
                 Err(err) => {
                     last_error = Some(err.clone());
-                    
-                    if attempt < self.interceptor.max_retries 
-                        && self.interceptor.is_retryable_error(&err) 
+
+                    if attempt < self.interceptor.max_retries
+                        && self.interceptor.is_retryable_error(&err)
                     {
                         let delay = self.interceptor.calculate_delay(attempt);
                         // Retry attempt: In production, this would be logged to metrics
@@ -111,8 +112,7 @@ impl RetryWrapper {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| {
-            AiLibError::ProviderError("Max retries exceeded".to_string())
-        }))
+        Err(last_error
+            .unwrap_or_else(|| AiLibError::ProviderError("Max retries exceeded".to_string())))
     }
 }

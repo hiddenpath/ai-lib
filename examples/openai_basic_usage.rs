@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = AiClient::new(Provider::OpenAI)?;
     println!(
         "✅ Created client with provider: {:?}",
-        client.current_provider()
+        client.provider_name()
     );
 
     // Get available models list

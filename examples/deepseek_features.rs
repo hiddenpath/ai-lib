@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Interceptor pipeline wraps a non-streaming call
     let pipeline = ai_lib::interceptors::InterceptorPipeline::new().with(Logger);
     let ctx = ai_lib::interceptors::RequestContext {
-        provider: format!("{:?}", client.current_provider()),
+        provider: client.provider_name().to_string(),
         model: model.clone(),
     };
     let _resp = pipeline
@@ -82,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     use futures::StreamExt;
     while let Some(chunk) = stream.next().await {
         let c = chunk?;
-        if let Some(delta) = c.choices.get(0).and_then(|d| d.delta.content.clone()) {
+        if let Some(delta) = c.choices.first().and_then(|d| d.delta.content.clone()) {
             print!("{}", delta);
         }
     }

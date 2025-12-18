@@ -46,7 +46,6 @@ pub fn content_to_provider_value(content: &Content) -> serde_json::Value {
 use crate::types::AiLibError;
 use reqwest::Client;
 use std::fs;
-use std::time::Duration;
 
 /// Upload or inline a local file path; current default behavior is to inline as data URL
 /// Returns a data URL string if successful, or None on failure.
@@ -71,29 +70,27 @@ pub async fn upload_file_to_provider(
     upload_url: &str,
     path: &str,
     field_name: &str,
-) -> Result<String, crate::types::AiLibError> {
+) -> Result<String, AiLibError> {
     use reqwest::multipart;
 
     let p = Path::new(path);
     if !p.exists() {
-        return Err(crate::types::AiLibError::ProviderError(
-            "file not found".to_string(),
-        ));
+        return Err(AiLibError::ProviderError("file not found".to_string()));
     }
 
     let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("file.bin");
-    let bytes = fs::read(p)
-        .map_err(|e| crate::types::AiLibError::ProviderError(format!("read error: {}", e)))?;
+    let bytes = fs::read(p).map_err(|e| AiLibError::ProviderError(format!("read error: {}", e)))?;
 
     let part = multipart::Part::bytes(bytes).file_name(file_name.to_string());
     let form = multipart::Form::new().part(field_name.to_string(), part);
 
     // Build HTTP client (feature-gated). Falls back to local builder if unified_transport is disabled.
-    fn build_http_client() -> Result<Client, crate::types::AiLibError> {
+    fn build_http_client() -> Result<Client, AiLibError> {
         #[cfg(feature = "unified_transport")]
         {
-            crate::transport::client_factory::build_shared_client()
-                .map_err(|e| crate::types::AiLibError::NetworkError(format!("failed to build http client: {}", e)))
+            crate::transport::client_factory::build_shared_client().map_err(|e| {
+                AiLibError::NetworkError(format!("failed to build http client: {}", e))
+            })
         }
         #[cfg(not(feature = "unified_transport"))]
         {
@@ -108,9 +105,9 @@ pub async fn upload_file_to_provider(
             } else {
                 builder = builder.no_proxy();
             }
-            builder
-                .build()
-                .map_err(|e| crate::types::AiLibError::NetworkError(format!("failed to build http client: {}", e)))
+            builder.build().map_err(|e| {
+                AiLibError::NetworkError(format!("failed to build http client: {}", e))
+            })
         }
     }
 
@@ -120,11 +117,11 @@ pub async fn upload_file_to_provider(
         .multipart(form)
         .send()
         .await
-        .map_err(|e| crate::types::AiLibError::NetworkError(format!("upload failed: {}", e)))?;
+        .map_err(|e| AiLibError::NetworkError(format!("upload failed: {}", e)))?;
     let status = resp.status();
     if !status.is_success() {
         let txt = resp.text().await.unwrap_or_default();
-        return Err(crate::types::AiLibError::ProviderError(format!(
+        return Err(AiLibError::ProviderError(format!(
             "upload returned {}: {}",
             status, txt
         )));
@@ -134,7 +131,7 @@ pub async fn upload_file_to_provider(
     let j: serde_json::Value = resp
         .json()
         .await
-        .map_err(|e| crate::types::AiLibError::ProviderError(format!("parse response: {}", e)))?;
+        .map_err(|e| AiLibError::ProviderError(format!("parse response: {}", e)))?;
     parse_upload_response(j)
 }
 
@@ -146,23 +143,20 @@ pub async fn upload_file_with_transport(
     upload_url: &str,
     path: &str,
     field_name: &str,
-) -> Result<String, crate::types::AiLibError> {
+) -> Result<String, AiLibError> {
     use std::fs;
     use std::path::Path;
 
     let p = Path::new(path);
     if !p.exists() {
-        return Err(crate::types::AiLibError::ProviderError(
-            "file not found".to_string(),
-        ));
+        return Err(AiLibError::ProviderError("file not found".to_string()));
     }
     let file_name = p
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("file.bin")
         .to_string();
-    let bytes = fs::read(p)
-        .map_err(|e| crate::types::AiLibError::ProviderError(format!("read error: {}", e)))?;
+    let bytes = fs::read(p).map_err(|e| AiLibError::ProviderError(format!("read error: {}", e)))?;
 
     if let Some(t) = transport {
         // Use the injected transport to perform multipart upload
@@ -179,58 +173,16 @@ pub async fn upload_file_with_transport(
 
 /// Parse a provider upload JSON response into a returned string.
 /// Accepts either `{ "url": "..." }` or `{ "id": "..." }` and returns the url or id.
-pub(crate) fn parse_upload_response(
-    j: serde_json::Value,
-) -> Result<String, crate::types::AiLibError> {
+pub(crate) fn parse_upload_response(j: serde_json::Value) -> Result<String, AiLibError> {
     if let Some(url) = j.get("url").and_then(|v| v.as_str()) {
         return Ok(url.to_string());
     }
     if let Some(id) = j.get("id").and_then(|v| v.as_str()) {
         return Ok(id.to_string());
     }
-    Err(crate::types::AiLibError::ProviderError(
+    Err(AiLibError::ProviderError(
         "upload response missing url/id".to_string(),
     ))
-}
-
-/// Simple health check helper for provider base URLs.
-/// Tries to GET {base_url}/models (common OpenAI-compatible endpoint) or the base URL
-/// and returns Ok(()) if reachable and returns an AiLibError otherwise.
-pub async fn health_check(base_url: &str) -> Result<(), AiLibError> {
-    #[cfg(feature = "unified_transport")]
-    let client = crate::transport::client_factory::build_shared_client()
-        .map_err(|e| AiLibError::NetworkError(format!("Failed to build HTTP client: {}", e)))?;
-    #[cfg(not(feature = "unified_transport"))]
-    let client = reqwest::Client::builder()
-        .build()
-        .map_err(|e| AiLibError::NetworkError(format!("Failed to build HTTP client: {}", e)))?;
-
-    // Try models endpoint first
-    let models_url = if base_url.ends_with('/') {
-        format!("{}models", base_url)
-    } else {
-        format!("{}/models", base_url)
-    };
-
-    let resp = client.get(&models_url).timeout(Duration::from_secs(5)).send().await;
-    match resp {
-        Ok(r) if r.status().is_success() => Ok(()),
-        _ => {
-            // fallback to base url
-            let resp2 = client.get(base_url).timeout(Duration::from_secs(5)).send().await;
-            match resp2 {
-                Ok(r2) if r2.status().is_success() => Ok(()),
-                Ok(r2) => Err(AiLibError::NetworkError(format!(
-                    "Health check returned status {}",
-                    r2.status()
-                ))),
-                Err(e) => Err(AiLibError::NetworkError(format!(
-                    "Health check request failed: {}",
-                    e
-                ))),
-            }
-        }
-    }
 }
 
 // Tests moved to file end to satisfy clippy::items-after-test-module
@@ -238,7 +190,15 @@ pub async fn health_check(base_url: &str) -> Result<(), AiLibError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::future::BoxFuture;
     use serde_json::json;
+    use std::collections::HashMap;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    use crate::transport::dyn_transport::{DynHttpTransport, StreamFuture};
 
     #[test]
     fn parse_upload_response_url() {
@@ -252,5 +212,136 @@ mod tests {
         let j = json!({"id": "file_123"});
         let res = parse_upload_response(j).unwrap();
         assert_eq!(res, "file_123");
+    }
+
+    #[test]
+    fn upload_file_inline_encodes_contents() {
+        let path = temp_path("inline");
+        fs::write(&path, b"hello-world").unwrap();
+        let data = upload_file_inline(path.to_str().unwrap(), Some("text/plain")).unwrap();
+        assert!(
+            data.starts_with("data:text/plain;base64,"),
+            "expected data URL, got {data}"
+        );
+        fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn upload_file_with_transport_invokes_injected_transport() {
+        let path = temp_path("upload-with-transport");
+        fs::write(&path, b"payload").unwrap();
+        let transport = Arc::new(MockUploadTransport::default());
+
+        let result = upload_file_with_transport(
+            Some(transport.clone()),
+            "https://mock.upload",
+            path.to_str().unwrap(),
+            "file",
+        )
+        .await
+        .expect("upload should succeed");
+
+        assert_eq!(result, "https://mock.upload/file");
+
+        let recorded = transport
+            .last_call
+            .lock()
+            .await
+            .clone()
+            .expect("call recorded");
+        assert_eq!(recorded.url, "https://mock.upload");
+        assert_eq!(recorded.field_name, "file");
+        assert_eq!(
+            recorded.file_name,
+            path.file_name().unwrap().to_str().unwrap()
+        );
+        assert_eq!(recorded.bytes, b"payload");
+
+        fs::remove_file(path).unwrap();
+    }
+
+    fn temp_path(prefix: &str) -> PathBuf {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("{prefix}-{unique}.bin"))
+    }
+
+    #[derive(Clone, Debug)]
+    struct UploadInvocation {
+        url: String,
+        field_name: String,
+        file_name: String,
+        bytes: Vec<u8>,
+    }
+
+    #[derive(Clone, Default)]
+    struct MockUploadTransport {
+        last_call: Arc<Mutex<Option<UploadInvocation>>>,
+    }
+
+    impl DynHttpTransport for MockUploadTransport {
+        fn get_json<'a>(
+            &'a self,
+            _url: &'a str,
+            _headers: Option<HashMap<String, String>>,
+        ) -> BoxFuture<'a, Result<serde_json::Value, AiLibError>> {
+            Box::pin(async {
+                Err(AiLibError::UnsupportedFeature(
+                    "get_json not implemented".to_string(),
+                ))
+            })
+        }
+
+        fn post_json<'a>(
+            &'a self,
+            _url: &'a str,
+            _headers: Option<HashMap<String, String>>,
+            _body: serde_json::Value,
+        ) -> BoxFuture<'a, Result<serde_json::Value, AiLibError>> {
+            Box::pin(async {
+                Err(AiLibError::UnsupportedFeature(
+                    "post_json not implemented".to_string(),
+                ))
+            })
+        }
+
+        fn post_stream<'a>(
+            &'a self,
+            _url: &'a str,
+            _headers: Option<HashMap<String, String>>,
+            _body: serde_json::Value,
+        ) -> StreamFuture<'a> {
+            Box::pin(async {
+                Err(AiLibError::UnsupportedFeature(
+                    "post_stream not implemented".to_string(),
+                ))
+            })
+        }
+
+        fn upload_multipart<'a>(
+            &'a self,
+            url: &'a str,
+            _headers: Option<HashMap<String, String>>,
+            field_name: &'a str,
+            file_name: &'a str,
+            bytes: Vec<u8>,
+        ) -> BoxFuture<'a, Result<serde_json::Value, AiLibError>> {
+            let last_call = self.last_call.clone();
+            let url = url.to_string();
+            let field_name = field_name.to_string();
+            let file_name = file_name.to_string();
+            Box::pin(async move {
+                let mut lock = last_call.lock().await;
+                *lock = Some(UploadInvocation {
+                    url,
+                    field_name,
+                    file_name,
+                    bytes,
+                });
+                Ok(json!({"url": "https://mock.upload/file"}))
+            })
+        }
     }
 }

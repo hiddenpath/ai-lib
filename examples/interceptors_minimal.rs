@@ -1,5 +1,5 @@
-use ai_lib::{AiClientBuilder, Provider, ChatCompletionRequest, Message, Role};
 use ai_lib::types::common::Content;
+use ai_lib::{AiClientBuilder, ChatCompletionRequest, Message, Provider, Role};
 
 #[cfg(feature = "interceptors")]
 #[tokio::main]
@@ -10,7 +10,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let req = ChatCompletionRequest::new(
         "gpt-4o".to_string(),
-        vec![Message { role: Role::User, content: Content::Text("Ping".to_string()), function_call: None }],
+        vec![Message {
+            role: Role::User,
+            content: Content::Text("Ping".to_string()),
+            function_call: None,
+        }],
     );
     let _ = client.chat_completion(req).await;
     Ok(())
@@ -20,5 +24,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn main() {
     println!("This example requires --features interceptors. Skipping.");
 }
-
-

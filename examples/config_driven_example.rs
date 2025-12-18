@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let client = AiClient::new(provider)?;
         println!(
             "✅ Client created successfully: {:?}",
-            client.current_provider()
+            client.provider_name()
         );
 
         // Get model list

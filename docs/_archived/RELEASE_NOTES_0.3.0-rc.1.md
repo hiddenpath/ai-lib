@@ -11,7 +11,7 @@ This RC focuses on optional, feature-gated infrastructure: unified SSE parsing, 
 - `unified_sse`: Common SSE parser; wired in GenericAdapter, Cohere, Mistral streaming.
 - `unified_transport`: Shared reqwest client factory (proxy/timeout/pool env overrides).
 - `cost_metrics`: Minimal cost accounting (env: `COST_INPUT_PER_1K`, `COST_OUTPUT_PER_1K`).
-- `routing_mvp`: `ModelArray` routing support; use sentinel model "__route__" to trigger selection.
+- `routing_mvp`: Strategy-based routing (`with_round_robin_chain`, `with_failover_chain`, or `RoutingStrategyBuilder`)—no sentinel models required.
 - `observability`: Tracer/AuditSink traits (Noop implementations).
 - `config_hot_reload`: ConfigProvider/ConfigWatcher traits (Noop implementations).
 

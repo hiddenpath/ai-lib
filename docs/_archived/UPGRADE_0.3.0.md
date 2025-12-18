@@ -13,7 +13,7 @@ This guide documents behavioral notes and recommended changes when upgrading to 
   - `unified_sse`: Common streaming parser; adapters (Generic/Cohere/Mistral) can opt into unified parsing.
   - `unified_transport`: Shared reqwest client factory (proxy/timeout/pool via env vars).
   - `cost_metrics`: Minimal cost accounting hooks driven by env (`COST_INPUT_PER_1K`, `COST_OUTPUT_PER_1K`).
-  - `routing_mvp`: Basic `ModelArray` routing (use sentinel model "__route__").
+  - `routing_mvp`: Strategy builders for round-robin/failover routing（构建阶段注入 `with_round_robin_chain / with_failover_chain`，不再依赖 `"__route__"` 哨兵模型）。
   - `observability`: `Tracer`/`AuditSink` facades (Noop by default).
   - `config_hot_reload`: ConfigProvider/ConfigWatcher facades (Noop by default).
 

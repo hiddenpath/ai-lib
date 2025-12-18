@@ -5,8 +5,6 @@ use ai_lib::error_handling::recovery::ErrorType;
 use ai_lib::error_handling::{ErrorContext, ErrorRecoveryManager, SuggestedAction};
 use ai_lib::rate_limiter::{RateLimiterConfig, TokenBucket};
 use ai_lib::types::AiLibError;
-use std::time::Duration;
-use tokio::time::sleep;
 
 #[tokio::test]
 async fn test_resilience_features_integration() {

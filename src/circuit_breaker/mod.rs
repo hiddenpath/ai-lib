@@ -1,7 +1,12 @@
-//! Circuit breaker implementation for resilient AI API calls
+//! 熔断器模块，提供AI API调用的弹性保护机制
 //!
-//! This module provides circuit breaker functionality to prevent cascading failures
+//! Circuit breaker module providing resilient protection for AI API calls.
+//!
+//! This module implements circuit breaker patterns to prevent cascading failures
 //! and improve system resilience when calling AI providers.
+//!
+//! The circuit breaker monitors failure rates and temporarily stops making requests
+//! to failing providers, allowing them time to recover.
 
 pub mod breaker;
 pub mod config;

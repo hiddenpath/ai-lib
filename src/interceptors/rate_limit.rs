@@ -43,7 +43,7 @@ impl TokenBucket {
         let now = Instant::now();
         let elapsed = now.duration_since(self.last_refill).as_secs_f64();
         let tokens_to_add = elapsed * self.refill_rate;
-        
+
         self.tokens = (self.tokens + tokens_to_add).min(self.capacity);
         self.last_refill = now;
     }
@@ -63,20 +63,16 @@ impl RateLimitInterceptor {
     pub fn new(requests_per_minute: u32) -> Self {
         let capacity = requests_per_minute as f64;
         let _refill_rate = capacity / 60.0; // tokens per second
-        
+
         Self {
             requests_per_minute,
             buckets: Arc::new(Mutex::new(HashMap::new())),
         }
     }
-
-    /// Create with default rate limit (60 requests per minute)
-    pub fn default() -> Self {
-        Self::new(60)
-    }
 }
 
 impl Default for RateLimitInterceptor {
+    /// Create with default rate limit (60 requests per minute)
     fn default() -> Self {
         Self::new(60)
     }
@@ -90,7 +86,7 @@ impl RateLimitInterceptor {
     fn try_acquire_token(&self, ctx: &RequestContext) -> Result<(), Duration> {
         let key = self.get_bucket_key(ctx);
         let mut buckets = self.buckets.lock().unwrap();
-        
+
         let bucket = buckets.entry(key).or_insert_with(|| {
             let capacity = self.requests_per_minute as f64;
             let refill_rate = capacity / 60.0;
@@ -129,8 +125,10 @@ impl RateLimitWrapper {
     pub fn new(interceptor: RateLimitInterceptor) -> Self {
         Self { interceptor }
     }
+}
 
-    pub fn default() -> Self {
+impl Default for RateLimitWrapper {
+    fn default() -> Self {
         Self::new(RateLimitInterceptor::default())
     }
 }

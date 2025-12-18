@@ -1,17 +1,15 @@
-use crate::api::ChatApi;
-use crate::types::{
-    ChatCompletionRequest, ChatCompletionResponse, Message, Role,
-};
+use crate::api::ChatProvider;
 use crate::types::AiLibError;
+use crate::types::{ChatCompletionRequest, ChatCompletionResponse, Message, Role};
+use async_trait::async_trait;
+use futures::Stream;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use futures::Stream;
-use async_trait::async_trait;
 
 /// AI21 API adapter
-/// 
+///
 /// AI21 provides Jurassic series models with a custom API format.
-/// Documentation: https://docs.ai21.com/reference/introduction
+/// Documentation: <https://docs.ai21.com/reference/introduction>
 pub struct AI21Adapter {
     client: Client,
     api_key: String,
@@ -19,10 +17,9 @@ pub struct AI21Adapter {
 
 impl AI21Adapter {
     pub fn new() -> Result<Self, AiLibError> {
-        let api_key = std::env::var("AI21_API_KEY")
-            .map_err(|_| AiLibError::ConfigurationError(
-                "AI21_API_KEY environment variable not set".to_string()
-            ))?;
+        let api_key = std::env::var("AI21_API_KEY").map_err(|_| {
+            AiLibError::ConfigurationError("AI21_API_KEY environment variable not set".to_string())
+        })?;
 
         Ok(Self {
             client: Client::new(),
@@ -35,7 +32,7 @@ impl AI21Adapter {
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
         let ai21_request = self.convert_request(&request)?;
-        
+
         let response = self
             .client
             .post("https://api.ai21.com/studio/v1/chat/completions")
@@ -48,17 +45,19 @@ impl AI21Adapter {
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(AiLibError::ProviderError(format!(
                 "AI21 API error {}: {}",
                 status, error_text
             )));
         }
 
-        let ai21_response: AI21Response = response
-            .json()
-            .await
-            .map_err(|e| AiLibError::DeserializationError(format!("Failed to parse AI21 response: {}", e)))?;
+        let ai21_response: AI21Response = response.json().await.map_err(|e| {
+            AiLibError::DeserializationError(format!("Failed to parse AI21 response: {}", e))
+        })?;
 
         self.convert_response(ai21_response)
     }
@@ -66,7 +65,14 @@ impl AI21Adapter {
     pub async fn chat_completion_stream(
         &self,
         request: ChatCompletionRequest,
-    ) -> Result<Box<dyn futures::Stream<Item = Result<crate::api::ChatCompletionChunk, AiLibError>> + Send + Unpin>, AiLibError> {
+    ) -> Result<
+        Box<
+            dyn futures::Stream<Item = Result<crate::api::ChatCompletionChunk, AiLibError>>
+                + Send
+                + Unpin,
+        >,
+        AiLibError,
+    > {
         let mut ai21_request = self.convert_request(&request)?;
         ai21_request.stream = Some(true);
 
@@ -82,7 +88,10 @@ impl AI21Adapter {
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(AiLibError::ProviderError(format!(
                 "AI21 API error {}: {}",
                 status, error_text
@@ -91,15 +100,17 @@ impl AI21Adapter {
 
         // For now, convert streaming request to non-streaming and return a single chunk
         let response = self.chat_completion(request.clone()).await?;
-        
+
         // Create a single chunk from the response
         let chunk = crate::api::ChatCompletionChunk {
             id: response.id.clone(),
             object: "chat.completion.chunk".to_string(),
             created: response.created,
             model: response.model.clone(),
-            choices: response.choices.into_iter().map(|choice| {
-                crate::api::ChoiceDelta {
+            choices: response
+                .choices
+                .into_iter()
+                .map(|choice| crate::api::ChoiceDelta {
                     index: choice.index,
                     delta: crate::api::MessageDelta {
                         role: Some(choice.message.role),
@@ -109,10 +120,10 @@ impl AI21Adapter {
                         }),
                     },
                     finish_reason: choice.finish_reason,
-                }
-            }).collect(),
+                })
+                .collect(),
         };
-        
+
         let stream = futures::stream::once(async move { Ok(chunk) });
         Ok(Box::new(Box::pin(stream)))
     }
@@ -142,12 +153,17 @@ impl AI21Adapter {
             temperature: request.temperature,
             top_p: request.top_p,
             stream: Some(false),
+            extensions: request.extensions.clone(),
         })
     }
 
-    fn convert_response(&self, response: AI21Response) -> Result<ChatCompletionResponse, AiLibError> {
-        let choice = response.choices.first()
-            .ok_or_else(|| AiLibError::InvalidModelResponse("No choices in AI21 response".to_string()))?;
+    fn convert_response(
+        &self,
+        response: AI21Response,
+    ) -> Result<ChatCompletionResponse, AiLibError> {
+        let choice = response.choices.first().ok_or_else(|| {
+            AiLibError::InvalidModelResponse("No choices in AI21 response".to_string())
+        })?;
 
         let message = Message {
             role: match choice.message.role.as_str() {
@@ -170,30 +186,37 @@ impl AI21Adapter {
                 message,
                 finish_reason: choice.finish_reason.clone(),
             }],
-            usage: response.usage.map(|u| crate::types::Usage {
-                prompt_tokens: u.prompt_tokens,
-                completion_tokens: u.completion_tokens,
-                total_tokens: u.total_tokens,
-            }).unwrap_or_else(|| crate::types::Usage {
-                prompt_tokens: 0,
-                completion_tokens: 0,
-                total_tokens: 0,
-            }),
+            usage: response
+                .usage
+                .map(|u| crate::types::Usage {
+                    prompt_tokens: u.prompt_tokens,
+                    completion_tokens: u.completion_tokens,
+                    total_tokens: u.total_tokens,
+                })
+                .unwrap_or_else(|| crate::types::Usage {
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: 0,
+                }),
             usage_status: crate::types::response::UsageStatus::Finalized,
         })
     }
 }
 
 #[async_trait]
-impl ChatApi for AI21Adapter {
-    async fn chat_completion(
+impl ChatProvider for AI21Adapter {
+    fn name(&self) -> &str {
+        "AI21"
+    }
+
+    async fn chat(
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
         self.chat_completion(request).await
     }
 
-    async fn chat_completion_stream(
+    async fn stream(
         &self,
         request: ChatCompletionRequest,
     ) -> Result<
@@ -231,6 +254,8 @@ struct AI21Request {
     temperature: Option<f32>,
     top_p: Option<f32>,
     stream: Option<bool>,
+    #[serde(flatten)]
+    extensions: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 #[derive(Serialize)]

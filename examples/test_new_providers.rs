@@ -1,4 +1,4 @@
-use ai_lib::{AiClient, Provider};
+use ai_lib::{client::AiClientBuilder, AiClient, Provider};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for provider in config_driven_providers {
         println!("Testing {} (config-driven)...", format!("{:?}", provider));
-        
+
         match AiClient::new(provider) {
             Ok(_client) => {
                 println!("  ✓ Client created successfully");
@@ -32,14 +32,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Test independent providers
-    let independent_providers = vec![
-        Provider::Perplexity,
-        Provider::AI21,
-    ];
+    let independent_providers = vec![Provider::Perplexity, Provider::AI21];
 
     for provider in independent_providers {
         println!("Testing {} (independent)...", format!("{:?}", provider));
-        
+
         match AiClient::new(provider) {
             Ok(_client) => {
                 println!("  ✓ Client created successfully");
@@ -58,10 +55,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test failover with new providers
     println!("Testing failover with new providers...");
-    let _client = AiClient::new(Provider::OpenAI)
-        .expect("create client")
-        .with_failover(vec![Provider::OpenRouter, Provider::Replicate, Provider::Perplexity]);
-    println!("  ✓ Failover configuration successful");
+    let _client = AiClientBuilder::new(Provider::OpenAI)
+        .with_failover_chain(vec![
+            Provider::OpenRouter,
+            Provider::Replicate,
+            Provider::Perplexity,
+        ])?
+        .build()?;
+    println!("  ✓ Failover chain configured via AiClientBuilder");
 
     println!("\nAll tests completed!");
     Ok(())

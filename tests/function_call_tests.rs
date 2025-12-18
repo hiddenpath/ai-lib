@@ -6,7 +6,7 @@ use ai_lib::types::function_call::FunctionCallPolicy;
 use ai_lib::types::function_call::Tool;
 use ai_lib::types::{ChatCompletionRequest, Message, Role};
 use ai_lib::AiLibError;
-use ai_lib::ChatApi;
+use ai_lib::ChatProvider;
 use bytes::Bytes;
 use futures::stream::{self};
 use serde_json::json;
@@ -123,7 +123,9 @@ async fn generic_adapter_parses_function_call_object_arguments() {
     };
     let req = ChatCompletionRequest::new("test-model".to_string(), vec![msg]);
 
-    let resp = adapter.chat_completion(req).await.expect("chat completion");
+    let resp = ChatProvider::chat(&adapter, req)
+        .await
+        .expect("chat completion");
     let fc = &resp.choices[0].message.function_call;
     assert!(fc.is_some(), "function_call should be populated");
     let fc = fc.as_ref().unwrap();
@@ -173,7 +175,9 @@ async fn generic_adapter_parses_function_call_stringified_arguments() {
     };
     let req = ChatCompletionRequest::new("test-model".to_string(), vec![msg]);
 
-    let resp = adapter.chat_completion(req).await.expect("chat completion");
+    let resp = ChatProvider::chat(&adapter, req)
+        .await
+        .expect("chat completion");
     let fc = &resp.choices[0].message.function_call;
     assert!(fc.is_some(), "function_call should be populated");
     let fc = fc.as_ref().unwrap();
@@ -216,12 +220,29 @@ async fn generic_adapter_parses_tool_calls_first_function() {
         ProviderConfig::openai_compatible("http://example", "API_KEY", "gpt-3.5-turbo", None);
     let adapter = GenericAdapter::with_transport_ref(config, transport).expect("create adapter");
 
-    let msg = Message { role: Role::User, content: Content::Text("Hello".to_string()), function_call: None };
+    let msg = Message {
+        role: Role::User,
+        content: Content::Text("Hello".to_string()),
+        function_call: None,
+    };
     let req = ChatCompletionRequest::new("test-model".to_string(), vec![msg]);
-    let resp = adapter.chat_completion(req).await.expect("chat completion");
-    let fc = resp.choices[0].message.function_call.as_ref().expect("function_call present");
+    let resp = ChatProvider::chat(&adapter, req)
+        .await
+        .expect("chat completion");
+    let fc = resp.choices[0]
+        .message
+        .function_call
+        .as_ref()
+        .expect("function_call present");
     assert_eq!(fc.name, "ascii_horse");
-    assert_eq!(fc.arguments.as_ref().unwrap().get("size").and_then(|v| v.as_i64()), Some(7));
+    assert_eq!(
+        fc.arguments
+            .as_ref()
+            .unwrap()
+            .get("size")
+            .and_then(|v| v.as_i64()),
+        Some(7)
+    );
 }
 
 #[test]

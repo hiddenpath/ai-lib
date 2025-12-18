@@ -12,7 +12,7 @@ ai-lib 通过现有的 API 能力完美支持推理模型，无需额外的接�
 - **openai/gpt-oss-20b**: OpenAI OSS 推理模型
 - **openai/gpt-oss-120b**: OpenAI OSS 大型推理模型
 
-## 推理模式
+## 推理模式（与结构化解析的结合）
 
 ### 1. 结构化推理
 使用函数调用进行步骤化推理，适合需要结构化输出的场景。
@@ -98,6 +98,8 @@ while let Some(chunk) = stream.next().await {
 ### 3. JSON 格式推理
 获取结构化的推理结果，适合需要程序化处理的场景。
 
+> 解析提示：开启 `response_parser` feature 后，可用 `AutoParser` 或 `JsonResponseParser<T>` 对模型输出做通用解析，详见 `docs/RESPONSE_PARSING.md`。
+
 ```rust
 let request = ChatCompletionRequest::new(
     "qwen-qwq-32b".to_string(),
@@ -138,10 +140,10 @@ let mut request = ChatCompletionRequest::new(
 
 // 添加 Groq 特定的推理参数
 request = request
-    .with_provider_specific("reasoning_format", serde_json::Value::String("parsed".to_string()))
-    .with_provider_specific("reasoning_effort", serde_json::Value::String("high".to_string()))
-    .with_provider_specific("parallel_tool_calls", serde_json::Value::Bool(true))
-    .with_provider_specific("service_tier", serde_json::Value::String("flex".to_string()));
+    .with_extension("reasoning_format", serde_json::Value::String("parsed".to_string()))
+    .with_extension("reasoning_effort", serde_json::Value::String("high".to_string()))
+    .with_extension("parallel_tool_calls", serde_json::Value::Bool(true))
+    .with_extension("service_tier", serde_json::Value::String("flex".to_string()));
 
 let response = client.chat_completion(request).await?;
 ```

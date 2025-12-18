@@ -1,6 +1,18 @@
+//! 可观测性模块，提供追踪和审计功能
+//!
+//! Observability module providing tracing and audit functionality.
+//!
+//! This module defines traits for distributed tracing and audit logging,
+//! allowing integration with observability backends like OpenTelemetry.
+//!
+//! Key components:
+//! - `Tracer`: Distributed tracing interface
+//! - `AuditSink`: Structured audit logging
+//! - No-op implementations for when observability is disabled
+
 use async_trait::async_trait;
 
-/// Minimal tracing facade trait to decouple from concrete backends (e.g., OpenTelemetry).
+/// 最小化追踪门面trait，用于与具体后端解耦（如OpenTelemetry）。
 #[async_trait]
 pub trait Tracer: Send + Sync {
     /// Start a span; return an opaque handle that stops on drop.

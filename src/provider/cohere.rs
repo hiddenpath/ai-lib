@@ -1,8 +1,9 @@
-use crate::api::{ChatApi, ChatCompletionChunk, ModelInfo, ModelPermission};
+use crate::api::{ChatCompletionChunk, ChatProvider, ModelInfo, ModelPermission};
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::transport::{DynHttpTransportRef, HttpTransport};
 use crate::types::{
-    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage, UsageStatus,
+    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
+    UsageStatus,
 };
 use futures::stream::Stream;
 use std::clone::Clone;
@@ -146,29 +147,6 @@ fn split_text_into_chunks(text: &str, max_len: usize) -> Vec<String> {
     }
     chunks
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn split_text_handles_multibyte_without_panic() {
-        let s = "这是一个包含中文字符的长文本，用于测试边界处理。🚀✨";
-        // Use a small max_len to force potential mid-codepoint boundaries
-        let chunks = split_text_into_chunks(s, 8);
-        assert!(!chunks.is_empty());
-        // ensure every chunk is valid UTF-8 and reasonably sized
-        for c in &chunks {
-            assert!(std::str::from_utf8(c.as_bytes()).is_ok());
-            // allow small slack: chunk bytes should not greatly exceed the requested max_len
-            assert!(c.as_bytes().len() <= 8 + 8);
-        }
-        // Reconstructing by simple concatenation should produce a string that is at least
-        // a substring of the original (this guards against lossy truncation logic)
-        let combined = chunks.join("");
-        assert!(s.contains(&combined) || combined.contains(&s) || !combined.is_empty());
-    }
-}
 use futures::StreamExt;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -194,10 +172,11 @@ impl CohereAdapter {
         #[cfg(feature = "unified_transport")]
         {
             let timeout = Duration::from_secs(Self::build_default_timeout_secs());
-            let client = crate::transport::client_factory::build_shared_client()
-                .map_err(|e| AiLibError::NetworkError(format!("Failed to build http client: {}", e)))?;
+            let client = crate::transport::client_factory::build_shared_client().map_err(|e| {
+                AiLibError::NetworkError(format!("Failed to build http client: {}", e))
+            })?;
             let t = HttpTransport::with_reqwest_client(client, timeout);
-            return Ok(t.boxed());
+            Ok(t.boxed())
         }
         #[cfg(not(feature = "unified_transport"))]
         {
@@ -310,6 +289,8 @@ impl CohereAdapter {
                 serde_json::Value::Number(serde_json::Number::from(max_tokens));
         }
 
+        request.apply_extensions(&mut chat_body);
+
         chat_body
     }
 
@@ -377,7 +358,8 @@ impl CohereAdapter {
                         if let Some(args_val) = &args_opt {
                             if args_val.is_string() {
                                 if let Some(s) = args_val.as_str() {
-                                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(s) {
+                                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(s)
+                                    {
                                         args_opt = Some(parsed);
                                     }
                                 }
@@ -421,8 +403,12 @@ impl CohereAdapter {
 }
 
 #[async_trait::async_trait]
-impl ChatApi for CohereAdapter {
-    async fn chat_completion(
+impl ChatProvider for CohereAdapter {
+    fn name(&self) -> &str {
+        "Cohere"
+    }
+
+    async fn chat(
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
@@ -468,6 +454,8 @@ impl ChatApi for CohereAdapter {
                 serde_json::Value::Number(serde_json::Number::from(max_tokens));
         }
 
+        request.apply_extensions(&mut generate_body);
+
         // Use unified transport
         let response_json = self
             .transport
@@ -481,7 +469,7 @@ impl ChatApi for CohereAdapter {
         self.parse_response(response_json)
     }
 
-    async fn chat_completion_stream(
+    async fn stream(
         &self,
         _request: ChatCompletionRequest,
     ) -> Result<
@@ -576,8 +564,8 @@ impl ChatApi for CohereAdapter {
             return Ok(Box::new(Box::pin(stream)));
         }
 
-        // Fallback: call non-streaming chat_completion and stream the result in chunks
-        let finished = self.chat_completion(_request.clone()).await?;
+        // Fallback: call non-streaming chat and stream the result in chunks
+        let finished = self.chat(_request.clone()).await?;
         let text = finished
             .choices
             .first()
@@ -662,5 +650,28 @@ impl ChatApi for CohereAdapter {
                 is_blocking: false,
             }],
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_text_handles_multibyte_without_panic() {
+        let s = "这是一个包含中文字符的长文本，用于测试边界处理。🚀✨";
+        // Use a small max_len to force potential mid-codepoint boundaries
+        let chunks = split_text_into_chunks(s, 8);
+        assert!(!chunks.is_empty());
+        // ensure every chunk is valid UTF-8 and reasonably sized
+        for c in &chunks {
+            assert!(std::str::from_utf8(c.as_bytes()).is_ok());
+            // allow small slack: chunk bytes should not greatly exceed the requested max_len
+            assert!(c.len() <= 8 + 8);
+        }
+        // Reconstructing by simple concatenation should produce a string that is at least
+        // a substring of the original (this guards against lossy truncation logic)
+        let combined = chunks.join("");
+        assert!(s.contains(&combined) || combined.contains(s) || !combined.is_empty());
     }
 }

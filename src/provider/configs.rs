@@ -256,57 +256,57 @@ impl ProviderConfigs {
     }
 
     /// OpenRouter configuration
-    /// 
+    ///
     /// OpenRouter is a unified gateway for multiple AI models with OpenAI-compatible API.
-    /// Base URL: https://openrouter.ai/api/v1
-    /// Documentation: https://openrouter.ai/docs/api-reference/overview
+    /// Base URL: <https://openrouter.ai/api/v1>
+    /// Documentation: <https://openrouter.ai/docs/api-reference/overview>
     pub fn openrouter() -> ProviderConfig {
         ProviderConfig::openai_compatible(
             "https://openrouter.ai/api/v1",
             "OPENROUTER_API_KEY",
             "openai/gpt-3.5-turbo", // Default model
-            Some("openai/gpt-4o"), // Multimodal model
+            Some("openai/gpt-4o"),  // Multimodal model
         )
     }
 
     /// Replicate configuration
-    /// 
+    ///
     /// Replicate provides access to various AI models with OpenAI-compatible API.
-    /// Base URL: https://api.replicate.com/v1
-    /// Documentation: https://replicate.com/docs/reference/http
+    /// Base URL: <https://api.replicate.com/v1>
+    /// Documentation: <https://replicate.com/docs/reference/http>
     pub fn replicate() -> ProviderConfig {
         ProviderConfig::openai_compatible(
             "https://api.replicate.com/v1",
             "REPLICATE_API_TOKEN",
-            "meta/llama-2-7b-chat", // Default model
+            "meta/llama-2-7b-chat",       // Default model
             Some("meta/llama-2-7b-chat"), // Multimodal model
         )
     }
 
     /// 智谱AI (GLM) configuration
-    /// 
+    ///
     /// 智谱AI provides GLM series models with OpenAI-compatible API.
-    /// Base URL: https://open.bigmodel.cn/api/paas/v4
-    /// Documentation: https://docs.bigmodel.cn/cn/api/introduction
+    /// Base URL: <https://open.bigmodel.cn/api/paas/v4>
+    /// Documentation: <https://docs.bigmodel.cn/cn/api/introduction>
     pub fn zhipu_ai() -> ProviderConfig {
         ProviderConfig::openai_compatible(
             "https://open.bigmodel.cn/api/paas/v4",
             "ZHIPU_API_KEY",
-            "glm-4", // Default model
+            "glm-4",        // Default model
             Some("glm-4v"), // Multimodal model
         )
     }
 
     /// MiniMax configuration
-    /// 
+    ///
     /// MiniMax provides AI models with OpenAI-compatible API.
-    /// Base URL: https://api.minimax.chat/v1
-    /// Documentation: https://www.minimax.io/platform/document/ChatCompletion
+    /// Base URL: <https://api.minimax.chat/v1>
+    /// Documentation: <https://www.minimax.io/platform/document/ChatCompletion>
     pub fn minimax() -> ProviderConfig {
         ProviderConfig::openai_compatible(
             "https://api.minimax.chat/v1",
             "MINIMAX_API_KEY",
-            "abab6.5-chat", // Default model
+            "abab6.5-chat",       // Default model
             Some("abab6.5-chat"), // Multimodal model
         )
     }

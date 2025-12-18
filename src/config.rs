@@ -1,9 +1,16 @@
+//! 配置管理模块，提供连接和运行时配置选项
+//!
+//! Configuration management module providing connection and runtime configuration options.
+//!
+//! This module defines configuration structures for customizing ai-lib behavior,
+//! including connection settings, resilience parameters, and provider-specific options.
+
 use crate::circuit_breaker::CircuitBreakerConfig;
 use crate::error_handling::ErrorThresholds;
 use crate::rate_limiter::RateLimiterConfig;
 use std::time::Duration;
 
-/// Minimal explicit connection/configuration options.
+/// 最小化的显式连接/配置选项。
 ///
 /// Library users can pass an instance of this struct to `AiClient::with_options` to
 /// explicitly control base URL, proxy, API key and timeout without relying exclusively

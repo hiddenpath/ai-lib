@@ -3,13 +3,6 @@
 use ai_lib::{AiClient, ChatCompletionRequest, Provider};
 
 #[test]
-fn routing_sentinel_model_constant_present() {
-    // Sanity check the sentinel string used by routing_mvp docs
-    let s = "__route__";
-    assert_eq!(s, "__route__");
-}
-
-#[test]
 fn cost_env_defaults_are_parsable() {
     #[cfg(feature = "cost_metrics")]
     {

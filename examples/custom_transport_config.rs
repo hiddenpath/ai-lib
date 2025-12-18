@@ -1,5 +1,5 @@
 use ai_lib::transport::{HttpTransport, HttpTransportConfig};
-use ai_lib::{AiClient, Provider, ConnectionOptions};
+use ai_lib::{AiClient, ConnectionOptions, Provider};
 use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

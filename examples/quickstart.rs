@@ -8,7 +8,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 🎯 Simplest usage - create client with one line of code
     println!("\n📋 Simplest usage:");
-    let client = AiClient::new(Provider::Groq)?;
+    let _client = AiClient::new(Provider::Groq)?;
     println!("✅ Client created successfully!");
 
     // 🔧 If you need custom configuration, use builder pattern
@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 📝 Create chat request
     println!("\n📋 Create chat request:");
-    let request = ChatCompletionRequest::new(
+    let _request = ChatCompletionRequest::new(
         "llama3-8b-8192".to_string(), // Model name
         vec![Message {
             role: Role::User,
@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 🎨 More customization options
     println!("\n📋 More customization options:");
-    let advanced_client = AiClientBuilder::new(Provider::Groq)
+    let _advanced_client = AiClientBuilder::new(Provider::Groq)
         .with_timeout(std::time::Duration::from_secs(60)) // 60 second timeout
         .with_pool_config(16, std::time::Duration::from_secs(60)) // Connection pool config
         .build()?;
@@ -60,10 +60,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 🔄 Switch to other providers
     println!("\n📋 Switch to other providers:");
-    let deepseek_client = AiClient::new(Provider::DeepSeek)?;
+    let _deepseek_client = AiClient::new(Provider::DeepSeek)?;
     println!("✅ DeepSeek client created successfully!");
 
-    let ollama_client = AiClient::new(Provider::Ollama)?;
+    let _ollama_client = AiClient::new(Provider::Ollama)?;
     println!("✅ Ollama client created successfully!");
 
     println!("\n🎉 Quickstart completed!");

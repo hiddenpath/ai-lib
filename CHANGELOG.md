@@ -1,3 +1,33 @@
+## [Unreleased]
+
+## v0.4.0 - 2025-12-04
+
+### Added
+- **Trait Shift 1.0 Evolution**: Complete architectural overhaul to a trait-based system (`ChatProvider`).
+    - **Unified Interface**: All providers now implement the `ChatProvider` trait, ensuring consistency across `chat`, `stream`, `batch`, and `list_models`.
+    - **Extensibility**: New `ProviderFactory` makes adding providers easier and more standardized.
+    - **Adapter Pattern**: Clear separation between "Generic" (config-driven) and "Adapter" (custom logic) implementations.
+- **Enhanced Client**: `AiClient` now acts as a powerful wrapper handling metrics, model resolution, and connection options.
+- **Improved Streaming**: Unified SSE/JSONL parsing logic across all providers.
+
+### Changed
+- **BREAKING**: `AiClient::new` now returns `Result<AiClient, AiLibError>` and requires `Provider` enum.
+- **Refactor**: Internal module structure optimized for the new trait-based architecture.
+- **Cleanup**: Removed legacy enum-based dispatch logic in favor of dynamic dispatch via `Box<dyn ChatProvider>`.
+
+### Fixed
+- Standardized error handling across all providers.
+- Improved token estimation fallback logic.
+
+### Added
+- **Strategy Builders**: `AiClientBuilder::with_round_robin_chain` and `with_failover_chain` let you compose `RoundRobinProvider`/`FailoverProvider` before runtime without custom wiring.
+- **Tests & Examples**: New routing strategy tests plus the refreshed `routing_modelarray.rs` example demonstrate pre-runtime strategy injection.
+- **ChatCompletionRequest Extensions**: Added `with_extension()` for structured provider-specific parameters (`with_provider_specific()` now forwards to it).
+
+### Changed
+- Removed the legacy `AiClient::with_failover` helper and all `"__route__"` sentinel references; routing decisions now happen via explicit strategies.
+- Documentation now highlights strategy builders (`readme.md`, `README_CN.md`, import guides, upgrade notes) and deprecates the sentinel-based workflow.
+
 ## v0.3.4 - 2025-09-15
 
 ### Added
@@ -116,7 +146,7 @@
 ## [0.3.0] - 2025-09-09
 
 ### Added
-- `AiClientBuilder::with_routing_array(...)` to configure `ModelArray` routing (feature: `routing_mvp`).
+- `AiClientBuilder::with_round_robin_chain(...)` / `with_failover_chain(...)` to configure routing strategies (feature: `routing_mvp`).
 - Minimal routing health check when selecting endpoints; probes base URL (or `/models` for OpenAI‑compatible) before use.
 - Routing metrics keys (feature: `routing_mvp`): `routing_mvp.request`, `routing_mvp.selected`, `routing_mvp.health_fail`, `routing_mvp.fallback_default`, `routing_mvp.no_endpoint`, `routing_mvp.missing_array`.
 - Examples:
@@ -125,7 +155,7 @@
 - Unified SSE MD5/event-sequence consistency test: `tests/sse_md5_consistency.rs` (feature: `unified_sse`).
 
 ### Changed
-- README/README_CN updated with routing example (`with_routing_array` + `"__route__"`) and metrics/health-check notes.
+- README/README_CN updated with routing strategy examples (`with_round_robin_chain` / `with_failover_chain`) and metrics/health-check notes.
 
 ### Deprecated
 - Added deprecation notes on legacy adapter-local SSE helpers in favor of `sse::parser` when `unified_sse` is enabled.
@@ -136,7 +166,7 @@
   - `unified_sse`: Common SSE parser and tests; `GenericAdapter` wired under flag
   - `unified_transport`: Shared reqwest client factory
   - `cost_metrics`: Env-driven minimal cost accounting (COST_INPUT_PER_1K, COST_OUTPUT_PER_1K)
-  - `routing_mvp`: Basic `ModelArray` routing via special model "__route__"
+  - `routing_mvp`: Strategy-based routing (round-robin/failover chains; no sentinel models required)
   - `observability`: Tracer/AuditSink traits (Noop implementations)
   - `config_hot_reload`: ConfigProvider/Watcher traits (Noop implementations)
 - Standardized metric keys via `metrics::keys`
@@ -202,7 +232,7 @@
 - **Provider Enum**: Added `PartialEq` trait to `Provider` enum for classification support
 - **Code Organization**: Eliminated duplicate provider classification logic across multiple modules
 - **Type Safety**: Compile-time provider classification with automatic adapter type detection
-- **ChatCompletionRequest**: Added `with_functions()`, `with_function_call()`, and `with_provider_specific()` methods for enhanced functionality
+- **ChatCompletionRequest**: Added `with_functions()`, `with_function_call()`, and `with_extension()` methods for enhanced functionality
 
 ### Changed
 - **Provider Classification Logic**: Replaced hardcoded `matches!` statements with trait-based classification
@@ -223,7 +253,7 @@
 - **New Types**: `CircuitBreaker`, `TokenBucket`, `ErrorRecoveryManager`, `ErrorContext`, `SuggestedAction`
 - **New Configuration**: `ResilienceConfig`, `CircuitBreakerConfig`, `RateLimiterConfig`, `ErrorThresholds`
 - **New Builder Methods**: `with_smart_defaults()`, `for_production()`, `for_development()`, `with_resilience_config()`
-- **New Request Methods**: `with_functions()`, `with_function_call()`, `with_provider_specific()`
+- **New Request Methods**: `with_functions()`, `with_function_call()`, `with_extension()`
 
 ### Breaking Changes
 - None - All new features are additive and backward compatible
@@ -273,8 +303,8 @@ let request = ChatCompletionRequest::new(model, messages)
 
 // Provider-specific reasoning configuration
 let request = ChatCompletionRequest::new(model, messages)
-    .with_provider_specific("reasoning_format", serde_json::Value::String("parsed".to_string()))
-    .with_provider_specific("reasoning_effort", serde_json::Value::String("high".to_string()));
+    .with_extension("reasoning_format", serde_json::Value::String("parsed".to_string()))
+    .with_extension("reasoning_effort", serde_json::Value::String("high".to_string()));
 ```
 
 ### Developer Experience

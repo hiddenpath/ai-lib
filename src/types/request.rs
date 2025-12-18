@@ -1,6 +1,7 @@
 use crate::types::Message;
 use crate::types::{FunctionCallPolicy, Tool};
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionRequest {
@@ -16,6 +17,9 @@ pub struct ChatCompletionRequest {
     pub functions: Option<Vec<Tool>>,
     /// Function call policy: "auto"/"none"/specific name
     pub function_call: Option<FunctionCallPolicy>,
+    /// Provider-specific extension properties (serialized verbatim)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extensions: Option<Map<String, Value>>,
 }
 
 impl ChatCompletionRequest {
@@ -31,6 +35,7 @@ impl ChatCompletionRequest {
             presence_penalty: None,
             functions: None,
             function_call: None,
+            extensions: None,
         }
     }
 
@@ -54,10 +59,19 @@ impl ChatCompletionRequest {
         self
     }
 
-    pub fn with_provider_specific(self, _key: &str, _value: serde_json::Value) -> Self {
-        // This needs to add provider_specific field to ChatCompletionRequest
-        // For now, just return self, actual implementation requires modifying the struct
+    /// Attach provider-specific extensions to the request (serialized verbatim).
+    pub fn with_extension(mut self, key: &str, value: serde_json::Value) -> Self {
+        let map = self.extensions.get_or_insert_with(Map::new);
+        map.insert(key.to_string(), value);
         self
+    }
+
+    pub fn apply_extensions(&self, target: &mut serde_json::Value) {
+        if let (Some(ext), Some(obj)) = (&self.extensions, target.as_object_mut()) {
+            for (k, v) in ext {
+                obj.insert(k.clone(), v.clone());
+            }
+        }
     }
 
     /// Drop previous conversational messages while keeping system messages and the last non-system message.

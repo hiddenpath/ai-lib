@@ -1,4 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
+//! AI-lib 是一个统一的 Rust AI SDK，提供单一接口访问多个 AI 模型提供商
+//!
 //! AI-lib: A Unified AI SDK for Rust
 //!
 //! This library provides a single, consistent interface for interacting with multiple AI model providers.
@@ -24,7 +26,7 @@
 //!         }],
 //!     );
 //!
-//!     println!("Client created successfully with provider: {:?}", client.current_provider());
+//!     println!("Client created successfully with provider: {}", client.provider_name());
 //!     println!("Request prepared for model: {}", request.model);
 //!
 //!     Ok(())
@@ -60,7 +62,7 @@
 //!   - `COST_OUTPUT_PER_1K`: USD per 1000 output tokens
 //!
 //! These cost metrics are read from environment variables for simplicity.
-//! 
+//!
 //! Note: In ai-lib-pro, these can be centrally configured and hot-reloaded
 //! via external configuration providers for enterprise deployments.
 
@@ -68,9 +70,12 @@ pub mod api;
 pub mod client;
 pub mod config;
 pub mod metrics;
+pub mod model;
 pub mod provider;
 pub mod transport;
 pub mod types;
+#[cfg(feature = "response_parser")]
+pub mod response_parser;
 pub mod utils; // minimal explicit configuration entrypoint
 
 // Feature-gated modules (OSS progressive complexity)
@@ -81,7 +86,9 @@ pub mod interceptors;
 pub mod sse;
 
 #[cfg(feature = "unified_transport")]
-pub mod net { pub use crate::transport::client_factory; }
+pub mod net {
+    pub use crate::transport::client_factory;
+}
 
 #[cfg(feature = "observability")]
 pub mod observability;
@@ -91,15 +98,16 @@ pub mod config_hot_reload;
 
 // Resilience modules
 pub mod circuit_breaker;
-pub mod rate_limiter;
 pub mod error_handling;
+pub mod rate_limiter;
 
 // Re-export main types for user convenience
-pub use api::ChatApi;
+pub use api::{ChatApi, ChatProvider};
 pub use client::{AiClient, AiClientBuilder, ModelOptions, Provider};
+pub use provider::chat_provider::AdapterProvider;
 pub use types::{
-    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role,
-    FunctionCall, FunctionCallPolicy, Tool,
+    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, FunctionCall,
+    FunctionCallPolicy, Message, Role, Tool,
 };
 // Convenience re-exports: make the most-used types available from the crate root so
 // users don't need deep imports for common flows.
@@ -112,8 +120,8 @@ pub use transport::{
 // Re-export minimal configuration type
 pub use config::ConnectionOptions;
 // Export response metadata (Usage/UsageStatus) and common Content from canonical modules
-pub use types::response::{Usage, UsageStatus};
 pub use types::common::Content;
+pub use types::response::{Usage, UsageStatus};
 
 // Re-export configuration types
 pub use provider::config::{FieldMapping, ProviderConfig};
@@ -137,17 +145,16 @@ pub use utils::file::{
     save_temp_file, validate_file,
 };
 
-
 /// Prelude with the minimal commonly used items for applications.
 ///
 /// Prefer `use ai_lib::prelude::*;` in application code for better ergonomics.
 /// Library authors may prefer importing explicit items from their modules.
 pub mod prelude {
-    pub use crate::{AiClient, AiClientBuilder, Provider};
-    pub use crate::types::{ChatCompletionRequest, ChatCompletionResponse, Choice};
     pub use crate::types::common::{Content, Message, Role};
-    pub use crate::types::response::{Usage, UsageStatus};
     pub use crate::types::error::AiLibError;
+    pub use crate::types::response::{Usage, UsageStatus};
+    pub use crate::types::{ChatCompletionRequest, ChatCompletionResponse, Choice};
+    pub use crate::{AiClient, AiClientBuilder, Provider};
 }
 
 // Module tree and import guidance:

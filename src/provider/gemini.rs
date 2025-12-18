@@ -1,8 +1,9 @@
-use crate::api::{ChatApi, ChatCompletionChunk, ModelInfo, ModelPermission};
+use crate::api::{ChatCompletionChunk, ChatProvider, ModelInfo, ModelPermission};
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::transport::{DynHttpTransportRef, HttpTransport};
 use crate::types::{
-    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage, UsageStatus,
+    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
+    UsageStatus,
 };
 use futures::stream::Stream;
 use futures::StreamExt;
@@ -19,7 +20,7 @@ use std::time::Duration;
 /// Gemini API is completely different from OpenAI format, requires independent adapter:
 /// - Endpoint: /v1beta/models/{model}:generateContent
 /// - Request body: contents array instead of messages
-/// - Response: candidates[0].content.parts[0].text
+/// - Response: candidates\[0\].content.parts\[0\].text
 /// - Authentication: URL parameter ?key=<API_KEY>
 pub struct GeminiAdapter {
     #[allow(dead_code)] // Kept for backward compatibility, now using direct reqwest
@@ -42,10 +43,11 @@ impl GeminiAdapter {
         #[cfg(feature = "unified_transport")]
         {
             let timeout = Duration::from_secs(Self::build_default_timeout_secs());
-            let client = crate::transport::client_factory::build_shared_client()
-                .map_err(|e| AiLibError::NetworkError(format!("Failed to build http client: {}", e)))?;
+            let client = crate::transport::client_factory::build_shared_client().map_err(|e| {
+                AiLibError::NetworkError(format!("Failed to build http client: {}", e))
+            })?;
             let t = HttpTransport::with_reqwest_client(client, timeout);
-            return Ok(t.boxed());
+            Ok(t.boxed())
         }
         #[cfg(not(feature = "unified_transport"))]
         {
@@ -155,6 +157,8 @@ impl GeminiAdapter {
             gemini_request["generationConfig"] = generation_config;
         }
 
+        request.apply_extensions(&mut gemini_request);
+
         gemini_request
     }
 
@@ -259,8 +263,12 @@ impl GeminiAdapter {
 }
 
 #[async_trait::async_trait]
-impl ChatApi for GeminiAdapter {
-    async fn chat_completion(
+impl ChatProvider for GeminiAdapter {
+    fn name(&self) -> &str {
+        "Gemini"
+    }
+
+    async fn chat(
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
@@ -281,14 +289,15 @@ impl ChatApi for GeminiAdapter {
         let response_json = self
             .transport
             .post_json(&url, Some(headers), gemini_request)
-            .await?;
+            .await
+            .map_err(|e| e.with_context(&format!("Gemini chat request to {}", url)))?;
         if let Some(t) = timer {
             t.stop();
         }
         self.parse_gemini_response(response_json, &request.model)
     }
 
-    async fn chat_completion_stream(
+    async fn stream(
         &self,
         request: ChatCompletionRequest,
     ) -> Result<
@@ -512,7 +521,7 @@ impl ChatApi for GeminiAdapter {
             chunks
         }
 
-        let finished = self.chat_completion(request).await?;
+        let finished = self.chat(request).await?;
         let text = finished
             .choices
             .first()

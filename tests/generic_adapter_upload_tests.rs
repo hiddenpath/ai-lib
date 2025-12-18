@@ -2,7 +2,7 @@ use ai_lib::transport::dyn_transport::DynHttpTransport;
 use ai_lib::types::common::Content;
 use ai_lib::types::{ChatCompletionRequest, Message, Role};
 use ai_lib::AiLibError;
-use ai_lib::ChatApi;
+use ai_lib::ChatProvider;
 use base64::Engine;
 use bytes::Bytes;
 use futures::Stream;
@@ -121,7 +121,9 @@ async fn generic_adapter_uploads_image_and_returns_file_id() {
     };
     let req = ChatCompletionRequest::new("m".to_string(), vec![msg]);
 
-    let _ = adapter.chat_completion(req).await.expect("chat completion");
+    let _ = ChatProvider::chat(&adapter, req)
+        .await
+        .expect("chat completion");
 
     let lock = transport.last_post_body.lock().await;
     let body = lock.as_ref().expect("body captured");
@@ -224,7 +226,9 @@ async fn generic_adapter_upload_failure_falls_back_to_inline() {
     };
     let req = ChatCompletionRequest::new("m".to_string(), vec![msg]);
 
-    let _ = adapter.chat_completion(req).await.expect("chat completion");
+    let _ = ChatProvider::chat(&adapter, req)
+        .await
+        .expect("chat completion");
 
     // Verify inline in data URL - generate data URL directly
     let bytes = std::fs::read(&tmp).unwrap();
@@ -319,7 +323,9 @@ async fn generic_adapter_size_boundary_respects_upload_size_limit() {
     };
     let req = ChatCompletionRequest::new("m".to_string(), vec![msg]);
 
-    let _ = adapter.chat_completion(req).await.expect("chat completion");
+    let _ = ChatProvider::chat(&adapter, req)
+        .await
+        .expect("chat completion");
 
     // If we reached here without panic, the upload wasn't called and adapter inlined the file as expected.
 }

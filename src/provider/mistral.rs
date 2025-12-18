@@ -1,23 +1,24 @@
 use crate::api::{
-    ChatApi, ChatCompletionChunk, ChoiceDelta, MessageDelta, ModelInfo, ModelPermission,
+    ChatCompletionChunk, ChatProvider, ChoiceDelta, MessageDelta, ModelInfo, ModelPermission,
 };
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::transport::{DynHttpTransportRef, HttpTransport};
 use crate::types::{
-    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage, UsageStatus,
+    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
+    UsageStatus,
 };
 use futures::stream::Stream;
 use futures::StreamExt;
 use std::collections::HashMap;
+use std::sync::Arc;
 #[cfg(feature = "unified_transport")]
 use std::time::Duration;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 /// Mistral adapter (conservative HTTP implementation).
 ///
-/// Note: Mistral provides an official Rust SDK (https://github.com/ivangabriele/mistralai-client-rs).
+/// Note: Mistral provides an official Rust SDK (<https://github.com/ivangabriele/mistralai-client-rs>).
 /// We keep this implementation HTTP-based for now and can swap to the SDK later.
 pub struct MistralAdapter {
     #[allow(dead_code)] // Kept for backward compatibility, now using direct reqwest
@@ -40,10 +41,11 @@ impl MistralAdapter {
         #[cfg(feature = "unified_transport")]
         {
             let timeout = Duration::from_secs(Self::build_default_timeout_secs());
-            let client = crate::transport::client_factory::build_shared_client()
-                .map_err(|e| AiLibError::NetworkError(format!("Failed to build http client: {}", e)))?;
+            let client = crate::transport::client_factory::build_shared_client().map_err(|e| {
+                AiLibError::NetworkError(format!("Failed to build http client: {}", e))
+            })?;
             let t = HttpTransport::with_reqwest_client(client, timeout);
-            return Ok(t.boxed());
+            Ok(t.boxed())
         }
         #[cfg(not(feature = "unified_transport"))]
         {
@@ -157,6 +159,8 @@ impl MistralAdapter {
             }
         }
 
+        request.apply_extensions(&mut body);
+
         body
     }
 
@@ -205,15 +209,21 @@ impl MistralAdapter {
                             arguments: args,
                         });
                     }
-                } else if let Some(tool_calls) = message.get("tool_calls").and_then(|v| v.as_array()) {
+                } else if let Some(tool_calls) =
+                    message.get("tool_calls").and_then(|v| v.as_array())
+                {
                     if let Some(first) = tool_calls.first() {
-                        if let Some(func) = first.get("function").or_else(|| first.get("function_call")) {
+                        if let Some(func) =
+                            first.get("function").or_else(|| first.get("function_call"))
+                        {
                             if let Some(name) = func.get("name").and_then(|v| v.as_str()) {
                                 let mut args_opt = func.get("arguments").cloned();
                                 if let Some(args_val) = &args_opt {
                                     if args_val.is_string() {
                                         if let Some(s) = args_val.as_str() {
-                                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(s) {
+                                            if let Ok(parsed) =
+                                                serde_json::from_str::<serde_json::Value>(s)
+                                            {
                                                 args_opt = Some(parsed);
                                             }
                                         }
@@ -365,8 +375,12 @@ fn split_text_into_chunks(text: &str, max_len: usize) -> Vec<String> {
 }
 
 #[async_trait::async_trait]
-impl ChatApi for MistralAdapter {
-    async fn chat_completion(
+impl ChatProvider for MistralAdapter {
+    fn name(&self) -> &str {
+        "Mistral"
+    }
+
+    async fn chat(
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
@@ -386,14 +400,15 @@ impl ChatApi for MistralAdapter {
         let response_json = self
             .transport
             .post_json(&url, Some(headers), provider_request)
-            .await?;
+            .await
+            .map_err(|e| e.with_context(&format!("Mistral chat request to {}", url)))?;
         if let Some(t) = timer {
             t.stop();
         }
         self.parse_response(response_json)
     }
 
-    async fn chat_completion_stream(
+    async fn stream(
         &self,
         request: ChatCompletionRequest,
     ) -> Result<
@@ -485,8 +500,8 @@ impl ChatApi for MistralAdapter {
             return Ok(Box::new(Box::pin(stream)));
         }
 
-        // fallback: call chat_completion and stream chunks
-        let finished = self.chat_completion(request).await?;
+        // fallback: call chat and stream chunks
+        let finished = self.chat(request).await?;
         let text = finished
             .choices
             .first()

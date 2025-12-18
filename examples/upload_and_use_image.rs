@@ -1,4 +1,4 @@
-use ai_lib::{AiClient, ChatCompletionRequest, Content, Message, Provider, Role};
+use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

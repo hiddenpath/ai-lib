@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 #[path = "utils/mock_transport.rs"]
 mod mock_transport;
-use ai_lib::api::ChatApi;
+use ai_lib::api::ChatProvider;
 use mock_transport::MockTransport;
 
 #[tokio::test]
@@ -47,7 +47,7 @@ async fn openai_adapter_parses_function_call_from_response() {
         }],
     );
 
-    let res = adapter.chat_completion(req).await.unwrap();
+    let res = ChatProvider::chat(&adapter, req).await.unwrap();
     let fc = &res.choices[0].message.function_call;
     assert!(fc.is_some());
     let fc = fc.as_ref().unwrap();

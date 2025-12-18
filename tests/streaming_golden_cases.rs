@@ -3,7 +3,7 @@
 //! These tests ensure consistent behavior across different streaming formats
 //! and edge cases that have been encountered in production.
 
-use ai_lib::types::AiLibError;
+use ai_lib::AiLibError;
 
 #[cfg(feature = "unified_sse")]
 #[test]

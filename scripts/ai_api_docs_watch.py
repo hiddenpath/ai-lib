@@ -48,7 +48,6 @@ PROVIDER_PAGES = [
     
     # Enterprise providers
     {"provider": "Azure OpenAI", "url": "https://learn.microsoft.com/en-us/azure/ai-services/openai/reference", "title": "Azure OpenAI REST API Reference"},
-    {"provider": "AWS Bedrock", "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/api-methods.html", "title": "AWS Bedrock API Methods"},
 ]
 
 PRIMARY_UA = "DocsWatchBot/1.0 (+https://github.com/hiddenpath/ai-lib)"

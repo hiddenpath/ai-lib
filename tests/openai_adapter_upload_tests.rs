@@ -3,7 +3,7 @@ use ai_lib::transport::dyn_transport::DynHttpTransport;
 use ai_lib::types::common::Content;
 use ai_lib::types::{ChatCompletionRequest, Message, Role};
 use ai_lib::AiLibError;
-use ai_lib::ChatApi;
+use ai_lib::ChatProvider;
 use base64::Engine;
 use bytes::Bytes;
 use futures::Stream;
@@ -125,7 +125,9 @@ async fn openai_adapter_uploads_image_and_includes_url_in_request() {
     let req = ChatCompletionRequest::new("m".to_string(), vec![msg]);
 
     // Call chat_completion which should upload and then post the chat request
-    let _ = adapter.chat_completion(req).await.expect("chat completion");
+    let _ = ChatProvider::chat(&adapter, req)
+        .await
+        .expect("chat completion");
 
     // Inspect the captured post body to ensure it contains the image URL returned by upload
     let lock = transport.last_post_body.lock().await;
@@ -181,7 +183,9 @@ async fn openai_adapter_uploads_image_and_includes_file_id_in_request() {
     };
     let req = ChatCompletionRequest::new("m".to_string(), vec![msg]);
 
-    let _ = adapter.chat_completion(req).await.expect("chat completion");
+    let _ = ChatProvider::chat(&adapter, req)
+        .await
+        .expect("chat completion");
 
     let lock = transport.last_post_body.lock().await;
     let body = lock.as_ref().expect("body captured");
@@ -284,7 +288,9 @@ async fn openai_adapter_upload_failure_falls_back_to_inline_data() {
     };
     let req = ChatCompletionRequest::new("m".to_string(), vec![msg]);
 
-    let _ = adapter.chat_completion(req).await.expect("chat completion");
+    let _ = ChatProvider::chat(&adapter, req)
+        .await
+        .expect("chat completion");
 
     // Capture the body via the post_json path isn't possible here since FailUploadTransport doesn't store it,
     // Verify inline in data URL - generate data URL directly

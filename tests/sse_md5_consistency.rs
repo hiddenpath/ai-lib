@@ -22,7 +22,7 @@ fn reference_parse_events(stream: &str) -> Vec<DeltaPayload> {
                         .and_then(|v| v.as_array())
                         .cloned()
                         .unwrap_or_default();
-                    if let Some(first) = choices.get(0) {
+                    if let Some(first) = choices.first() {
                         let delta = first.get("delta").cloned().unwrap_or(serde_json::json!({}));
                         let role = delta
                             .get("role")
@@ -79,9 +79,9 @@ fn md5_and_sequence_consistency_with_unified_parser() -> Result<(), Box<dyn std:
             "finish_reason": serde_json::Value::Null
         }]
     });
-    let event1 = format!("id: 1\ndata: {}\n\n", json1.to_string());
-    let event2 = format!("id: 2\ndata: {}\n\n", json2.to_string());
-    let event3 = format!("id: 3\ndata: {}\n\n", json3.to_string());
+    let event1 = format!("id: 1\ndata: {}\n\n", json1);
+    let event2 = format!("id: 2\ndata: {}\n\n", json2);
+    let event3 = format!("id: 3\ndata: {}\n\n", json3);
     let stream = format!("{}{}{}", event1, event2, event3);
 
     // Unified parser path
@@ -96,14 +96,17 @@ fn md5_and_sequence_consistency_with_unified_parser() -> Result<(), Box<dyn std:
             if let Some(chunk) = chunk_opt {
                 let role = chunk
                     .choices
-                    .get(0)
+                    .first()
                     .and_then(|ch| ch.delta.role.clone())
                     .map(|r| match r {
                         ai_lib::types::Role::Assistant => "assistant".to_string(),
                         ai_lib::types::Role::User => "user".to_string(),
                         ai_lib::types::Role::System => "system".to_string(),
                     });
-                let content = chunk.choices.get(0).and_then(|ch| ch.delta.content.clone());
+                let content = chunk
+                    .choices
+                    .first()
+                    .and_then(|ch| ch.delta.content.clone());
                 unified_payloads.push(DeltaPayload { role, content });
             }
         }

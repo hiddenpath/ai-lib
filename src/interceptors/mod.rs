@@ -1,3 +1,13 @@
+//! 拦截器模块，提供请求/响应拦截和中间件功能
+//!
+//! Interceptors module providing request/response interception and middleware functionality.
+//!
+//! This module implements the interceptor pattern for cross-cutting concerns like:
+//! - Retry logic with exponential backoff
+//! - Rate limiting and circuit breaker
+//! - Request/response logging and metrics
+//! - Custom business logic injection
+
 use async_trait::async_trait;
 
 use crate::types::{AiLibError, ChatCompletionRequest, ChatCompletionResponse};
@@ -43,7 +53,13 @@ pub trait Interceptor: Send + Sync {
     }
 
     /// Called when an error happens during request execution.
-    async fn on_error(&self, _ctx: &RequestContext, _req: &ChatCompletionRequest, _err: &AiLibError) {}
+    async fn on_error(
+        &self,
+        _ctx: &RequestContext,
+        _req: &ChatCompletionRequest,
+        _err: &AiLibError,
+    ) {
+    }
 }
 
 /// A simple interceptor pipeline that runs hooks in order.
@@ -54,7 +70,9 @@ pub struct InterceptorPipeline {
 impl InterceptorPipeline {
     /// Create a new empty pipeline
     pub fn new() -> Self {
-        Self { interceptors: Vec::new() }
+        Self {
+            interceptors: Vec::new(),
+        }
     }
 
     /// Add an interceptor to the pipeline
@@ -99,7 +117,7 @@ impl InterceptorPipeline {
 }
 
 impl Default for InterceptorPipeline {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
-
-

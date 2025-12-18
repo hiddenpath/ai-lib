@@ -25,7 +25,7 @@ pub fn find_event_boundary(buffer: &[u8]) -> Option<usize> {
 }
 
 /// Parse a raw SSE event text into an optional chunk.
-/// Returns Ok(None) for [DONE] signals.
+/// Returns Ok(None) for \[DONE\] signals.
 pub fn parse_sse_event(
     event_text: &str,
 ) -> Option<Result<Option<ChatCompletionChunk>, AiLibError>> {

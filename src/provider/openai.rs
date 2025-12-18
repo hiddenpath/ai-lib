@@ -1,15 +1,18 @@
-use crate::api::{ChatApi, ChatCompletionChunk, ModelInfo, ModelPermission};
+use crate::api::{ChatCompletionChunk, ChatProvider, ModelInfo, ModelPermission};
+#[cfg(not(feature = "unified_sse"))]
+use crate::api::{ChoiceDelta, MessageDelta};
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::transport::{DynHttpTransportRef, HttpTransport};
 use crate::types::{
-    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage, UsageStatus,
+    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
+    UsageStatus,
 };
-use futures::stream::{self, Stream};
+use futures::stream::{Stream, StreamExt};
 use std::collections::HashMap;
-#[cfg(feature = "unified_transport")]
-use std::time::Duration;
 use std::env;
 use std::sync::Arc;
+#[cfg(feature = "unified_transport")]
+use std::time::Duration;
 
 /// OpenAI adapter, supporting GPT series models
 ///
@@ -34,10 +37,11 @@ impl OpenAiAdapter {
         #[cfg(feature = "unified_transport")]
         {
             let timeout = Duration::from_secs(Self::build_default_timeout_secs());
-            let client = crate::transport::client_factory::build_shared_client()
-                .map_err(|e| AiLibError::NetworkError(format!("Failed to build http client: {}", e)))?;
+            let client = crate::transport::client_factory::build_shared_client().map_err(|e| {
+                AiLibError::NetworkError(format!("Failed to build http client: {}", e))
+            })?;
             let t = HttpTransport::with_reqwest_client(client, timeout);
-            return Ok(t.boxed());
+            Ok(t.boxed())
         }
         #[cfg(not(feature = "unified_transport"))]
         {
@@ -134,6 +138,7 @@ impl OpenAiAdapter {
             msgs.push(serde_json::json!({"role": role, "content": content_val}));
         }
         openai_request["messages"] = serde_json::Value::Array(msgs);
+        request.apply_extensions(&mut openai_request);
         openai_request
     }
 
@@ -248,6 +253,8 @@ impl OpenAiAdapter {
             }
         }
 
+        request.apply_extensions(&mut openai_request);
+
         Ok(openai_request)
     }
 
@@ -352,8 +359,12 @@ impl OpenAiAdapter {
 }
 
 #[async_trait::async_trait]
-impl ChatApi for OpenAiAdapter {
-    async fn chat_completion(
+impl ChatProvider for OpenAiAdapter {
+    fn name(&self) -> &str {
+        "OpenAI"
+    }
+
+    async fn chat(
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
@@ -376,7 +387,8 @@ impl ChatApi for OpenAiAdapter {
         let response_json = self
             .transport
             .post_json(&url, Some(headers), openai_request)
-            .await?;
+            .await
+            .map_err(|e| e.with_context(&format!("OpenAI chat request to {}", url)))?;
 
         if let Some(t) = timer {
             t.stop();
@@ -385,15 +397,108 @@ impl ChatApi for OpenAiAdapter {
         self.parse_response(response_json)
     }
 
-    async fn chat_completion_stream(
+    async fn stream(
         &self,
-        _request: ChatCompletionRequest,
+        request: ChatCompletionRequest,
     ) -> Result<
         Box<dyn Stream<Item = Result<ChatCompletionChunk, AiLibError>> + Send + Unpin>,
         AiLibError,
     > {
-        let stream = stream::empty();
-        Ok(Box::new(Box::pin(stream)))
+        let url = format!("{}/chat/completions", self.base_url);
+
+        // Build request body with stream=true
+        let mut openai_request = self.convert_request_async(&request).await?;
+        openai_request["stream"] = serde_json::Value::Bool(true);
+
+        let mut headers = HashMap::new();
+        headers.insert(
+            "Authorization".to_string(),
+            format!("Bearer {}", self.api_key),
+        );
+        headers.insert("Content-Type".to_string(), "application/json".to_string());
+        headers.insert("Accept".to_string(), "text/event-stream".to_string());
+
+        let byte_stream_res = self
+            .transport
+            .post_stream(&url, Some(headers), openai_request)
+            .await;
+
+        match byte_stream_res {
+            Ok(mut byte_stream) => {
+                let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+                tokio::spawn(async move {
+                    let mut buffer = Vec::new();
+                    while let Some(result) = byte_stream.next().await {
+                        match result {
+                            Ok(bytes) => {
+                                buffer.extend_from_slice(&bytes);
+                                #[cfg(feature = "unified_sse")]
+                                {
+                                    while let Some(event_end) =
+                                        crate::sse::parser::find_event_boundary(&buffer)
+                                    {
+                                        let event_bytes =
+                                            buffer.drain(..event_end).collect::<Vec<_>>();
+                                        if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                                            if let Some(chunk) =
+                                                crate::sse::parser::parse_sse_event(event_text)
+                                            {
+                                                match chunk {
+                                                    Ok(Some(c)) => {
+                                                        if tx.send(Ok(c)).is_err() {
+                                                            return;
+                                                        }
+                                                    }
+                                                    Ok(None) => return, // [DONE] signal
+                                                    Err(e) => {
+                                                        let _ = tx.send(Err(e));
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                #[cfg(not(feature = "unified_sse"))]
+                                {
+                                    while let Some(event_end) = find_sse_event_boundary(&buffer) {
+                                        let event_bytes =
+                                            buffer.drain(..event_end).collect::<Vec<_>>();
+                                        if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
+                                            if let Some(chunk) = parse_openai_sse_event(event_text)
+                                            {
+                                                match chunk {
+                                                    Ok(Some(c)) => {
+                                                        if tx.send(Ok(c)).is_err() {
+                                                            return;
+                                                        }
+                                                    }
+                                                    Ok(None) => return, // [DONE] signal
+                                                    Err(e) => {
+                                                        let _ = tx.send(Err(e));
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                let _ = tx.send(Err(AiLibError::ProviderError(format!(
+                                    "Stream error: {}",
+                                    e
+                                ))));
+                                break;
+                            }
+                        }
+                    }
+                });
+                let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
+                Ok(Box::new(Box::pin(stream)))
+            }
+            Err(e) => Err(e),
+        }
     }
 
     async fn list_models(&self) -> Result<Vec<String>, AiLibError> {
@@ -436,4 +541,87 @@ impl ChatApi for OpenAiAdapter {
             }],
         })
     }
+}
+
+// Local SSE parsing functions for when unified_sse feature is not enabled
+#[cfg(not(feature = "unified_sse"))]
+fn find_sse_event_boundary(buffer: &[u8]) -> Option<usize> {
+    let mut i = 0;
+    while i + 1 < buffer.len() {
+        // LF LF
+        if buffer[i] == b'\n' && buffer[i + 1] == b'\n' {
+            return Some(i + 2);
+        }
+        // CR LF CR LF
+        if i + 3 < buffer.len()
+            && buffer[i] == b'\r'
+            && buffer[i + 1] == b'\n'
+            && buffer[i + 2] == b'\r'
+            && buffer[i + 3] == b'\n'
+        {
+            return Some(i + 4);
+        }
+        i += 1;
+    }
+    None
+}
+
+#[cfg(not(feature = "unified_sse"))]
+fn parse_openai_sse_event(
+    event_text: &str,
+) -> Option<Result<Option<ChatCompletionChunk>, AiLibError>> {
+    for line in event_text.lines() {
+        let line = line.trim();
+        if let Some(data) = line.strip_prefix("data: ") {
+            if data == "[DONE]" {
+                return Some(Ok(None));
+            }
+            return Some(parse_openai_chunk_data(data));
+        }
+    }
+    None
+}
+
+#[cfg(not(feature = "unified_sse"))]
+fn parse_openai_chunk_data(data: &str) -> Result<Option<ChatCompletionChunk>, AiLibError> {
+    let json: serde_json::Value = serde_json::from_str(data)
+        .map_err(|e| AiLibError::ProviderError(format!("JSON parse error: {}", e)))?;
+
+    let mut choices_vec: Vec<ChoiceDelta> = Vec::new();
+    if let Some(arr) = json["choices"].as_array() {
+        for (index, choice) in arr.iter().enumerate() {
+            let delta = &choice["delta"];
+            let role = delta.get("role").and_then(|v| v.as_str()).map(|r| match r {
+                "assistant" => Role::Assistant,
+                "user" => Role::User,
+                "system" => Role::System,
+                _ => Role::Assistant,
+            });
+            let content = delta
+                .get("content")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let md = MessageDelta { role, content };
+            let cd = ChoiceDelta {
+                index: index as u32,
+                delta: md,
+                finish_reason: choice
+                    .get("finish_reason")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+            };
+            choices_vec.push(cd);
+        }
+    }
+
+    Ok(Some(ChatCompletionChunk {
+        id: json["id"].as_str().unwrap_or_default().to_string(),
+        object: json["object"]
+            .as_str()
+            .unwrap_or("chat.completion.chunk")
+            .to_string(),
+        created: json["created"].as_u64().unwrap_or(0),
+        model: json["model"].as_str().unwrap_or_default().to_string(),
+        choices: choices_vec,
+    }))
 }

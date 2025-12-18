@@ -17,7 +17,7 @@ mod tests {
         assert!(client_result.is_ok());
 
         let client = client_result.unwrap();
-        assert!(matches!(client.current_provider(), Provider::Groq));
+        assert_eq!(client.provider_name(), "Groq");
     }
 
     #[test]

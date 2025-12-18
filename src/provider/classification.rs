@@ -65,12 +65,14 @@ impl ProviderClassification for Provider {
             Provider::MiniMax => Ok(ProviderConfigs::minimax()),
 
             // Independent providers don't support custom configuration
-            Provider::OpenAI | Provider::Gemini | Provider::Mistral | Provider::Cohere | 
-            Provider::Perplexity | Provider::AI21 => {
-                Err(crate::types::AiLibError::ConfigurationError(
-                    "This provider does not support custom configuration".to_string(),
-                ))
-            }
+            Provider::OpenAI
+            | Provider::Gemini
+            | Provider::Mistral
+            | Provider::Cohere
+            | Provider::Perplexity
+            | Provider::AI21 => Err(crate::types::AiLibError::ConfigurationError(
+                "This provider does not support custom configuration".to_string(),
+            )),
         }
     }
 }

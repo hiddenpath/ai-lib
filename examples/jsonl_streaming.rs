@@ -78,7 +78,5 @@ async fn main() -> Result<(), AiLibError> {
 #[cfg(not(feature = "unified_sse"))]
 fn main() {
     // This example requires the `unified_sse` feature to be enabled.
-    println!(
-        "jsonl_streaming example requires --features unified_sse to run. Skipping."
-    );
+    println!("jsonl_streaming example requires --features unified_sse to run. Skipping.");
 }

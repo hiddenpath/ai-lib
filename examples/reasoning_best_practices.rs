@@ -223,16 +223,16 @@ async fn demonstrate_reasoning_config(client: &AiClient) -> Result<(), Box<dyn s
 
     // Add Groq-specific reasoning parameters
     request = request
-        .with_provider_specific(
+        .with_extension(
             "reasoning_format",
             serde_json::Value::String("parsed".to_string()),
         )
-        .with_provider_specific(
+        .with_extension(
             "reasoning_effort",
             serde_json::Value::String("high".to_string()),
         )
-        .with_provider_specific("parallel_tool_calls", serde_json::Value::Bool(true))
-        .with_provider_specific(
+        .with_extension("parallel_tool_calls", serde_json::Value::Bool(true))
+        .with_extension(
             "service_tier",
             serde_json::Value::String("flex".to_string()),
         );
@@ -256,7 +256,7 @@ async fn demonstrate_reasoning_config(client: &AiClient) -> Result<(), Box<dyn s
 
 /// Method 5: Math problem reasoning
 async fn demonstrate_math_reasoning(client: &AiClient) -> Result<(), Box<dyn std::error::Error>> {
-    let math_problems = vec![
+    let math_problems = [
         "Calculate the value of 2^10 + 3^5",
         "If a circle has radius 5cm, find its area and circumference",
         "Solve the equation: 2x + 3 = 11",
@@ -291,11 +291,9 @@ async fn demonstrate_math_reasoning(client: &AiClient) -> Result<(), Box<dyn std
 
 /// Method 6: Logic reasoning
 async fn demonstrate_logic_reasoning(client: &AiClient) -> Result<(), Box<dyn std::error::Error>> {
-    let logic_problems = vec![
-        "If all birds can fly, and penguins are birds, can penguins fly? Please analyze this logical reasoning.",
+    let logic_problems = ["If all birds can fly, and penguins are birds, can penguins fly? Please analyze this logical reasoning.",
         "There are three people: A, B, C. A says: 'B is lying', B says: 'C is lying', C says: 'A and B are both lying'. Who is telling the truth?",
-        "In a room, there are 3 switches controlling 3 light bulbs. You can only enter the room once. How do you determine which switch controls which bulb?",
-    ];
+        "In a room, there are 3 switches controlling 3 light bulbs. You can only enter the room once. How do you determine which switch controls which bulb?"];
 
     for (i, problem) in logic_problems.iter().enumerate() {
         println!("🧩 Logic problem {}: {}", i + 1, problem);

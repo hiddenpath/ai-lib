@@ -1,11 +1,12 @@
 use super::config::ProviderConfig;
 use crate::api::{
-    ChatApi, ChatCompletionChunk, ChoiceDelta, MessageDelta, ModelInfo, ModelPermission,
+    ChatCompletionChunk, ChatProvider, ChoiceDelta, MessageDelta, ModelInfo, ModelPermission,
 };
 use crate::metrics::{Metrics, NoopMetrics};
 use crate::transport::{DynHttpTransportRef, HttpTransport};
 use crate::types::{
-    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage, UsageStatus,
+    AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, Message, Role, Usage,
+    UsageStatus,
 };
 use futures::stream::{Stream, StreamExt};
 use std::env;
@@ -325,6 +326,8 @@ impl GenericAdapter {
             }
         }
 
+        request.apply_extensions(&mut provider_request);
+
         Ok(provider_request)
     }
 
@@ -513,7 +516,9 @@ impl GenericAdapter {
                             });
                         }
                     }
-                } else if let Some(tool_calls) = message.get("tool_calls").and_then(|v| v.as_array()) {
+                } else if let Some(tool_calls) =
+                    message.get("tool_calls").and_then(|v| v.as_array())
+                {
                     // OpenAI tool_calls format: [{"type":"function","function":{"name":...,"arguments":...}}]
                     if let Some(first) = tool_calls.first() {
                         if let Some(func) = first.get("function") {
@@ -523,7 +528,9 @@ impl GenericAdapter {
                                 if let Some(args_val) = &args_opt {
                                     if args_val.is_string() {
                                         if let Some(s) = args_val.as_str() {
-                                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(s) {
+                                            if let Ok(parsed) =
+                                                serde_json::from_str::<serde_json::Value>(s)
+                                            {
                                                 args_opt = Some(parsed);
                                             }
                                         }
@@ -572,8 +579,12 @@ impl GenericAdapter {
     }
 }
 #[async_trait::async_trait]
-impl ChatApi for GenericAdapter {
-    async fn chat_completion(
+impl ChatProvider for GenericAdapter {
+    fn name(&self) -> &str {
+        "GenericAdapter"
+    }
+
+    async fn chat(
         &self,
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, AiLibError> {
@@ -605,7 +616,8 @@ impl ChatApi for GenericAdapter {
         let response_json = self
             .transport
             .post_json(&url, Some(headers), provider_request)
-            .await?;
+            .await
+            .map_err(|e| e.with_context(&format!("GenericAdapter chat request to {}", url)))?;
 
         // Stop timer
         if let Some(t) = timer {
@@ -633,7 +645,7 @@ impl ChatApi for GenericAdapter {
         Ok(parsed)
     }
 
-    async fn chat_completion_stream(
+    async fn stream(
         &self,
         request: ChatCompletionRequest,
     ) -> Result<
@@ -735,7 +747,7 @@ impl ChatApi for GenericAdapter {
             }
             Err(_) => {
                 // Fallback to non-streaming + simulated chunks
-                let finished = self.chat_completion(request).await?;
+                let finished = self.chat(request).await?;
                 let text = finished
                     .choices
                     .first()

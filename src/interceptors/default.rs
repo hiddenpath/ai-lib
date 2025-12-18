@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use crate::interceptors::{
-    InterceptorPipeline,
-    CircuitBreakerInterceptor, RateLimitInterceptor, RetryInterceptor, TimeoutInterceptor,
+    CircuitBreakerInterceptor, InterceptorPipeline, RateLimitInterceptor, RetryInterceptor,
+    TimeoutInterceptor,
 };
 
 /// Default interceptors bundle configuration
@@ -53,7 +53,12 @@ impl DefaultInterceptorsBuilder {
     }
 
     /// Configure retry settings
-    pub fn with_retry(mut self, max_attempts: u32, base_delay: Duration, max_delay: Duration) -> Self {
+    pub fn with_retry(
+        mut self,
+        max_attempts: u32,
+        base_delay: Duration,
+        max_delay: Duration,
+    ) -> Self {
         self.config.retry_max_attempts = max_attempts;
         self.config.retry_base_delay = base_delay;
         self.config.retry_max_delay = max_delay;

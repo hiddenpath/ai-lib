@@ -116,6 +116,13 @@ impl ProviderConfig {
             ));
         }
 
+        // base_url should not end with trailing slash
+        if self.base_url.ends_with('/') {
+            return Err(AiLibError::ConfigurationError(
+                "base_url must not end with a trailing slash".to_string(),
+            ));
+        }
+
         // Validate api_key_env
         if self.api_key_env.is_empty() {
             return Err(AiLibError::ConfigurationError(
@@ -129,12 +136,21 @@ impl ProviderConfig {
                 "chat_endpoint cannot be empty".to_string(),
             ));
         }
+        Self::validate_endpoint_path(&self.chat_endpoint, "chat_endpoint")?;
 
         // Validate chat_model
         if self.chat_model.is_empty() {
             return Err(AiLibError::ConfigurationError(
                 "chat_model cannot be empty".to_string(),
             ));
+        }
+
+        if let Some(endpoint) = &self.upload_endpoint {
+            Self::validate_endpoint_path(endpoint, "upload_endpoint")?;
+        }
+
+        if let Some(endpoint) = &self.models_endpoint {
+            Self::validate_endpoint_path(endpoint, "models_endpoint")?;
         }
 
         // Validate field_mapping
@@ -150,6 +166,15 @@ impl ProviderConfig {
             }
         }
 
+        Ok(())
+    }
+
+    fn validate_endpoint_path(path: &str, field: &str) -> Result<(), AiLibError> {
+        if !path.starts_with('/') {
+            return Err(AiLibError::ConfigurationError(format!(
+                "{field} must start with /"
+            )));
+        }
         Ok(())
     }
 

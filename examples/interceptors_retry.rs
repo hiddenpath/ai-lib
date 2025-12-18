@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Compose pipeline
     let pipeline = ai_lib::interceptors::InterceptorPipeline::new().with(Logger);
     let ctx = ai_lib::interceptors::RequestContext {
-        provider: format!("{:?}", client.current_provider()),
+        provider: client.provider_name().to_string(),
         model: default_model.to_string(),
     };
 

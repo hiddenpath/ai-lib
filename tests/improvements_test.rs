@@ -21,11 +21,11 @@ mod tests {
         assert!(valid_config.validate().is_ok());
 
         // Test invalid base_url
-        let mut invalid_config =
+        let invalid_config =
             ProviderConfig::openai_compatible("", "OPENAI_API_KEY", "gpt-3.5-turbo", None);
         assert!(invalid_config.validate().is_err());
 
-        let mut invalid_config = ProviderConfig::openai_compatible(
+        let invalid_config = ProviderConfig::openai_compatible(
             "ftp://invalid.com",
             "OPENAI_API_KEY",
             "gpt-3.5-turbo",
@@ -34,7 +34,7 @@ mod tests {
         assert!(invalid_config.validate().is_err());
 
         // Test invalid api_key_env
-        let mut invalid_config =
+        let invalid_config =
             ProviderConfig::openai_compatible("https://api.openai.com", "", "gpt-3.5-turbo", None);
         assert!(invalid_config.validate().is_err());
 
@@ -114,7 +114,7 @@ mod tests {
         let metrics = NoopMetrics::new();
 
         // Test basic metrics methods
-        let _ = tokio::runtime::Runtime::new().unwrap().block_on(async {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
             metrics.incr_counter("test.counter", 1).await;
             metrics.record_gauge("test.gauge", 42.0).await;
             metrics.record_histogram("test.histogram", 10.5).await;
@@ -138,7 +138,7 @@ mod tests {
     fn test_metrics_ext() {
         let metrics = NoopMetrics::new();
 
-        let _ = tokio::runtime::Runtime::new().unwrap().block_on(async {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
             // Test convenience methods
             metrics.record_request("test.request", None, true).await;
             metrics

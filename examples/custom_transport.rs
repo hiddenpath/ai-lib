@@ -1,5 +1,5 @@
 use ai_lib::transport::HttpTransport;
-use ai_lib::{AiClient, Provider, ConnectionOptions};
+use ai_lib::{AiClient, ConnectionOptions, Provider};
 use reqwest::Client;
 use std::time::Duration;
 

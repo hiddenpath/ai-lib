@@ -1,4 +1,4 @@
-use ai_lib::types::AiLibError;
+use ai_lib::AiLibError;
 
 #[cfg(feature = "unified_sse")]
 #[test]

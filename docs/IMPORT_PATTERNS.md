@@ -28,7 +28,7 @@ async fn main() -> Result<(), AiLibError> {
         "gpt-4".to_string(),
         vec![Message {
             role: Role::User,
-            content: Content::from_text("Hello, world!"),
+            content: Content::new_text("Hello, world!"),
             function_call: None,
         }],
     );
@@ -124,7 +124,7 @@ use ai_lib::prelude::*;
 let messages = vec![
     Message {
         role: Role::User,
-        content: Content::from_text("Please analyze this image"),
+        content: Content::new_text("Please analyze this image"),
         function_call: None,
     },
     Message {
@@ -145,9 +145,10 @@ use ai_lib::prelude::*;
 // Single provider
 let client = AiClient::new(Provider::OpenAI)?;
 
-// With failover
-let client = AiClient::new(Provider::OpenAI)?
-    .with_failover(vec![Provider::Anthropic, Provider::Groq]);
+// Routing + failover composed during build
+let client = ai_lib::client::AiClientBuilder::new(Provider::OpenAI)
+    .with_failover_chain(vec![Provider::Anthropic, Provider::Groq])?
+    .build()?;
 ```
 
 ### Available Providers
@@ -215,7 +216,7 @@ async fn main() -> Result<(), AiLibError> {
         "gpt-4".to_string(),
         vec![Message {
             role: Role::User,
-            content: Content::from_text("Tell me a story"),
+            content: Content::new_text("Tell me a story"),
             function_call: None,
         }],
     );
@@ -286,6 +287,6 @@ With the new import structure, your IDE's auto-completion will guide you to the 
 ## Further Reading
 
 - [Module Tree and Import Patterns](MODULE_TREE_AND_IMPORTS.md) - Detailed module structure guide
-- [API Reference](https://docs.rs/ai-lib/0.3.4) - Complete API documentation
+- [API Reference](https://docs.rs/ai-lib/0.4.0) - Complete API documentation
 - [Examples](../examples/) - Practical usage examples
 

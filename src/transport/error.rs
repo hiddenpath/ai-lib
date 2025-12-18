@@ -1,3 +1,4 @@
+use std::error::Error as StdError;
 use thiserror::Error;
 
 /// Transport layer error types, unified encapsulation of HTTP and JSON errors
@@ -45,7 +46,12 @@ impl TransportError {
 
 impl From<reqwest::Error> for TransportError {
     fn from(err: reqwest::Error) -> Self {
-        Self::HttpError(err.to_string())
+        let mut msg = err.to_string();
+        if let Some(source) = StdError::source(&err) {
+            msg.push_str(": ");
+            msg.push_str(&source.to_string());
+        }
+        Self::HttpError(msg)
     }
 }
 

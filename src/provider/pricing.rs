@@ -19,7 +19,10 @@ pub struct PricingInfo {
 #[cfg(not(feature = "routing_mvp"))]
 impl PricingInfo {
     pub fn new(input_cost_per_1k: f64, output_cost_per_1k: f64) -> Self {
-        Self { input_cost_per_1k, output_cost_per_1k }
+        Self {
+            input_cost_per_1k,
+            output_cost_per_1k,
+        }
     }
 }
 
