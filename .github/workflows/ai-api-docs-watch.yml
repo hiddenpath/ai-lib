@@ -5,6 +5,11 @@ on:
     - cron: "10 2 * * *"   # 每天 02:10 UTC 运行
   workflow_dispatch:
 
+# 避免并发（可选但推荐）：同一时间只跑一个实例
+concurrency:
+  group: docs-watch
+  cancel-in-progress: true
+
 permissions:
   contents: write
   issues: write
@@ -23,31 +28,54 @@ jobs:
 
       - name: Install deps
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
-          pip install requests beautifulsoup4 jq
+          pip install requests beautifulsoup4
+          sudo apt-get update
+          sudo apt-get install -y jq
+          gh --version
+          jq --version
 
       - name: Run watcher
         run: |
+          set -euo pipefail
           python scripts/ai_api_docs_watch.py
 
       - name: Commit snapshots (if changed)
         run: |
+          set -euo pipefail
           if [ -n "$(git status --porcelain data/api_doc_snapshots.json 2>/dev/null)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add data/api_doc_snapshots.json
             git commit -m "chore(docs-watch): update snapshots [skip ci]"
+
+            # 避免非快进推送导致失败：先同步再推送
+            BRANCH="${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}"
+            git fetch origin "$BRANCH"
+            git pull --rebase origin "$BRANCH" || true
             git push
           else
             echo "No snapshot changes to commit."
           fi
 
+      - name: Ensure docs-watch label exists (idempotent)
+        run: |
+          # --force 确保存在或更新，不会因已存在报错，也避免并发时的竞争
+          gh label create "docs-watch" --color "0052CC" --description "AI API 监控自动变更" --force
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create / Update daily issue
         run: |
+          set -euo pipefail
+
           if [ ! -f changes_out.json ]; then
             echo "changes_out.json missing, abort."
             exit 0
           fi
+
           BASELINE=$(jq -r '.baseline // false' changes_out.json)
           COUNT=$(jq '.changes | length' changes_out.json)
           DATE=$(date -u +"%Y-%m-%d")
@@ -64,8 +92,10 @@ jobs:
           fi
 
           BODY_HEADER="本 Issue 汇总 ${DATE} 检测到的各大 AI Provider API 文档变更。\n\n变更总数: ${COUNT}\n\n"
+
+          # 修复 pipeline 子 shell 问题：用进程替换保障 CHANGES_MD 在当前 shell 累积
           CHANGES_MD=""
-          jq -r '.changes[] | @base64' changes_out.json | while read -r row; do
+          while IFS= read -r row; do
             obj=$(echo "$row" | base64 --decode)
             provider=$(echo "$obj" | jq -r '.provider')
             url=$(echo "$obj" | jq -r '.url')
@@ -73,8 +103,9 @@ jobs:
             new_hash=$(echo "$obj" | jq -r '.new_hash')
             old_hash=$(echo "$obj" | jq -r '.old_hash')
             diff=$(echo "$obj" | jq -r '.diff')
-            CHANGES_MD+="### ${provider}: ${title}\nURL: ${url}\nOld: ${old_hash}\nNew: ${new_hash}\n\n\`\`\`diff\n${diff}\n\`\`\`\n\n\n"
-          done
+            CHANGES_MD+=$(printf "### %s: %s\nURL: %s\nOld: %s\nNew: %s\n\n\`\`\`diff\n%s\n\`\`\`\n\n\n" \
+              "$provider" "$title" "$url" "$old_hash" "$new_hash" "$diff")
+          done < <(jq -r '.changes[] | @base64' changes_out.json)
 
           EXIST=$(gh issue list --search "$TITLE in:title" --state open --json number | jq 'length')
           if [ "$EXIST" -eq 0 ]; then
@@ -84,8 +115,13 @@ jobs:
             echo "Append to existing issue."
             NUMBER=$(gh issue list --search "$TITLE in:title" --state open --json number | jq -r '.[0].number')
             CURR=$(gh issue view "$NUMBER" --json body -q '.body')
-            NEW_BODY="${CURR}\n\n---\n(追加更新于 $(date -u +"%H:%M:%SZ"))\n\n${CHANGES_MD}"
+
+            # 用 printf 可靠拼接换行与新增内容，避免转义问题
+            printf -v NEW_BODY "%s\n\n---\n(追加更新于 %s)\n\n%s" \
+              "$CURR" "$(date -u +"%H:%M:%SZ")" "$CHANGES_MD"
+
             gh issue edit "$NUMBER" --body "$NEW_BODY"
           fi
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
