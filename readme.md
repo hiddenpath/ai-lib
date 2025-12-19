@@ -156,6 +156,19 @@ async fn main() -> anyhow::Result<()> {
 
 ---
 
+## 📈 Upgrading from 0.3.x to 0.4.0
+
+**Major changes in 0.4.0**: Trait Shift 1.0 Evolution - moved from enum-based to trait-driven architecture.
+
+- `AiClient::new()` now returns `Result<AiClient, AiLibError>` (no more panics)
+- Routing: `with_failover(vec![...])` → `AiClientBuilder::with_failover_chain(vec![...])`
+- Removed sentinel model `"__route__"` - use strategy builders instead
+- New `ChatProvider` trait unifies all provider implementations
+
+**📖 [Complete Upgrade Guide](docs/UPGRADE_0.4.0_USER_GUIDE.md) | [中文升级指南](docs/UPGRADE_0.4.0_USER_GUIDE_CN.md)**
+
+---
+
 ## 🌍 Supported Providers
 
 *17+ providers and growing* - We continuously add new AI platforms to support the evolving ecosystem.
