@@ -3,7 +3,7 @@ use crate::types::{FunctionCallPolicy, Tool};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChatCompletionRequest {
     pub model: String,
     pub messages: Vec<Message>,
@@ -13,6 +13,13 @@ pub struct ChatCompletionRequest {
     pub top_p: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub presence_penalty: Option<f32>,
+    pub top_k: Option<u32>,
+    pub stop_sequences: Option<Vec<String>>,
+    pub logprobs: Option<bool>,
+    pub top_logprobs: Option<u32>,
+    pub seed: Option<u64>,
+    /// Structured output / JSON mode selection
+    pub response_format_mode: Option<String>,
     /// Optional function/tool definitions for Function Calling
     pub functions: Option<Vec<Tool>>,
     /// Function call policy: "auto"/"none"/specific name
@@ -33,6 +40,12 @@ impl ChatCompletionRequest {
             top_p: None,
             frequency_penalty: None,
             presence_penalty: None,
+            top_k: None,
+            stop_sequences: None,
+            logprobs: None,
+            top_logprobs: None,
+            seed: None,
+            response_format_mode: None,
             functions: None,
             function_call: None,
             extensions: None,

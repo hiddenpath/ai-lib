@@ -1,0 +1,60 @@
+name: Validate Configurations (DISABLED - Repository Archived)
+
+# This workflow is disabled as ai-lib has been migrated to ai-lib-rust
+# See: https://github.com/hiddenpath/ai-lib-rust
+
+on:
+  workflow_dispatch:  # Only allow manual dispatch, effectively disabled
+  # push:
+  #   branches: [ main, develop ]
+  #   paths:
+  #     - 'v1/**'
+  #     - 'v2-alpha/**'
+  #     - 'examples/**'
+  #     - 'schemas/**'
+  #     - '.github/workflows/validate.yml'
+  # pull_request:
+  #   branches: [ main, develop ]
+  #   paths:
+  #     - 'v1/**'
+  #     - 'v2-alpha/**'
+  #     - 'examples/**'
+  #     - 'schemas/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install AJV CLI
+      run: npm install -g ajv-cli
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install yamllint
+      run: pip install yamllint
+
+    - name: Make validation script executable
+      run: chmod +x scripts/validate-configs.sh
+
+    - name: Run configuration validation
+      run: ./scripts/validate-configs.sh
+
+    - name: Validate JSON schemas
+      run: |
+        echo "Validating JSON schemas..."
+        for schema in schemas/*.json; do
+          echo "Checking $schema..."
+          python -c "import json; json.load(open('$schema'))" && echo "✅ $schema is valid JSON"
+        done

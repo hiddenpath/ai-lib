@@ -46,7 +46,7 @@ impl OpenAiAdapter {
         #[cfg(not(feature = "unified_transport"))]
         {
             let t = HttpTransport::new();
-            return Ok(t.boxed());
+            Ok(t.boxed())
         }
     }
 
@@ -133,6 +133,7 @@ impl OpenAiAdapter {
                 Role::System => "system",
                 Role::User => "user",
                 Role::Assistant => "assistant",
+                Role::Tool => "tool",
             };
             let content_val = crate::provider::utils::content_to_provider_value(&msg.content);
             msgs.push(serde_json::json!({"role": role, "content": content_val}));
@@ -161,6 +162,7 @@ impl OpenAiAdapter {
                 Role::System => "system",
                 Role::User => "user",
                 Role::Assistant => "assistant",
+                Role::Tool => "tool",
             };
 
             // If it's an Image with no URL but has a local `name`, attempt async upload to OpenAI
@@ -388,7 +390,7 @@ impl ChatProvider for OpenAiAdapter {
             .transport
             .post_json(&url, Some(headers), openai_request)
             .await
-            .map_err(|e| e.with_context(&format!("OpenAI chat request to {}", url)))?;
+            .map_err(|e| e.with_context(format!("OpenAI chat request to {}", url)))?;
 
         if let Some(t) = timer {
             t.stop();

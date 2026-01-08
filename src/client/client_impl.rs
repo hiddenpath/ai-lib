@@ -115,7 +115,11 @@ impl AiClient {
         // Hydrate unset fields from environment variables
         let opts = opts.hydrate_with_env(provider.env_prefix());
 
-        let resolved_base_url = super::builder::resolve_base_url(provider, opts.base_url.clone())?;
+        let resolved_base_url =
+            crate::client::transport_builder::TransportBuilder::determine_base_url(
+                provider,
+                opts.base_url.clone(),
+            )?;
 
         // Determine effective proxy: None if disable_proxy is true, otherwise use hydrated value
         let effective_proxy = if opts.disable_proxy {

@@ -6,7 +6,7 @@ use thiserror::Error;
 /// Transport layer error types with unified encapsulation of HTTP and JSON errors
 ///
 /// Unified encapsulation of all HTTP-level errors and JSON parsing errors
-#[derive(Error, Debug, Clone)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum TransportError {
     #[error("HTTP request failed: {0}")]
     HttpError(String),

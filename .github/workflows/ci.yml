@@ -1,10 +1,14 @@
-name: CI
+name: CI (DISABLED - Repository Archived)
+
+# This workflow is disabled as ai-lib has been migrated to ai-lib-rust
+# See: https://github.com/hiddenpath/ai-lib-rust
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
+  workflow_dispatch:  # Only allow manual dispatch, effectively disabled
+  # push:
+  #   branches:
+  #     - main
+  # pull_request:
 
 jobs:
   msrv:

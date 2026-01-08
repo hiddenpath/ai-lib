@@ -1,8 +1,10 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+use std::fmt;
 
 /// Message content — moved to an enum to support multimodal and structured content
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub enum Content {
     #[serde(rename = "text")]
     Text(String),
@@ -35,88 +37,123 @@ impl Content {
         }
     }
 
-    /// Convenience constructor for text content
-    pub fn new_text<S: Into<String>>(s: S) -> Self {
-        Content::Text(s.into())
+    /// Check if this content is text
+    pub fn is_text(&self) -> bool {
+        matches!(self, Content::Text(_))
     }
 
-    /// Convenience constructor for JSON content
-    pub fn new_json(v: JsonValue) -> Self {
-        Content::Json(v)
+    /// Check if this content is multimodal (image/audio)
+    pub fn is_multimodal(&self) -> bool {
+        matches!(self, Content::Image { .. } | Content::Audio { .. })
     }
+}
 
-    /// Convenience constructor for image content
-    pub fn new_image(url: Option<String>, mime: Option<String>, name: Option<String>) -> Self {
-        Content::Image { url, mime, name }
-    }
-
-    /// Convenience constructor for audio content
-    pub fn new_audio(url: Option<String>, mime: Option<String>) -> Self {
-        Content::Audio { url, mime }
-    }
-
-    /// Create image content from a file path - the file will be automatically processed
-    /// (uploaded or inlined as data URL) by the AI client when used in a request
-    pub fn from_image_file<P: AsRef<std::path::Path>>(path: P) -> Self {
-        let path = path.as_ref();
-        let name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .map(|s| s.to_string());
-        let mime = path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .and_then(|ext| match ext.to_lowercase().as_str() {
-                "png" => Some("image/png"),
-                "jpg" | "jpeg" => Some("image/jpeg"),
-                "gif" => Some("image/gif"),
-                "webp" => Some("image/webp"),
-                "svg" => Some("image/svg+xml"),
-                _ => None,
-            })
-            .map(|s| s.to_string());
-
-        Content::Image {
-            url: None, // Will be filled by the client
-            mime,
-            name,
-        }
-    }
-
-    /// Create audio content from a file path - the file will be automatically processed
-    /// (uploaded or inlined as data URL) by the AI client when used in a request
-    pub fn from_audio_file<P: AsRef<std::path::Path>>(path: P) -> Self {
-        let path = path.as_ref();
-        let mime = path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .and_then(|ext| match ext.to_lowercase().as_str() {
-                "mp3" => Some("audio/mpeg"),
-                "wav" => Some("audio/wav"),
-                "ogg" => Some("audio/ogg"),
-                "m4a" => Some("audio/mp4"),
-                "flac" => Some("audio/flac"),
-                _ => None,
-            })
-            .map(|s| s.to_string());
-
-        Content::Audio {
-            url: None, // Will be filled by the client
-            mime,
-        }
-    }
-
-    /// Create image content from a data URL (base64 encoded)
-    pub fn from_data_url(data_url: String, mime: Option<String>, name: Option<String>) -> Self {
-        Content::Image {
-            url: Some(data_url),
-            mime,
-            name,
+impl fmt::Display for Content {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Content::Text(text) => write!(f, "{}", text),
+            Content::Json(json) => write!(f, "{}", json),
+            Content::Image { url, name, .. } => {
+                if let Some(name) = name {
+                    write!(f, "[Image: {}]", name)
+                } else if let Some(url) = url {
+                    write!(f, "[Image: {}]", url)
+                } else {
+                    write!(f, "[Image]")
+                }
+            }
+            Content::Audio { url, .. } => {
+                if let Some(url) = url {
+                    write!(f, "[Audio: {}]", url)
+                } else {
+                    write!(f, "[Audio]")
+                }
+            }
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Convenience constructor for text content
+pub fn new_text<S: Into<String>>(s: S) -> Content {
+    Content::Text(s.into())
+}
+
+/// Convenience constructor for JSON content
+pub fn new_json(v: JsonValue) -> Content {
+    Content::Json(v)
+}
+
+/// Convenience constructor for image content
+pub fn new_image(url: Option<String>, mime: Option<String>, name: Option<String>) -> Content {
+    Content::Image { url, mime, name }
+}
+
+/// Convenience constructor for audio content
+pub fn new_audio(url: Option<String>, mime: Option<String>) -> Content {
+    Content::Audio { url, mime }
+}
+
+/// Create image content from a file path - the file will be automatically processed
+/// (uploaded or inlined as data URL) by the AI client when used in a request
+pub fn from_image_file<P: AsRef<std::path::Path>>(path: P) -> Content {
+    let path = path.as_ref();
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|s| s.to_string());
+    let mime = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .and_then(|ext| match ext.to_lowercase().as_str() {
+            "png" => Some("image/png"),
+            "jpg" | "jpeg" => Some("image/jpeg"),
+            "gif" => Some("image/gif"),
+            "webp" => Some("image/webp"),
+            "svg" => Some("image/svg+xml"),
+            _ => None,
+        })
+        .map(|s| s.to_string());
+
+    Content::Image {
+        url: None, // Will be filled by the client
+        mime,
+        name,
+    }
+}
+
+/// Create audio content from a file path - the file will be automatically processed
+/// (uploaded or inlined as data URL) by the AI client when used in a request
+pub fn from_audio_file<P: AsRef<std::path::Path>>(path: P) -> Content {
+    let path = path.as_ref();
+    let mime = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .and_then(|ext| match ext.to_lowercase().as_str() {
+            "mp3" => Some("audio/mpeg"),
+            "wav" => Some("audio/wav"),
+            "ogg" => Some("audio/ogg"),
+            "m4a" => Some("audio/mp4"),
+            "flac" => Some("audio/flac"),
+            _ => None,
+        })
+        .map(|s| s.to_string());
+
+    Content::Audio {
+        url: None, // Will be filled by the client
+        mime,
+    }
+}
+
+/// Create image content from a data URL (base64 encoded)
+pub fn from_data_url(data_url: String, mime: Option<String>, name: Option<String>) -> Content {
+    Content::Image {
+        url: Some(data_url),
+        mime,
+        name,
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct Message {
     pub role: Role,
     pub content: Content,
@@ -228,7 +265,7 @@ impl From<&str> for Content {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub enum Role {
     #[serde(rename = "system")]
     System,
@@ -236,9 +273,11 @@ pub enum Role {
     User,
     #[serde(rename = "assistant")]
     Assistant,
+    #[serde(rename = "tool")]
+    Tool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct Choice {
     pub index: u32,
     pub message: Message,

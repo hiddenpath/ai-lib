@@ -3,11 +3,13 @@
 //! Demonstrates how to use ai-lib's response parsing utilities to extract
 //! JSON, Markdown sections, and code blocks from model outputs.
 
+#[cfg(feature = "response_parser")]
+use ai_lib::prelude::*;
+#[cfg(feature = "response_parser")]
 use ai_lib::response_parser::{
-    extract_code_blocks, extract_json_from_text, AutoParser, JsonResponseParser, MarkdownSectionParser,
-    ParsedResponse, ResponseParser,
+    extract_code_blocks, extract_json_from_text, AutoParser, JsonResponseParser,
+    MarkdownSectionParser, ParsedResponse, ResponseParser,
 };
-use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -16,6 +18,7 @@ struct MathSolution {
     answer: String,
 }
 
+#[cfg(feature = "response_parser")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔍 ai-lib Response Parsing (generic)");
@@ -31,7 +34,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let request = ChatCompletionRequest::new(
         "qwen-qwq-32b".to_string(),
         vec![
-            Message::system("Return analysis with ## sections and include a JSON code block named solution."),
+            Message::system(
+                "Return analysis with ## sections and include a JSON code block named solution.",
+            ),
             Message::user("Solve 2x + 5 = 17 and explain briefly."),
         ],
     );
@@ -58,13 +63,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         ParsedResponse::Text(_) => println!("\n(plain text)"),
+        ParsedResponse::JsonLines(lines) => {
+            println!("\n📋 JSON Lines: {} items", lines.len());
+        }
     }
 
     // 2) Extract JSON code block and deserialize
     if let Some(json_str) = extract_json_from_text(&content) {
         let parser = JsonResponseParser::<MathSolution>::new();
         if let Ok(sol) = parser.parse(&json_str).await {
-            println!("\n✅ Parsed MathSolution: answer={}, steps={}", sol.answer, sol.steps.len());
+            println!(
+                "\n✅ Parsed MathSolution: answer={}, steps={}",
+                sol.answer,
+                sol.steps.len()
+            );
         } else {
             println!("\n⚠️ Found JSON block but failed to parse as MathSolution");
         }
@@ -79,3 +91,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(not(feature = "response_parser"))]
+fn main() {
+    println!("This example requires the 'response_parser' feature to be enabled.");
+    println!("Run with: cargo run --example response_parsing --features response_parser");
+}

@@ -3,78 +3,63 @@ use ai_lib::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🚀 AI-lib Quickstart Example");
+    println!("🚀 AI-lib v0.5.0 Quickstart");
     println!("============================");
 
-    // 🎯 Simplest usage - create client with one line of code
-    println!("\n📋 Simplest usage:");
-    let _client = AiClient::new(Provider::Groq)?;
-    println!("✅ Client created successfully!");
+    // 🎯 Simplest v0.5.0 usage - create client with a model ID
+    // Configurations are loaded from the embedded aimanifest.yaml
+    println!("\n📋 Model-Driven simplified usage:");
+    let client = AiClientBuilder::new(Provider::OpenAI)
+        .with_model("gpt-4o")
+        .build()?;
+    println!(
+        "✅ Client created via Manifest for model: {}",
+        client.default_chat_model()
+    );
 
-    // 🔧 If you need custom configuration, use builder pattern
-    println!("\n📋 Custom configuration:");
-    let client = AiClientBuilder::new(Provider::Groq)
-        .with_base_url("https://custom.groq.com") // Optional: custom server
-        .with_proxy(Some("http://proxy.example.com:8080")) // Optional: custom proxy
+    // 🔧 Customize behavior while remaining manifest-compatible
+    println!("\n📋 Advanced Client Configuration:");
+    let _custom_client = AiClientBuilder::new(Provider::OpenAI)
+        .with_model("gpt-4o")
+        .with_timeout(std::time::Duration::from_secs(30))
         .build()?;
     println!("✅ Custom client created successfully!");
 
-    // 📝 Create chat request
-    println!("\n📋 Create chat request:");
-    let _request = ChatCompletionRequest::new(
-        "llama3-8b-8192".to_string(), // Model name
-        vec![Message {
-            role: Role::User,
-            content: Content::new_text("Hello! How are you?"),
-            function_call: None,
-        }],
+    // 📝 Create a structured chat request
+    println!("\n📋 Creating a chat request:");
+    let request = ChatCompletionRequest::new(
+        "gpt-4o".to_string(),
+        vec![Message::user("Tell me one interesting fact about Rust.")],
     );
-    println!("✅ Request created successfully!");
+    println!("✅ Request built for model: {}", request.model);
 
-    // 🌐 Send request (requires GROQ_API_KEY environment variable)
-    println!("\n📋 Send request:");
-    println!("   Note: Set GROQ_API_KEY environment variable for actual API calls");
-    println!("   Usage: export GROQ_API_KEY=your_api_key_here");
+    // 🌐 Multi-provider support (all driven by local or embedded YAML)
+    println!("\n📋 Switching Providers (Zero code change needed):");
 
-    // Check if API key is available
-    match std::env::var("GROQ_API_KEY") {
-        Ok(_) => {
-            println!("✅ GROQ_API_KEY detected, ready to send actual requests");
-            // Uncomment the following code to send actual request
-            // let response = client.chat_completion(request).await?;
-            // println!("🤖 AI response: {}", response.choices[0].message.content.as_text());
-        }
-        Err(_) => {
-            println!("ℹ️  GROQ_API_KEY not set, skipping actual request");
-            println!("   This is a demo showing how to build requests");
-        }
-    }
-
-    // 🎨 More customization options
-    println!("\n📋 More customization options:");
-    let _advanced_client = AiClientBuilder::new(Provider::Groq)
-        .with_timeout(std::time::Duration::from_secs(60)) // 60 second timeout
-        .with_pool_config(16, std::time::Duration::from_secs(60)) // Connection pool config
+    // Switch to Groq (Llama 3) via manifest
+    let groq_client = AiClientBuilder::new(Provider::Groq)
+        .with_model("llama-3.3-70b-versatile")
         .build()?;
-    println!("✅ Advanced configuration client created successfully!");
+    println!(
+        "✅ Groq client (Manifest-driven) created: {}",
+        groq_client.default_chat_model()
+    );
 
-    // 🔄 Switch to other providers
-    println!("\n📋 Switch to other providers:");
-    let _deepseek_client = AiClient::new(Provider::DeepSeek)?;
-    println!("✅ DeepSeek client created successfully!");
-
-    let _ollama_client = AiClient::new(Provider::Ollama)?;
-    println!("✅ Ollama client created successfully!");
+    // Switch to Mistral via manifest
+    let mistral_client = AiClientBuilder::new(Provider::Mistral)
+        .with_model("mistral-large-latest")
+        .build()?;
+    println!(
+        "✅ Mistral client (Manifest-driven) created: {}",
+        mistral_client.default_chat_model()
+    );
 
     println!("\n🎉 Quickstart completed!");
-    println!("\n💡 Key points:");
-    println!("   1. AiClient::new() - Simplest usage with automatic environment detection");
-    println!("   2. AiClientBuilder - Builder pattern with custom configuration support");
-    println!(
-        "   3. Environment variable priority: Explicit setting > Environment variable > Default"
-    );
-    println!("   4. Support for all mainstream AI providers");
-    println!("   5. Backward compatible, existing code requires no changes");
+    println!("\n💡 Key points for v0.5.0:");
+    println!("   1. Manifest-First: No hardcoded provider logic; all details are in YAML.");
+    println!("   2. Model-Centric: Use .with_model() to pick specific capabilities.");
+    println!("   3. Unified SSE: Streaming is handled by operators, not provider branches.");
+    println!("   4. Zero-Code: Add new providers to aimanifest.yaml without rebuilding the SDK.");
 
     Ok(())
 }

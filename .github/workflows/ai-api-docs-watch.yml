@@ -1,9 +1,12 @@
-name: AI API Docs Watch (Daily)
+name: AI API Docs Watch (DISABLED - Repository Archived)
+
+# This workflow is disabled as ai-lib has been migrated to ai-lib-rust
+# See: https://github.com/hiddenpath/ai-lib-rust
 
 on:
-  schedule:
-    - cron: "10 2 * * *"   # 每天 02:10 UTC 运行
-  workflow_dispatch:
+  workflow_dispatch:  # Only allow manual dispatch, effectively disabled
+  # schedule:
+  #   - cron: "10 2 * * *"   # 每天 02:10 UTC 运行 (DISABLED)
 
 # 避免并发（可选但推荐）：同一时间只跑一个实例
 concurrency:

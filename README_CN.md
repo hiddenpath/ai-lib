@@ -1,6 +1,38 @@
-# ai-lib 🦀✨  
+# ⚠️ 重要公告：本仓库已停止更新
+
+> **本仓库（ai-lib）已停止维护，不再接受新的 PR、Issue 或功能更新。**
+
+## 🚀 迁移到 ai-lib-rust
+
+**ai-lib 项目已完全转向 [ai-lib-rust](https://github.com/hiddenpath/ai-lib-rust)**，这是一个全新的、基于 **manifest-first（协议优先）** 和 **数据驱动** 架构的通用 AI 接口运行时。
+
+### 为什么迁移？
+
+- ✅ **协议驱动架构**: 所有逻辑由 YAML 协议文件驱动，无需硬编码 provider 逻辑
+- ✅ **统一标准**: 基于 [AI-Protocol](https://github.com/hiddenpath/ai-protocol) 规范，确保跨运行时一致性
+- ✅ **更简洁的 API**: 开发者友好的接口，避免复杂混乱的用户界面
+- ✅ **更好的可维护性**: 模块化设计，清晰的架构分层
+- ✅ **生产就绪**: 完整的测试覆盖、CI/CD 集成、协议验证
+
+### 如何迁移？
+
+1. **查看新项目**: [ai-lib-rust](https://github.com/hiddenpath/ai-lib-rust)
+2. **查看协议规范**: [AI-Protocol](https://github.com/hiddenpath/ai-protocol)
+3. **迁移指南**: 请参考 ai-lib-rust 的 README 和示例代码，或查看 [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md)
+
+### 获取帮助
+
+- **新项目 Issues**: [ai-lib-rust Issues](https://github.com/hiddenpath/ai-lib-rust/issues)
+- **协议规范**: [AI-Protocol](https://github.com/hiddenpath/ai-protocol)
+- **讨论**: 请在 ai-lib-rust 仓库中提出问题和建议
+
+---
+
+# ai-lib 🦀✨ (已停止维护)
 
 > 面向 Rust 的统一、可靠、高性能多厂商 AI SDK
+
+**⚠️ 注意**: 本仓库已停止更新。请迁移到 [ai-lib-rust](https://github.com/hiddenpath/ai-lib-rust)。
 
 一个生产级、厂商无关的 SDK，提供面向 20+ 家且持续增加 的 AI 平台的统一 Rust API（OpenAI、Groq、Anthropic、Gemini、Mistral、Cohere、Azure OpenAI、Ollama、DeepSeek、Qwen、百度文心、腾讯混元、讯飞星火、Kimi、HuggingFace、TogetherAI、xAI Grok、OpenRouter、Replicate、Perplexity、AI21、智谱AI、MiniMax 等）。  
 它消除了分散的认证流程、流式格式、错误语义、模型命名差异和不一致的函数调用。无需重写集成代码，即可从一行脚本扩展到生产系统。

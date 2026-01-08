@@ -3,11 +3,9 @@
 //! These tests ensure consistent behavior across different streaming formats
 //! and edge cases that have been encountered in production.
 
-use ai_lib::AiLibError;
-
 #[cfg(feature = "unified_sse")]
 #[test]
-fn golden_sse_multibyte_utf8_boundary() -> Result<(), AiLibError> {
+fn golden_sse_multibyte_utf8_boundary() -> Result<(), Box<dyn std::error::Error>> {
     // Test UTF-8 multibyte characters split across SSE event boundaries
     let chinese_text = "你好世界";
     let event1 = format!(
@@ -41,7 +39,7 @@ fn golden_sse_multibyte_utf8_boundary() -> Result<(), AiLibError> {
 
 #[cfg(feature = "unified_sse")]
 #[test]
-fn golden_sse_mixed_line_endings() -> Result<(), AiLibError> {
+fn golden_sse_mixed_line_endings() -> Result<(), Box<dyn std::error::Error>> {
     // Test SSE events with mixed line endings (LF and CRLF)
     let event_lf = "data: {\"id\":\"1\",\"choices\":[{\"delta\":{\"content\":\"LF event\"}}]}\n\n";
     let event_crlf =
@@ -67,7 +65,7 @@ fn golden_sse_mixed_line_endings() -> Result<(), AiLibError> {
 
 #[cfg(feature = "unified_sse")]
 #[test]
-fn golden_sse_partial_json_recovery() -> Result<(), AiLibError> {
+fn golden_sse_partial_json_recovery() -> Result<(), Box<dyn std::error::Error>> {
     // Test recovery from partial JSON in SSE events
     // First, test that partial JSON is ignored (no boundary found)
     let partial_event = "data: {\"id\":\"1\",\"choices\":[{\"delta\":{\"content\":\"partial";
@@ -102,7 +100,7 @@ fn golden_sse_partial_json_recovery() -> Result<(), AiLibError> {
 
 #[cfg(feature = "unified_sse")]
 #[test]
-fn golden_sse_whitespace_handling() -> Result<(), AiLibError> {
+fn golden_sse_whitespace_handling() -> Result<(), Box<dyn std::error::Error>> {
     // Test various whitespace scenarios in SSE events
     let events = vec![
         "data: {\"id\":\"1\",\"choices\":[{\"delta\":{\"content\":\"no_ws\"}}]}\n\n",
@@ -134,7 +132,7 @@ fn golden_sse_whitespace_handling() -> Result<(), AiLibError> {
 
 #[cfg(feature = "unified_sse")]
 #[test]
-fn golden_sse_nested_json_escaping() -> Result<(), AiLibError> {
+fn golden_sse_nested_json_escaping() -> Result<(), Box<dyn std::error::Error>> {
     // Test SSE events with nested JSON and escaped characters
     let complex_json =
         r#"{"id":"1","choices":[{"delta":{"content":"He said: \"Hello, world!\""}}]}"#;
@@ -162,7 +160,7 @@ fn golden_sse_nested_json_escaping() -> Result<(), AiLibError> {
 
 #[cfg(feature = "unified_sse")]
 #[test]
-fn golden_sse_empty_content_chunks() -> Result<(), AiLibError> {
+fn golden_sse_empty_content_chunks() -> Result<(), Box<dyn std::error::Error>> {
     // Test SSE events with empty content (should be handled gracefully)
     let events = vec![
         r#"data: {"id":"1","choices":[{"delta":{"role":"assistant"}}]}"#,
@@ -200,7 +198,7 @@ fn golden_sse_empty_content_chunks() -> Result<(), AiLibError> {
 
 #[cfg(feature = "unified_sse")]
 #[test]
-fn golden_sse_finish_reason_variants() -> Result<(), AiLibError> {
+fn golden_sse_finish_reason_variants() -> Result<(), Box<dyn std::error::Error>> {
     // Test different finish_reason values
     let events = vec![
         r#"data: {"id":"1","choices":[{"delta":{"content":"content"},"finish_reason":null}]}"#,
@@ -240,7 +238,7 @@ fn golden_sse_finish_reason_variants() -> Result<(), AiLibError> {
 
 #[cfg(feature = "unified_sse")]
 #[test]
-fn golden_sse_very_large_single_event() -> Result<(), AiLibError> {
+fn golden_sse_very_large_single_event() -> Result<(), Box<dyn std::error::Error>> {
     // Test a single SSE event with very large content
     let large_content = "A".repeat(100_000); // 100KB
     let large_json = format!(

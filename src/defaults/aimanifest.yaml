@@ -1,0 +1,1184 @@
+version: "1.1"
+metadata:
+  description: "AI-Lib Manifest-First v1.1 - Official configuration supporting 0.3.x provider ecosystem"
+  last_updated: "2025-01-XX"
+  authors: ["AI-Lib Team"]
+  license: "MIT OR Apache-2.0"
+
+# =========================================================
+# Layer 1: Standard Schema (2025 Extensions)
+# =========================================================
+standard_schema:
+  # Standard parameter definitions - unified developer interface
+  parameters:
+    temperature:
+      type: float
+      range: [0.0, 2.0]
+      default: 1.0
+      description: "Controls randomness in the output"
+    max_tokens:
+      type: integer
+      min: 1
+      max: 32768
+      description: "Maximum number of tokens to generate"
+    stream:
+      type: boolean
+      default: false
+      description: "Enable streaming responses"
+    top_p:
+      type: float
+      range: [0.0, 1.0]
+      default: 1.0
+      description: "Nucleus sampling parameter"
+
+    frequency_penalty:
+      type: float
+      range: [-2.0, 2.0]
+      default: 0.0
+      description: "Penalize frequent tokens (OpenAI-compatible)"
+
+    presence_penalty:
+      type: float
+      range: [-2.0, 2.0]
+      default: 0.0
+      description: "Penalize repeated presence (OpenAI-compatible)"
+
+    top_k:
+      type: integer
+      min: 1
+      max: 500
+      description: "Top-K filtering (Gemini/open-source compatible)"
+
+    stop_sequences:
+      type: array
+      description: "Stop sequences to truncate generation"
+
+    logprobs:
+      type: boolean
+      default: false
+      description: "Return token logprobs when provider supports"
+
+    top_logprobs:
+      type: integer
+      min: 1
+      max: 5
+      description: "Number of top logprobs to return"
+
+    seed:
+      type: integer
+      description: "Deterministic seed when supported"
+
+    tool_choice:
+      type: string
+      values: ["auto", "none", "required", "specific"]
+      default: "auto"
+      description: "Tool choice policy per request"
+
+    response_format_mode:
+      type: string
+      values: ["auto", "text", "json_object", "json_schema"]
+      default: "auto"
+      description: "Structured output selection (OpenAI Responses / JSON mode)"
+
+    # 2025: Agentic reasoning control
+    reasoning_effort:
+      type: string
+      values: ["low", "medium", "high", "auto"]
+      default: "auto"
+      description: "Reasoning effort for agentic tasks"
+
+  # Tool definition standards
+  tools:
+    schema: "standard_tool_definition"
+    choice_policy: ["auto", "none", "required", "specific"]
+    strict_mode: true
+    parallel_calls: true
+
+  # Response format standards
+  response_format:
+    types: ["text", "json", "structured"]
+    schema_validation: true
+
+  # Multimodal content standards
+  multimodal:
+    image:
+      formats: ["png", "jpeg", "gif", "webp"]
+      max_size: "10MB"
+
+  # 2025: Agentic Loop configuration
+  agentic_loop:
+    max_iterations: 10
+    stop_conditions: ["tool_result", "final_answer"]
+    reasoning_effort: "auto"
+
+  # 2025: Streaming events model
+  streaming_events:
+    supported_events: ["PartialContentDelta", "ThinkingDelta", "PartialToolCall", "ToolCallStarted", "ToolCallEnded"]
+    thinking_blocks: true
+    citations_enabled: true
+
+# =========================================================
+# Layer 2: Provider Mappings (2025 Extensions)
+# =========================================================
+providers:
+  openai:
+    version: "v1"
+    base_url: "https://api.openai.com/v1"
+    auth:
+      type: bearer
+      token_env: "OPENAI_API_KEY"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      top_p: "top_p"
+      stop_sequences: "stop"
+      frequency_penalty: "frequency_penalty"
+      presence_penalty: "presence_penalty"
+      stop_sequences: "stop"
+      logprobs: "logprobs"
+      top_logprobs: "top_logprobs"
+      seed: "seed"
+      tools: "tools"
+      tool_choice: "tool_choice"
+      reasoning_effort: "reasoning_effort"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      tool_calls: "choices[0].message.tool_calls"
+      usage: "usage"
+      finish_reason: "choices[0].finish_reason"
+    streaming:
+      event_format: "data_lines"
+      decoder:
+        format: "sse"
+        delimiter: "\n\n"
+        prefix: "data: "
+        done_signal: "[DONE]"
+      frame_selector: "exists($.choices)"
+      candidate:
+        candidate_id_path: "$.choices[*].index"
+        fan_out: true
+      event_map:
+        # Text content delta (supports multi-candidate via choices array)
+        - match: "exists($.choices[*].delta.content)"
+          emit: "PartialContentDelta"
+          fields:
+            content: "$.choices[*].delta.content"
+        # Tool call start (first chunk with tool_calls)
+        - match: "exists($.choices[*].delta.tool_calls[*].function.name)"
+          emit: "ToolCallStarted"
+          fields:
+            tool_call_id: "$.choices[*].delta.tool_calls[*].id"
+            tool_name: "$.choices[*].delta.tool_calls[*].function.name"
+            index: "$.choices[*].delta.tool_calls[*].index"
+        # Tool call arguments streaming
+        - match: "exists($.choices[*].delta.tool_calls[*].function.arguments)"
+          emit: "PartialToolCall"
+          fields:
+            arguments: "$.choices[*].delta.tool_calls[*].function.arguments"
+            index: "$.choices[*].delta.tool_calls[*].index"
+        # Usage metadata (OpenAI returns usage in final chunk with stream_options)
+        - match: "exists($.usage)"
+          emit: "Metadata"
+          fields:
+            usage: "$.usage"
+            prompt_tokens: "$.usage.prompt_tokens"
+            completion_tokens: "$.usage.completion_tokens"
+        # Finish with reason
+        - match: "exists($.choices[*].finish_reason)"
+          emit: "FinalCandidate"
+          fields:
+            finish_reason: "$.choices[*].finish_reason"
+            candidate_index: "$.choices[*].index"
+      stop_condition: "$.choices[0].finish_reason != null"
+      extra_metadata_path: "$.usage"
+      content_path: "choices[0].delta.content"
+      tool_call_path: "choices[0].delta.tool_calls"
+    features:
+      multi_candidate:
+        support_type: "native"
+        param_name: "n"
+      response_mapping:
+        tool_calls:
+          path: "choices[0].message.tool_calls"
+          fields:
+            id: "id"
+            name: "function.name"
+            args: "function.arguments"
+        error:
+          message_path: "error.message"
+          code_path: "error.type"
+    capabilities: [chat, vision, tools, streaming, agentic, parallel_tools, reasoning]
+    experimental_features:
+      - "strict_tools"
+      - "parallel_tool_calls"
+      - "responses_api"
+
+  anthropic:
+    version: "v1"
+    base_url: "https://api.anthropic.com/v1"
+    auth:
+      type: bearer
+      token_env: "ANTHROPIC_API_KEY"
+      extra_headers:
+        - name: "anthropic-version"
+          value: "2023-06-01"
+    payload_format: "anthropic_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      top_p: "top_p"
+      stop_sequences: "stop_sequences"
+      tools: "tools"
+      tool_choice: "tool_choice"
+      system_message: "system"
+      reasoning_effort: "reasoning_effort"
+    response_format: "anthropic_style"
+    response_paths:
+      content: "content[0].text"
+      tool_calls: "content[0].tool_calls"
+      usage: "usage"
+      stop_reason: "stop_reason"
+    streaming:
+      event_format: "anthropic_sse"
+      decoder:
+        format: "anthropic_sse"
+        delimiter: "\n\n"
+        prefix: "data: "
+        done_signal: "[DONE]"
+      frame_selector: "$.type in ['content_block_start', 'content_block_delta', 'content_block_stop', 'message_delta', 'message_stop']"
+      accumulator:
+        stateful_tool_parsing: true
+        key_path: "$.delta.partial_json"
+        flush_on: "$.type == 'content_block_stop'"
+      event_map:
+        # Text content streaming
+        - match: "$.type == 'content_block_delta' && $.delta.type == 'text_delta'"
+          emit: "PartialContentDelta"
+          fields:
+            content: "$.delta.text"
+        # Thinking/reasoning delta (Claude 3.5+ extended thinking)
+        - match: "$.type == 'content_block_delta' && $.delta.type == 'thinking_delta'"
+          emit: "ThinkingDelta"
+          fields:
+            thinking: "$.delta.thinking"
+        # Tool call start (for multi-tool scenarios)
+        - match: "$.type == 'content_block_start' && $.content_block.type == 'tool_use'"
+          emit: "ToolCallStarted"
+          fields:
+            tool_call_id: "$.content_block.id"
+            tool_name: "$.content_block.name"
+            index: "$.index"
+        # Tool call arguments streaming
+        - match: "$.type == 'content_block_delta' && $.delta.type == 'input_json_delta'"
+          emit: "PartialToolCall"
+          fields:
+            arguments: "$.delta.partial_json"
+            index: "$.index"
+        # Tool call end
+        - match: "$.type == 'content_block_stop'"
+          emit: "ToolCallEnded"
+          fields:
+            index: "$.index"
+        # Message delta with usage and stop_reason
+        - match: "$.type == 'message_delta'"
+          emit: "Metadata"
+          fields:
+            stop_reason: "$.delta.stop_reason"
+            usage: "$.usage"
+        # Stream end
+        - match: "$.type == 'message_stop'"
+          emit: "StreamEnd"
+          fields:
+            finish_reason: "end_turn"
+      stop_condition: "$.type == 'message_stop'"
+      extra_metadata_path: "$.usage"
+      content_path: "delta.text"
+      tool_call_path: "delta.tool_calls"
+    features:
+      multi_candidate:
+        support_type: "simulated"
+        max_concurrent: 4
+      response_mapping:
+        tool_calls:
+          path: "content"
+          filter: "type == 'tool_use'"
+          fields:
+            id: "id"
+            name: "name"
+            args: "input"
+            id_strategy: "path"
+          array_fan_out: true
+        error:
+          message_path: "error.message"
+          code_path: "error.type"
+    capabilities: [chat, vision, tools, streaming, agentic, reasoning]
+    experimental_features:
+      - "thinking_blocks"
+      - "mcp"
+
+  gemini:
+    version: "v1beta"
+    base_url: "https://generativelanguage.googleapis.com/v1beta"
+    auth:
+      type: query_param
+      param_name: "key"
+      token_env: "GEMINI_API_KEY"
+    payload_format: "gemini_style"
+    parameter_mappings:
+      temperature: "generationConfig.temperature"
+      max_tokens: "generationConfig.maxOutputTokens"
+      top_p: "generationConfig.topP"
+      top_k: "generationConfig.topK"
+      stop_sequences: "stopSequences"
+      tools: "tools"
+      tool_choice: "toolConfig"
+    response_format: "gemini_style"
+    response_paths:
+      content: "candidates[0].content.parts[0].text"
+      tool_calls: "candidates[0].content.parts[0].functionCall"
+      finish_reason: "candidates[0].finishReason"
+    streaming:
+      event_format: "gemini_json"
+      decoder:
+        format: "gemini_json"
+        delimiter: "\n"
+      frame_selector: "exists($.candidates)"
+      candidate:
+        candidate_id_path: "$.candidates[*].index"
+        fan_out: true
+      event_map:
+        # Text content (supports multi-candidate via array fan-out)
+        - match: "exists($.candidates[*].content.parts[*].text)"
+          emit: "PartialContentDelta"
+          fields:
+            content: "$.candidates[*].content.parts[*].text"
+        # Function call start (Gemini returns complete function call in one chunk)
+        - match: "exists($.candidates[*].content.parts[*].functionCall.name)"
+          emit: "ToolCallStarted"
+          fields:
+            tool_name: "$.candidates[*].content.parts[*].functionCall.name"
+            tool_call_id: "_generate_uuid"
+        # Function call arguments
+        - match: "exists($.candidates[*].content.parts[*].functionCall.args)"
+          emit: "PartialToolCall"
+          fields:
+            arguments: "$.candidates[*].content.parts[*].functionCall.args"
+            tool_name: "$.candidates[*].content.parts[*].functionCall.name"
+            tool_call_id: "_generate_uuid"
+        # Usage metadata
+        - match: "exists($.usageMetadata)"
+          emit: "Metadata"
+          fields:
+            usage: "$.usageMetadata"
+            prompt_tokens: "$.usageMetadata.promptTokenCount"
+            completion_tokens: "$.usageMetadata.candidatesTokenCount"
+        # Finish with reason
+        - match: "exists($.candidates[*].finishReason)"
+          emit: "FinalCandidate"
+          fields:
+            finish_reason: "$.candidates[*].finishReason"
+            candidate_index: "$.candidates[*].index"
+      stop_condition: "exists($.candidates[*].finishReason)"
+      extra_metadata_path: "$.usageMetadata"
+      content_path: "candidates[0].content.parts[0].text"
+      tool_call_path: "candidates[0].content.parts[0].functionCall.args"
+    features:
+      multi_candidate:
+        support_type: "native"
+        param_name: "candidateCount"
+      response_mapping:
+        tool_calls:
+          path: "candidates[0].content.parts"
+          filter: "exists(functionCall)"
+          fields:
+            id: "_generate_uuid"
+            name: "functionCall.name"
+            args: "functionCall.args"
+            id_strategy: "generate_uuid"
+          array_fan_out: true
+        error:
+          message_path: "error.message"
+          code_path: "error.code"
+    capabilities: [chat, vision, tools, multimodal]
+    experimental_features:
+      - "multimodal_video"
+      - "multimodal_audio"
+
+  groq:
+    version: "v1"
+    base_url: "https://api.groq.com/openai/v1"
+    auth:
+      type: bearer
+      token_env: "GROQ_API_KEY"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      stop_sequences: "stop"
+      tools: "tools"
+      tool_choice: "tool_choice"
+      frequency_penalty: "frequency_penalty"
+      presence_penalty: "presence_penalty"
+      stop_sequences: "stop"
+      logprobs: "logprobs"
+      top_logprobs: "top_logprobs"
+      seed: "seed"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      tool_calls: "choices[0].message.tool_calls"
+      usage: "usage"
+    streaming:
+      event_format: "data_lines"
+      content_path: "choices[0].delta.content"
+      tool_call_path: "choices[0].delta.tool_calls"
+    features:
+      multi_candidate:
+        support_type: "native"
+        param_name: "n"
+      response_mapping:
+        tool_calls:
+          path: "choices[0].message.tool_calls"
+          fields:
+            id: "id"
+            name: "function.name"
+            args: "function.arguments"
+        error:
+          message_path: "error.message"
+          code_path: "error.type"
+    capabilities: [chat, tools, streaming, parallel_tools, agentic]
+    experimental_features:
+      - "builtin_search"
+      - "code_execution"
+      - "fast_inference"
+
+  # OpenAI-compatible providers
+  azure_openai:
+    version: "v1"
+    base_url_template: "https://{resource_name}.openai.azure.com/openai/deployments/{deployment}"
+    connection_vars:
+      resource_name: "${AZURE_OPENAI_RESOURCE_NAME}"
+      deployment: "${AZURE_OPENAI_DEPLOYMENT}"
+    auth:
+      type: api_key
+      key_env: "AZURE_OPENAI_API_KEY"
+      header_name: "api-key"
+      extra_headers:
+        - name: "api-version"
+          value: "2023-12-01-preview"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      top_p: "top_p"
+      frequency_penalty: "frequency_penalty"
+      presence_penalty: "presence_penalty"
+      stop_sequences: "stop"
+      logprobs: "logprobs"
+      top_logprobs: "top_logprobs"
+      seed: "seed"
+      tools: "tools"
+      tool_choice: "tool_choice"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      tool_calls: "choices[0].message.tool_calls"
+      usage: "usage"
+      finish_reason: "choices[0].finish_reason"
+    streaming:
+      event_format: "data_lines"
+      content_path: "choices[0].delta.content"
+      tool_call_path: "choices[0].delta.tool_calls"
+    features:
+      multi_candidate:
+        support_type: "native"
+        param_name: "n"
+      response_mapping:
+        tool_calls:
+          path: "choices[0].message.tool_calls"
+          fields:
+            id: "id"
+            name: "function.name"
+            args: "function.arguments"
+        error:
+          message_path: "error.message"
+          code_path: "error.type"
+    capabilities: [chat, vision, tools, streaming, agentic, parallel_tools]
+    experimental_features:
+      - "strict_tools"
+      - "parallel_tool_calls"
+
+  openrouter:
+    version: "v1"
+    base_url: "https://openrouter.ai/api/v1"
+    auth:
+      type: bearer
+      token_env: "OPENROUTER_API_KEY"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      top_p: "top_p"
+      frequency_penalty: "frequency_penalty"
+      presence_penalty: "presence_penalty"
+      stop_sequences: "stop"
+      logprobs: "logprobs"
+      top_logprobs: "top_logprobs"
+      seed: "seed"
+      tools: "tools"
+      tool_choice: "tool_choice"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      tool_calls: "choices[0].message.tool_calls"
+      usage: "usage"
+      finish_reason: "choices[0].finish_reason"
+    streaming:
+      event_format: "data_lines"
+      content_path: "choices[0].delta.content"
+      tool_call_path: "choices[0].delta.tool_calls"
+    capabilities: [chat, vision, tools, streaming, agentic, parallel_tools]
+    experimental_features:
+      - "model_routing"
+      - "auto_routing"
+
+  replicate:
+    version: "v1"
+    base_url: "https://api.replicate.com/v1"
+    auth:
+      type: bearer
+      token_env: "REPLICATE_API_TOKEN"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "input.temperature"
+      max_tokens: "input.max_tokens"
+      stream: "stream"
+      top_p: "input.top_p"
+      messages: "input.messages"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      usage: "usage"
+      finish_reason: "choices[0].finish_reason"
+    capabilities: [chat, vision, streaming]
+    experimental_features:
+      - "serverless_inference"
+      - "model_versioning"
+
+  zhipuai:
+    version: "v1"
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
+    auth:
+      type: bearer
+      token_env: "ZHIPUAI_API_KEY"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      top_p: "top_p"
+      stop_sequences: "stop"
+      tools: "tools"
+      tool_choice: "tool_choice"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      tool_calls: "choices[0].message.tool_calls"
+      usage: "usage"
+      finish_reason: "choices[0].finish_reason"
+    streaming:
+      event_format: "data_lines"
+      content_path: "choices[0].delta.content"
+      tool_call_path: "choices[0].delta.tool_calls"
+    capabilities: [chat, vision, tools, streaming, agentic]
+    experimental_features:
+      - "multilingual_support"
+
+  minimax:
+    version: "v1"
+    base_url: "https://api.minimax.chat/v1"
+    auth:
+      type: bearer
+      token_env: "MINIMAX_API_KEY"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      top_p: "top_p"
+      stop_sequences: "stop"
+      tools: "tools"
+      tool_choice: "tool_choice"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      tool_calls: "choices[0].message.tool_calls"
+      usage: "usage"
+      finish_reason: "choices[0].finish_reason"
+    streaming:
+      event_format: "data_lines"
+      content_path: "choices[0].delta.content"
+      tool_call_path: "choices[0].delta.tool_calls"
+    capabilities: [chat, vision, tools, streaming, agentic]
+    experimental_features:
+      - "speech_synthesis"
+
+  # Independent providers
+  mistral:
+    version: "v1"
+    base_url: "https://api.mistral.ai/v1"
+    auth:
+      type: bearer
+      token_env: "MISTRAL_API_KEY"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      top_p: "top_p"
+      stop_sequences: "stop"
+      tools: "tools"
+      tool_choice: "tool_choice"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      tool_calls: "choices[0].message.tool_calls"
+      usage: "usage"
+      finish_reason: "choices[0].finish_reason"
+    streaming:
+      event_format: "data_lines"
+      content_path: "choices[0].delta.content"
+      tool_call_path: "choices[0].delta.tool_calls"
+    capabilities: [chat, tools, streaming, agentic, parallel_tools]
+    experimental_features:
+      - "codestral_integration"
+
+  cohere:
+    version: "v2"
+    base_url: "https://api.cohere.ai/v1"
+    auth:
+      type: bearer
+      token_env: "COHERE_API_KEY"
+    payload_format: "cohere_native"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      tools: "tools"
+      tool_choice: "tool_choice"
+    response_format: "openai_style"
+    response_paths:
+      content: "text"
+      tool_calls: "tool_calls"
+      citations: "citations"
+    streaming:
+      event_format: "cohere_native"
+      decoder:
+        format: "cohere_native"
+        delimiter: "\n"
+      frame_selector: "exists($.event_type)"
+      event_map:
+        # Text generation event
+        - match: "$.event_type == 'text-generation'"
+          emit: "PartialContentDelta"
+          fields:
+            content: "$.text"
+        # Tool call start
+        - match: "$.event_type == 'tool-calls-chunk' && exists($.tool_call_delta.name)"
+          emit: "ToolCallStarted"
+          fields:
+            tool_name: "$.tool_call_delta.name"
+            tool_call_id: "$.tool_call_delta.index"
+        # Tool call arguments streaming
+        - match: "$.event_type == 'tool-calls-chunk' && exists($.tool_call_delta.parameters)"
+          emit: "PartialToolCall"
+          fields:
+            arguments: "$.tool_call_delta.parameters"
+            index: "$.tool_call_delta.index"
+        # Citations (Cohere RAG feature)
+        - match: "$.event_type == 'citation-generation'"
+          emit: "Metadata"
+          fields:
+            citations: "$.citations"
+        # Search results (Cohere connectors)
+        - match: "$.event_type == 'search-results'"
+          emit: "Metadata"
+          fields:
+            search_results: "$.search_results"
+            documents: "$.documents"
+        # Stream end with finish reason
+        - match: "$.event_type == 'stream-end'"
+          emit: "StreamEnd"
+          fields:
+            finish_reason: "$.finish_reason"
+        # Final response with usage
+        - match: "$.event_type == 'stream-end' && exists($.response.meta.tokens)"
+          emit: "Metadata"
+          fields:
+            usage: "$.response.meta.tokens"
+      stop_condition: "$.event_type == 'stream-end'"
+      extra_metadata_path: "$.response.meta"
+    features:
+      multi_candidate:
+        support_type: "simulated"
+        max_concurrent: 2
+      response_mapping:
+        tool_calls:
+          path: "tool_calls"
+          fields:
+            id: "_generate_uuid"
+            name: "name"
+            args: "function.arguments"
+            id_strategy: "generate_uuid"
+          array_fan_out: true
+        error:
+          message_path: "message"
+          code_path: "code"
+    capabilities: [chat, tools, streaming, agentic]
+    experimental_features:
+      - "rag"
+      - "citations"
+      - "command_r_plus"
+
+  perplexity:
+    version: "v1"
+    base_url: "https://api.perplexity.ai"
+    auth:
+      type: bearer
+      token_env: "PERPLEXITY_API_KEY"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      top_p: "top_p"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      usage: "usage"
+      finish_reason: "choices[0].finish_reason"
+    streaming:
+      event_format: "data_lines"
+      content_path: "choices[0].delta.content"
+    capabilities: [chat, streaming]
+    experimental_features:
+      - "search_integration"
+      - "real_time_knowledge"
+
+  ai21:
+    version: "v1"
+    base_url: "https://api.ai21.com/studio/v1"
+    auth:
+      type: bearer
+      token_env: "AI21_API_KEY"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      top_p: "top_p"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      usage: "usage"
+      finish_reason: "choices[0].finish_reason"
+    streaming:
+      event_format: "data_lines"
+      content_path: "choices[0].delta.content"
+    capabilities: [chat, streaming]
+    experimental_features:
+      - "wordsmith_studio"
+
+  deepseek:
+    version: "v1"
+    base_url: "https://api.deepseek.com/v1"
+    auth:
+      type: bearer
+      token_env: "DEEPSEEK_API_KEY"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      top_p: "top_p"
+      stop_sequences: "stop"
+      tools: "tools"
+      tool_choice: "tool_choice"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      tool_calls: "choices[0].message.tool_calls"
+      usage: "usage"
+      finish_reason: "choices[0].finish_reason"
+    streaming:
+      event_format: "data_lines"
+      content_path: "choices[0].delta.content"
+      tool_call_path: "choices[0].delta.tool_calls"
+    features:
+      multi_candidate:
+        support_type: "native"
+        param_name: "n"
+      response_mapping:
+        tool_calls:
+          path: "choices[0].message.tool_calls"
+          fields:
+            id: "id"
+            name: "function.name"
+            args: "function.arguments"
+        error:
+          message_path: "error.message"
+          code_path: "error.type"
+    capabilities: [chat, tools, streaming, agentic, reasoning]
+    experimental_features:
+      - "deep_thinking"
+
+  qwen:
+    version: "v1"
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    auth:
+      type: bearer
+      token_env: "QWEN_API_KEY"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      top_p: "top_p"
+      stop_sequences: "stop"
+      tools: "tools"
+      tool_choice: "tool_choice"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      tool_calls: "choices[0].message.tool_calls"
+      usage: "usage"
+      finish_reason: "choices[0].finish_reason"
+    streaming:
+      event_format: "data_lines"
+      content_path: "choices[0].delta.content"
+      tool_call_path: "choices[0].delta.tool_calls"
+    capabilities: [chat, vision, tools, streaming, agentic]
+    experimental_features:
+      - "multilingual_support"
+      - "qwen_agent"
+
+  ollama:
+    version: "v1"
+    base_url: "http://localhost:11434"
+    auth:
+      type: bearer
+      token_env: ""
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      tools: "tools"
+      tool_choice: "tool_choice"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      tool_calls: "choices[0].message.tool_calls"
+    capabilities: [chat, tools, streaming]
+    experimental_features:
+      - "local_inference"
+      - "custom_models"
+
+# =========================================================
+# Layer 3: Model Instances (2025 Extensions)
+# =========================================================
+models:
+  gpt-4o:
+    provider: openai
+    model_id: "gpt-4o"
+    display_name: "GPT-4o"
+    context_window: 128000
+    capabilities: [chat, vision, tools, streaming, agentic, parallel_tools, reasoning]
+    pricing:
+      input_per_token: 0.000005
+      output_per_token: 0.000015
+    status: active
+    tags: ["gpt", "vision", "tools", "agentic", "reasoning"]
+    agentic_capabilities:
+      reasoning_effort: "high"
+      thinking_blocks: false
+      parallel_tools: true
+      max_parallel_tools: 5
+      builtin_tools: ["web_search", "code_execution"]
+
+  claude-3-5-sonnet:
+    provider: anthropic
+    model_id: "claude-3-5-sonnet-20241022"
+    display_name: "Claude 3.5 Sonnet"
+    context_window: 200000
+    capabilities: [chat, vision, tools, streaming, agentic, reasoning]
+    pricing:
+      input_per_token: 0.000003
+      output_per_token: 0.000015
+    status: active
+    tags: ["claude", "vision", "reasoning", "agentic", "thinking"]
+    agentic_capabilities:
+      reasoning_effort: "high"
+      thinking_blocks: true
+      parallel_tools: false
+      builtin_tools: ["web_search", "document_analysis"]
+
+  gemini-pro-1.5:
+    provider: gemini
+    model_id: "gemini-1.5-pro-latest"
+    display_name: "Gemini 1.5 Pro"
+    context_window: 2097152
+    capabilities: [chat, vision, tools, multimodal, streaming]
+    pricing:
+      input_per_token: 0.00000125
+      output_per_token: 0.000005
+    status: active
+    tags: ["gemini", "vision", "multimodal", "long-context"]
+
+  llama-3-1-70b-groq:
+    provider: groq
+    model_id: "llama-3.1-70b-instruct"
+    display_name: "Llama 3.1 70B (Groq)"
+    context_window: 131072
+    capabilities: [chat, tools, streaming, parallel_tools, agentic]
+    pricing:
+      input_per_token: 0.0000005
+      output_per_token: 0.0000008
+    status: active
+    tags: ["llama", "open-source", "fast-inference", "agentic"]
+    agentic_capabilities:
+      reasoning_effort: "medium"
+      parallel_tools: true
+      max_parallel_tools: 4
+      builtin_tools: ["code_execution"]
+
+  # Azure OpenAI models
+  gpt-4-azure:
+    provider: azure_openai
+    model_id: "gpt-4"
+    display_name: "GPT-4 (Azure)"
+    context_window: 8192
+    capabilities: [chat, tools, streaming, agentic]
+    pricing:
+      input_per_token: 0.00003
+      output_per_token: 0.00006
+    status: active
+    tags: ["gpt", "azure", "tools", "agentic"]
+
+  gpt-35-turbo-azure:
+    provider: azure_openai
+    model_id: "gpt-35-turbo"
+    display_name: "GPT-3.5 Turbo (Azure)"
+    context_window: 4096
+    capabilities: [chat, tools, streaming]
+    pricing:
+      input_per_token: 0.0000015
+      output_per_token: 0.000002
+    status: active
+    tags: ["gpt", "azure", "cost-effective"]
+
+  # OpenRouter models
+  gpt-4o-openrouter:
+    provider: openrouter
+    model_id: "openai/gpt-4o"
+    display_name: "GPT-4o (OpenRouter)"
+    context_window: 128000
+    capabilities: [chat, vision, tools, streaming, agentic, parallel_tools]
+    pricing:
+      input_per_token: 0.000005
+      output_per_token: 0.000015
+    status: active
+    tags: ["gpt", "openrouter", "vision", "tools", "agentic"]
+
+  # Replicate models
+  llama-2-70b-replicate:
+    provider: replicate
+    model_id: "meta/llama-2-70b-chat"
+    display_name: "Llama 2 70B (Replicate)"
+    context_window: 4096
+    capabilities: [chat, streaming]
+    pricing:
+      input_per_token: 0.00000065
+      output_per_token: 0.00000275
+    status: active
+    tags: ["llama", "replicate", "open-source"]
+
+  # ZhipuAI models
+  glm-4-zhipu:
+    provider: zhipuai
+    model_id: "glm-4"
+    display_name: "GLM-4 (ZhipuAI)"
+    context_window: 128000
+    capabilities: [chat, vision, tools, streaming, agentic]
+    pricing:
+      input_per_token: 0.000001
+      output_per_token: 0.000001
+    status: active
+    tags: ["glm", "zhipuai", "vision", "multilingual", "agentic"]
+
+  # MiniMax models
+  abab-6-minimax:
+    provider: minimax
+    model_id: "abab6-chat"
+    display_name: "abab6-chat (MiniMax)"
+    context_window: 8192
+    capabilities: [chat, vision, tools, streaming, agentic]
+    pricing:
+      input_per_token: 0.000001
+      output_per_token: 0.000002
+    status: active
+    tags: ["abab", "minimax", "vision", "agentic"]
+
+  # Mistral models
+  mistral-large:
+    provider: mistral
+    model_id: "mistral-large-latest"
+    display_name: "Mistral Large"
+    context_window: 128000
+    capabilities: [chat, tools, streaming, agentic, parallel_tools]
+    pricing:
+      input_per_token: 0.000004
+      output_per_token: 0.000012
+    status: active
+    tags: ["mistral", "tools", "agentic", "codestral"]
+
+  mistral-medium:
+    provider: mistral
+    model_id: "mistral-medium"
+    display_name: "Mistral Medium"
+    context_window: 32000
+    capabilities: [chat, tools, streaming, agentic]
+    pricing:
+      input_per_token: 0.0000027
+      output_per_token: 0.0000081
+    status: active
+    tags: ["mistral", "tools", "agentic"]
+
+  # Cohere models
+  command-r-plus:
+    provider: cohere
+    model_id: "command-r-plus"
+    display_name: "Command R+"
+    context_window: 128000
+    capabilities: [chat, tools, streaming, agentic]
+    pricing:
+      input_per_token: 0.0000025
+      output_per_token: 0.00001
+    status: active
+    tags: ["cohere", "rag", "citations", "agentic"]
+    agentic_capabilities:
+      reasoning_effort: "high"
+      parallel_tools: true
+      citations: true
+      rag_enabled: true
+
+  # Perplexity models
+  sonar-pro:
+    provider: perplexity
+    model_id: "llama-3.1-sonar-large-128k-online"
+    display_name: "Sonar Pro (128k)"
+    context_window: 128000
+    capabilities: [chat, streaming]
+    pricing:
+      input_per_token: 0.000005
+      output_per_token: 0.000005
+    status: active
+    tags: ["sonar", "perplexity", "search", "real-time"]
+
+  # AI21 models
+  jamba-1-5-ai21:
+    provider: ai21
+    model_id: "jamba-1.5-large"
+    display_name: "Jamba 1.5 Large"
+    context_window: 256000
+    capabilities: [chat, streaming]
+    pricing:
+      input_per_token: 0.000002
+      output_per_token: 0.000008
+    status: active
+    tags: ["jamba", "ai21", "long-context"]
+
+  # DeepSeek models
+  deepseek-chat:
+    provider: deepseek
+    model_id: "deepseek-chat"
+    display_name: "DeepSeek Chat"
+    context_window: 32768
+    capabilities: [chat, tools, streaming, agentic, reasoning]
+    pricing:
+      input_per_token: 0.00000014
+      output_per_token: 0.00000028
+    status: active
+    tags: ["deepseek", "reasoning", "cost-effective", "agentic"]
+    agentic_capabilities:
+      reasoning_effort: "high"
+      thinking_blocks: true
+      parallel_tools: true
+      builtin_tools: ["web_search", "math_solver"]
+
+  deepseek-coder:
+    provider: deepseek
+    model_id: "deepseek-coder"
+    display_name: "DeepSeek Coder"
+    context_window: 32768
+    capabilities: [chat, tools, streaming, agentic]
+    pricing:
+      input_per_token: 0.00000014
+      output_per_token: 0.00000028
+    status: active
+    tags: ["deepseek", "coding", "agentic", "code-generation"]
+    agentic_capabilities:
+      reasoning_effort: "high"
+      parallel_tools: true
+      builtin_tools: ["code_execution", "file_analysis", "shell_commands"]
+
+  # Qwen models
+  qwen-max:
+    provider: qwen
+    model_id: "qwen-max"
+    display_name: "Qwen Max"
+    context_window: 8000
+    capabilities: [chat, vision, tools, streaming, agentic]
+    pricing:
+      input_per_token: 0.000002
+      output_per_token: 0.000006
+    status: active
+    tags: ["qwen", "vision", "multilingual", "agentic"]
+
+  qwen-turbo:
+    provider: qwen
+    model_id: "qwen-turbo"
+    display_name: "Qwen Turbo"
+    context_window: 8000
+    capabilities: [chat, tools, streaming, agentic]
+    pricing:
+      input_per_token: 0.0000006
+      output_per_token: 0.0000018
+    status: active
+    tags: ["qwen", "cost-effective", "agentic"]
+
+  # Ollama models (examples)
+  llama3-local:
+    provider: ollama
+    model_id: "llama3"
+    display_name: "Llama 3 (Local)"
+    context_window: 8192
+    capabilities: [chat, tools, streaming]
+    status: active
+    tags: ["ollama", "local", "open-source"]
+
+  codellama-local:
+    provider: ollama
+    model_id: "codellama"
+    display_name: "CodeLlama (Local)"
+    context_window: 16384
+    capabilities: [chat, streaming]
+    status: active
+    tags: ["ollama", "local", "coding", "code-generation"]

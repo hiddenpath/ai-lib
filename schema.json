@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI-Lib Manifest",
+  "description": "AI-Lib Manifest-First configuration schema - Code-First validation",
+  "type": "object",
+  "required": ["version", "standard_schema", "providers", "models"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Manifest schema version"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "description": {"type": "string"},
+        "last_updated": {"type": "string"},
+        "authors": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "standard_schema": {
+      "type": "object",
+      "description": "Standard interface definitions (Layer 1)",
+      "properties": {
+        "parameters": {"type": "object"},
+        "tools": {"type": "object"},
+        "response_format": {"type": "object"},
+        "multimodal": {"type": "object"},
+        "agentic_loop": {"type": "object"},
+        "streaming_events": {"type": "object"}
+      }
+    },
+    "providers": {
+      "type": "object",
+      "description": "Provider mappings (Layer 2)",
+      "patternProperties": {
+        ".*": {
+          "type": "object",
+          "properties": {
+            "version": {"type": "string"},
+            "base_url": {"type": "string"},
+            "auth": {"type": "object"},
+            "payload_format": {"type": "string"},
+            "parameter_mappings": {"type": "object"},
+            "response_format": {"type": "string"},
+            "capabilities": {
+              "type": "array",
+              "items": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "models": {
+      "type": "object",
+      "description": "Model instances (Layer 3)",
+      "patternProperties": {
+        ".*": {
+          "type": "object",
+          "properties": {
+            "provider": {"type": "string"},
+            "model_id": {"type": "string"},
+            "display_name": {"type": "string"},
+            "context_window": {"type": "integer"},
+            "capabilities": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "pricing": {"type": "object"},
+            "status": {"type": "string"}
+          }
+        }
+      }
+    }
+  },
+  "_comment": "This schema is generated via Code-First approach. Full auto-generation will be available in Phase 3."
+}

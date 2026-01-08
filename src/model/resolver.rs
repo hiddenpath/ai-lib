@@ -37,6 +37,12 @@ pub enum ModelResolutionSource {
     ProfileFallback,
 }
 
+impl Default for ModelResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ModelResolver {
     pub fn new() -> Self {
         Self

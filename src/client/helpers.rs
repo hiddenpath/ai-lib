@@ -30,7 +30,11 @@ pub async fn list_models(client: &AiClient) -> Result<Vec<String>, AiLibError> {
 pub fn switch_provider(client: &mut AiClient, provider: Provider) -> Result<(), AiLibError> {
     // Determine base_url and transport based on existing connection options
     let (base_url, transport) = if let Some(opts) = &client.connection_options {
-        let resolved_base_url = super::builder::resolve_base_url(provider, opts.base_url.clone())?;
+        let resolved_base_url =
+            crate::client::transport_builder::TransportBuilder::determine_base_url(
+                provider,
+                opts.base_url.clone(),
+            )?;
         let transport = if opts.proxy.is_some() || opts.timeout.is_some() {
             let transport_config = crate::transport::HttpTransportConfig {
                 timeout: opts.timeout.unwrap_or(std::time::Duration::from_secs(30)),
@@ -44,7 +48,8 @@ pub fn switch_provider(client: &mut AiClient, provider: Provider) -> Result<(), 
         };
         (Some(resolved_base_url), transport)
     } else {
-        let resolved_base_url = super::builder::resolve_base_url(provider, None)?;
+        let resolved_base_url =
+            crate::client::transport_builder::TransportBuilder::determine_base_url(provider, None)?;
         (Some(resolved_base_url), None)
     };
 
@@ -255,8 +260,40 @@ pub async fn upload_file(client: &AiClient, path: &str) -> Result<String, AiLibE
         format!("{}{}", base_url, endpoint)
     };
 
-    // Perform upload using unified transport helper (uses injected transport when None)
     crate::provider::utils::upload_file_with_transport(None, &upload_url, path, "file")
         .await
         .map_err(|err| err.with_context("client helpers upload_file"))
+}
+
+/// Create adapter from environment variables
+pub fn create_adapter_from_env(
+    provider: Provider,
+) -> Result<Box<dyn crate::api::ChatProvider>, AiLibError> {
+    let opts = crate::config::ConnectionOptions::default().hydrate_with_env(provider.env_prefix());
+    let resolved_base_url = crate::client::transport_builder::TransportBuilder::determine_base_url(
+        provider,
+        opts.base_url.clone(),
+    )?;
+    let transport = crate::client::transport_builder::TransportBuilder::from_options(&opts)?;
+    ProviderFactory::create_adapter(
+        provider,
+        opts.api_key.clone(),
+        Some(resolved_base_url),
+        transport,
+    )
+}
+
+/// Build strategy chain
+pub fn build_strategy_chain(
+    providers: Vec<Provider>,
+) -> Result<Vec<Box<dyn crate::api::ChatProvider>>, AiLibError> {
+    if providers.is_empty() {
+        return Err(AiLibError::ConfigurationError(
+            "routing strategy requires at least one provider".to_string(),
+        ));
+    }
+    providers
+        .into_iter()
+        .map(|provider| create_adapter_from_env(provider))
+        .collect()
 }

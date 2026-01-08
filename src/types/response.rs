@@ -1,4 +1,5 @@
 use crate::types::Choice;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Usage token counts returned by providers as part of chat response.
@@ -8,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// re-exported at the crate root as `ai_lib::Usage`.
 #[doc(alias = "token_usage")]
 #[doc(alias = "usage_info")]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default, PartialEq)]
 pub struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,

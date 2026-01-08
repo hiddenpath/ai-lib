@@ -120,6 +120,7 @@ impl PerplexityAdapter {
                     Role::System => "system".to_string(),
                     Role::User => "user".to_string(),
                     Role::Assistant => "assistant".to_string(),
+                    Role::Tool => "tool".to_string(),
                 },
                 content: match &msg.content {
                     crate::Content::Text(text) => text.clone(),

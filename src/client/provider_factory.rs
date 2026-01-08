@@ -1,275 +1,274 @@
 // Provider factory - unified adapter creation
 //
 // This module centralizes all provider adapter creation logic.
-// Adding a new provider only requires modifying this file.
-
-//! Provider Factory module.
-//!
-//! This module is the central place for creating provider adapters.
-//! It decouples the `AiClient` from specific provider implementations.
-//!
-//! To add a new provider:
-//! 1. Add variant to `Provider` enum
-//! 2. Add configuration to `ProviderConfigs`
-//! 3. Add match arm in `create`
+// v0.5.0 Update: Now Data-Driven based on Protocols.
 
 use crate::api::ChatProvider;
 use crate::client::Provider;
 use crate::provider::chat_provider::AdapterProvider;
+#[allow(deprecated)]
 use crate::provider::{
-    config::ProviderConfig, AI21Adapter, CohereAdapter, GeminiAdapter, GenericAdapter,
-    MistralAdapter, OpenAiAdapter, PerplexityAdapter, ProviderConfigs,
+    config::ProviderConfig as LegacyProviderConfig, AI21Adapter, CohereAdapter, GeminiAdapter,
+    GenericAdapter, MistralAdapter, PerplexityAdapter,
 };
+use crate::registry::model::ProviderConfig;
 use crate::transport::DynHttpTransportRef;
 use crate::types::AiLibError;
 
 pub struct ProviderFactory;
 
 impl ProviderFactory {
-    /// Create provider adapter - unified entry point
+    /// Create provider adapter based on Protocol and Configuration (v0.5.0 Core)
     ///
     /// # Arguments
-    /// * `provider` - The provider enum variant
-    /// * `api_key` - Optional API key override
-    /// * `base_url` - Optional base URL override
+    /// * `protocol` - The protocol ID (e.g., "openai", "anthropic")
+    /// * `config` - The configuration from the Registry
     /// * `transport` - Optional transport override
     ///
     /// # Returns
-    /// Boxed ChatProvider implementation for the provider
-    pub fn create_adapter(
-        provider: Provider,
-        api_key: Option<String>,
-        base_url: Option<String>,
+    /// Boxed ChatProvider implementation
+    pub fn create(
+        protocol: &str,
+        config: ProviderConfig,
         transport: Option<DynHttpTransportRef>,
     ) -> Result<Box<dyn ChatProvider>, AiLibError> {
-        let adapter = match provider {
-            // Config-driven providers using GenericAdapter
-            Provider::Groq => create_generic(ProviderConfigs::groq(), api_key, base_url, transport),
-            Provider::XaiGrok => {
-                create_generic(ProviderConfigs::xai_grok(), api_key, base_url, transport)
-            }
-            Provider::Ollama => {
-                create_generic(ProviderConfigs::ollama(), api_key, base_url, transport)
-            }
-            Provider::DeepSeek => {
-                create_generic(ProviderConfigs::deepseek(), api_key, base_url, transport)
-            }
-            Provider::Qwen => create_generic(ProviderConfigs::qwen(), api_key, base_url, transport),
-            Provider::Anthropic => {
-                create_generic(ProviderConfigs::anthropic(), api_key, base_url, transport)
-            }
-            Provider::AzureOpenAI => create_generic(
-                ProviderConfigs::azure_openai(),
-                api_key,
-                base_url,
-                transport,
-            ),
-            Provider::HuggingFace => {
-                create_generic(ProviderConfigs::huggingface(), api_key, base_url, transport)
-            }
-            Provider::TogetherAI => {
-                create_generic(ProviderConfigs::together_ai(), api_key, base_url, transport)
-            }
-            Provider::OpenRouter => {
-                create_generic(ProviderConfigs::openrouter(), api_key, base_url, transport)
-            }
-            Provider::Replicate => {
-                create_generic(ProviderConfigs::replicate(), api_key, base_url, transport)
-            }
-            Provider::BaiduWenxin => create_generic(
-                ProviderConfigs::baidu_wenxin(),
-                api_key,
-                base_url,
-                transport,
-            ),
-            Provider::TencentHunyuan => create_generic(
-                ProviderConfigs::tencent_hunyuan(),
-                api_key,
-                base_url,
-                transport,
-            ),
-            Provider::IflytekSpark => create_generic(
-                ProviderConfigs::iflytek_spark(),
-                api_key,
-                base_url,
-                transport,
-            ),
-            Provider::Moonshot => {
-                create_generic(ProviderConfigs::moonshot(), api_key, base_url, transport)
-            }
-            Provider::ZhipuAI => {
-                create_generic(ProviderConfigs::zhipu_ai(), api_key, base_url, transport)
-            }
-            Provider::MiniMax => {
-                create_generic(ProviderConfigs::minimax(), api_key, base_url, transport)
+        let adapter: Box<dyn ChatProvider> = match protocol {
+            // Config-driven Generic Logic (OpenAI Compatible)
+            "openai" => {
+                use crate::adapter::dynamic::ConfigDrivenAdapter;
+                use crate::manifest::schema::{
+                    AuthConfig, ModelDefinition, PayloadFormat, ProviderDefinition, ResponseFormat,
+                };
+                use std::collections::HashMap;
+                use std::sync::Arc;
+
+                // 1. Synthesize ProviderDefinition from Registry Config
+                let api_key_env = config
+                    .api_env
+                    .clone()
+                    .unwrap_or("OPENAI_API_KEY".to_string());
+                let auth = AuthConfig::Bearer {
+                    token_env: api_key_env,
+                    extra_headers: vec![],
+                };
+
+                let provider_def = ProviderDefinition {
+                    version: "1.0".to_string(),
+                    base_url: config.base_url.clone(),
+                    base_url_template: None,
+                    connection_vars: None,
+                    auth,
+                    payload_format: PayloadFormat::OpenaiStyle,
+                    parameter_mappings: HashMap::new(),
+                    special_handling: HashMap::new(),
+                    response_format: ResponseFormat::OpenaiStyle,
+                    response_paths: HashMap::new(),
+                    streaming: Default::default(),
+                    experimental_features: vec![],
+                    capabilities: vec![],
+                    response_strategy: None,
+                    tools_mapping: None,
+                    prompt_caching: None,
+                    service_tier: None,
+                    reasoning_tokens: None,
+                    features: None,
+                };
+
+                let model_def = ModelDefinition {
+                    provider: protocol.to_string(),
+                    model_id: "default".to_string(),
+                    display_name: None,
+                    context_window: 128000,
+                    capabilities: vec![],
+                    pricing: None,
+                    overrides: HashMap::new(),
+                    status: Default::default(),
+                    tags: vec![],
+                    agentic_capabilities: None,
+                };
+
+                // 2. Create Dummy Manifest (Mock) - required by new_raw if it expects strong type
+                let manifest = Arc::new(crate::manifest::schema::Manifest {
+                    version: "1.0".to_string(),
+                    metadata: Default::default(),
+                    standard_schema: crate::manifest::schema::StandardSchema {
+                        parameters: HashMap::new(),
+                        tools: Default::default(),
+                        response_format: Default::default(),
+                        multimodal: Default::default(),
+                        agentic_loop: None,
+                        streaming_events: None,
+                    },
+                    providers: HashMap::new(),
+                    models: HashMap::new(),
+                });
+
+                // 3. Instantiate ConfigDrivenAdapter
+                // Note: Transport override is ignored in this phase as ConfigDrivenAdapter manages its own client.
+                let adapter = ConfigDrivenAdapter::new_raw(manifest, provider_def, model_def)?;
+
+                Box::new(adapter)
             }
 
-            // Independent adapters with dedicated implementations
-            Provider::OpenAI => create_openai_adapter(api_key, base_url, transport),
-            Provider::Gemini => create_gemini_adapter(api_key, base_url, transport),
-            Provider::Mistral => create_mistral_adapter(api_key, base_url, transport),
-            Provider::Cohere => create_cohere_adapter(api_key, base_url, transport),
-            Provider::Perplexity => create_perplexity_adapter(),
-            Provider::AI21 => create_ai21_adapter(),
-        }?;
+            // Native Protocols - Legacy paths preserved for specific optimized providers for now
+            "anthropic" => create_generic_native("ANTHROPIC_API_KEY", config, transport)?,
 
-        Ok(AdapterProvider::new(format!("{provider:?}"), adapter).boxed())
+            // Independent Adapters
+            "gemini" => create_native_adapter(
+                |k, u, t| GeminiAdapter::with_transport_ref(t, k, u),
+                |k, u| GeminiAdapter::new_with_overrides(k, Some(u)),
+                GeminiAdapter::new,
+                "GEMINI_API_KEY",
+                "https://generativelanguage.googleapis.com/v1beta",
+                config,
+                transport,
+            )?,
+
+            "mistral" => {
+                let base = config
+                    .base_url
+                    .unwrap_or_else(|| "https://api.mistral.ai".to_string());
+                // Priority: config.api_key > env var
+                let api_key = config
+                    .api_key
+                    .or_else(|| std::env::var("MISTRAL_API_KEY").ok());
+
+                if let Some(t) = transport {
+                    Box::new(MistralAdapter::with_transport(t, api_key, base)?)
+                } else if api_key.is_some() {
+                    Box::new(MistralAdapter::new_with_overrides(api_key, Some(base))?)
+                } else {
+                    Box::new(MistralAdapter::new()?)
+                }
+            }
+
+            "cohere" => create_native_adapter(
+                |k, u, t| Ok(CohereAdapter::with_transport_ref(t, k, u)),
+                |k, u| CohereAdapter::new_with_overrides(k, Some(u)),
+                CohereAdapter::new,
+                "COHERE_API_KEY",
+                "https://api.cohere.ai",
+                config,
+                transport,
+            )?,
+
+            "perplexity" => Box::new(PerplexityAdapter::new()?),
+            "ai21" => Box::new(AI21Adapter::new()?),
+
+            _ => {
+                return Err(AiLibError::ConfigurationError(format!(
+                    "Unknown protocol: {}",
+                    protocol
+                )))
+            }
+        };
+
+        Ok(AdapterProvider::new(protocol.to_string(), adapter).boxed())
+    }
+
+    /// Legacy Compatibility Wrapper
+    ///
+    /// Converts the `Provider` enum into a Protocol + Default Config call.
+    pub fn create_adapter(
+        provider: Provider,
+        api_key_override: Option<String>,
+        base_url_override: Option<String>,
+        transport: Option<DynHttpTransportRef>,
+    ) -> Result<Box<dyn ChatProvider>, AiLibError> {
+        let protocol = provider.as_protocol();
+
+        // Construct temporary ConnectionOptions to use the converter
+        // This bridges the legacy arguments to the new unified converter
+        let options = crate::config::ConnectionOptions {
+            base_url: base_url_override,
+            api_key: api_key_override,
+            proxy: None,
+            timeout: None,
+            disable_proxy: false,
+        };
+
+        // Use unified converter
+        let config =
+            crate::config::converter::ConfigConverter::convert_legacy(provider, Some(&options));
+
+        Self::create(protocol, config, transport)
     }
 }
 
-/// Helper function to create GenericAdapter with configuration
-fn create_generic(
-    mut config: ProviderConfig,
-    api_key: Option<String>,
-    base_url: Option<String>,
+// Helper to reduce boilerplate for Native Adapters
+fn create_native_adapter<F1, F2, F3, E>(
+    with_transport: F1,
+    with_override: F2,
+    new_default: F3,
+    env_key: &str,
+    default_base: &str,
+    config: ProviderConfig,
+    transport: Option<DynHttpTransportRef>,
+) -> Result<Box<dyn ChatProvider>, AiLibError>
+where
+    F1: Fn(String, String, DynHttpTransportRef) -> Result<E, AiLibError>,
+    F2: Fn(String, String) -> Result<E, AiLibError>,
+    F3: Fn() -> Result<E, AiLibError>,
+    E: ChatProvider + 'static,
+{
+    let base = config.base_url.unwrap_or_else(|| default_base.to_string());
+    // Priority: config.api_key > env var
+    let api_key = config.api_key.or_else(|| std::env::var(env_key).ok());
+
+    if let Some(t) = transport {
+        let key = api_key
+            .ok_or_else(|| AiLibError::AuthenticationError(format!("{} not set", env_key)))?;
+        Ok(Box::new(with_transport(key, base, t)?))
+    } else if let Some(key) = api_key {
+        Ok(Box::new(with_override(key, base)?))
+    } else {
+        Ok(Box::new(new_default()?))
+    }
+}
+
+// Helper for Anthropic/Other Generic-like natives
+#[allow(deprecated)]
+fn create_generic_native(
+    env_key: &str,
+    config: ProviderConfig,
     transport: Option<DynHttpTransportRef>,
 ) -> Result<Box<dyn ChatProvider>, AiLibError> {
-    // Apply overrides to config
-    if let Some(url) = base_url {
-        config.base_url = url;
-    }
-
-    let adapter = match (transport, api_key) {
-        (Some(t), Some(key)) => GenericAdapter::with_transport_ref_api_key(config, t, Some(key))?,
-        (Some(t), None) => GenericAdapter::with_transport_ref(config, t)?,
-        (None, Some(key)) => GenericAdapter::new_with_api_key(config, Some(key))?,
-        (None, None) => GenericAdapter::new(config)?,
+    let legacy_conf = LegacyProviderConfig {
+        base_url: config
+            .base_url
+            .ok_or(AiLibError::ConfigurationError("Missing baseUrl".into()))?,
+        api_key_env: env_key.to_string(),
+        chat_model: "placeholder".to_string(), // Placeholder for validation, not used in adapter init
+        multimodal_model: None,
+        headers: config.headers,
+        models_endpoint: None,
+        chat_endpoint: "/chat/completions".to_string(), // Default assumes OpenAI-like structure or overriding
+        upload_endpoint: None,
+        upload_size_limit: None,
+        field_mapping: crate::provider::config::FieldMapping {
+            messages_field: "messages".to_string(),
+            model_field: "model".to_string(),
+            role_mapping: std::collections::HashMap::from([
+                ("System".to_string(), "system".to_string()),
+                ("User".to_string(), "user".to_string()),
+                ("Assistant".to_string(), "assistant".to_string()),
+            ]),
+            response_content_path: "choices.0.message.content".to_string(),
+        },
     };
 
-    Ok(Box::new(adapter))
-}
+    // Pass api_key from config if available (priority: config.api_key > env var)
+    let adapter = match transport {
+        Some(t) => Box::new(GenericAdapter::with_transport_ref_api_key(
+            legacy_conf,
+            t,
+            config.api_key,
+        )?) as Box<dyn ChatProvider>,
+        None => Box::new(GenericAdapter::new_with_api_key(
+            legacy_conf,
+            config.api_key,
+        )?) as Box<dyn ChatProvider>,
+    };
 
-fn create_openai_adapter(
-    api_key: Option<String>,
-    base_url: Option<String>,
-    transport: Option<DynHttpTransportRef>,
-) -> Result<Box<dyn ChatProvider>, AiLibError> {
-    const DEFAULT_BASE: &str = "https://api.openai.com/v1";
-
-    if let Some(t) = transport {
-        let key = match api_key {
-            Some(k) => k,
-            None => resolve_api_key("OPENAI_API_KEY")?,
-        };
-        let base = base_url.unwrap_or_else(|| DEFAULT_BASE.to_string());
-        let adapter = OpenAiAdapter::with_transport_ref(t, key, base)?;
-        return Ok(Box::new(adapter));
-    }
-
-    if let Some(key) = api_key {
-        return Ok(Box::new(OpenAiAdapter::new_with_overrides(key, base_url)?));
-    }
-
-    Ok(Box::new(OpenAiAdapter::new()?))
-}
-
-fn create_gemini_adapter(
-    api_key: Option<String>,
-    base_url: Option<String>,
-    transport: Option<DynHttpTransportRef>,
-) -> Result<Box<dyn ChatProvider>, AiLibError> {
-    const DEFAULT_BASE: &str = "https://generativelanguage.googleapis.com/v1beta";
-
-    if let Some(t) = transport {
-        let key = match api_key {
-            Some(k) => k,
-            None => resolve_api_key("GEMINI_API_KEY")?,
-        };
-        let base = base_url.unwrap_or_else(|| DEFAULT_BASE.to_string());
-        let adapter = GeminiAdapter::with_transport_ref(t, key, base)?;
-        return Ok(Box::new(adapter));
-    }
-
-    if let Some(key) = api_key {
-        return Ok(Box::new(GeminiAdapter::new_with_overrides(key, base_url)?));
-    }
-
-    Ok(Box::new(GeminiAdapter::new()?))
-}
-
-fn create_mistral_adapter(
-    api_key: Option<String>,
-    base_url: Option<String>,
-    transport: Option<DynHttpTransportRef>,
-) -> Result<Box<dyn ChatProvider>, AiLibError> {
-    if let Some(t) = transport {
-        let base = base_url.unwrap_or_else(default_mistral_base);
-        let adapter = MistralAdapter::with_transport(t, api_key, base)?;
-        return Ok(Box::new(adapter));
-    }
-
-    if base_url.is_some() || api_key.is_some() {
-        let adapter = MistralAdapter::new_with_overrides(api_key, base_url)?;
-        return Ok(Box::new(adapter));
-    }
-
-    Ok(Box::new(MistralAdapter::new()?))
-}
-
-fn create_cohere_adapter(
-    api_key: Option<String>,
-    base_url: Option<String>,
-    transport: Option<DynHttpTransportRef>,
-) -> Result<Box<dyn ChatProvider>, AiLibError> {
-    const DEFAULT_BASE: &str = "https://api.cohere.ai";
-
-    if let Some(t) = transport {
-        let key = match api_key {
-            Some(k) => k,
-            None => resolve_api_key("COHERE_API_KEY")?,
-        };
-        let base = base_url.unwrap_or_else(|| DEFAULT_BASE.to_string());
-        let adapter = CohereAdapter::with_transport_ref(t, key, base);
-        return Ok(Box::new(adapter));
-    }
-
-    if let Some(key) = api_key {
-        return Ok(Box::new(CohereAdapter::new_with_overrides(key, base_url)?));
-    }
-
-    Ok(Box::new(CohereAdapter::new()?))
-}
-
-fn create_perplexity_adapter() -> Result<Box<dyn ChatProvider>, AiLibError> {
-    Ok(Box::new(PerplexityAdapter::new()?))
-}
-
-fn create_ai21_adapter() -> Result<Box<dyn ChatProvider>, AiLibError> {
-    Ok(Box::new(AI21Adapter::new()?))
-}
-
-fn resolve_api_key(var: &str) -> Result<String, AiLibError> {
-    std::env::var(var)
-        .map_err(|_| AiLibError::AuthenticationError(format!("{var} environment variable not set")))
-}
-
-fn default_mistral_base() -> String {
-    std::env::var("MISTRAL_BASE_URL").unwrap_or_else(|_| "https://api.mistral.ai".to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn config_driven_provider_builds_generic_adapter() {
-        std::env::set_var("GROQ_API_KEY", "test-key");
-        let adapter = ProviderFactory::create_adapter(Provider::Groq, None, None, None)
-            .expect("config-driven adapter builds");
-        assert_eq!(adapter.name(), "Groq");
-    }
-
-    #[test]
-    fn openai_provider_uses_env_key() {
-        std::env::set_var("OPENAI_API_KEY", "test-key");
-        let adapter = ProviderFactory::create_adapter(
-            Provider::OpenAI,
-            None,
-            Some("https://api.openai.com/v1".to_string()),
-            None,
-        )
-        .expect("independent adapter builds");
-        assert_eq!(adapter.name(), "OpenAI");
-        std::env::remove_var("OPENAI_API_KEY");
-    }
+    Ok(adapter)
 }

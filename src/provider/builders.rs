@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
+#[allow(deprecated)]
 use crate::{
     api::ChatProvider,
     client::{AiClient, AiClientBuilder, Provider},
@@ -260,6 +261,7 @@ impl CustomProviderBuilder {
     }
 
     /// Build a boxed `ChatProvider` that can be passed to `AiClientBuilder::with_strategy`.
+    #[allow(deprecated)]
     pub fn build_provider(self) -> Result<Box<dyn ChatProvider>, AiLibError> {
         let base_url = self.base_url.ok_or_else(|| {
             AiLibError::ConfigurationError(

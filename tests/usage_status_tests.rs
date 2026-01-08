@@ -66,11 +66,7 @@ async fn test_chat_completion_response_with_usage_status() {
         model: "test-model".to_string(),
         choices: vec![Choice {
             index: 0,
-            message: Message {
-                role: Role::Assistant,
-                content: Content::new_text("Test response"),
-                function_call: None,
-            },
+            message: Message::new(Role::Assistant, "Test response"),
             finish_reason: Some("stop".to_string()),
         }],
         usage: Usage {

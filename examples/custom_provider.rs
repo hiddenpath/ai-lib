@@ -5,7 +5,7 @@
 use ai_lib::*;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Note: In a real scenario, you would add 'YourProvider' to the Provider enum
     // and recompile. For this example, we'll use an existing provider to demonstrate
     // the client creation flow which would be identical.

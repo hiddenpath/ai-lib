@@ -275,7 +275,7 @@ async fn test_error_recovery_manager_multiple_errors() {
         ),
     ];
 
-    for (error, expected_type) in errors {
+    for (error, _expected_type) in errors {
         let context = ErrorContext::new("test_provider".to_string(), "/test/endpoint".to_string());
         let _ = manager.handle_error(&error, &context).await;
     }

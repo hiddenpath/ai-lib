@@ -52,7 +52,7 @@ impl GeminiAdapter {
         #[cfg(not(feature = "unified_transport"))]
         {
             let t = HttpTransport::new();
-            return Ok(t.boxed());
+            Ok(t.boxed())
         }
     }
 
@@ -124,6 +124,7 @@ impl GeminiAdapter {
                     Role::User => "user",
                     Role::Assistant => "model", // Gemini uses "model" instead of "assistant"
                     Role::System => "user",     // Gemini has no system role, convert to user
+                    Role::Tool => "function",   // Gemini uses "function" for tool calls
                 };
 
                 serde_json::json!({
@@ -290,7 +291,7 @@ impl ChatProvider for GeminiAdapter {
             .transport
             .post_json(&url, Some(headers), gemini_request)
             .await
-            .map_err(|e| e.with_context(&format!("Gemini chat request to {}", url)))?;
+            .map_err(|e| e.with_context(format!("Gemini chat request to {}", url)))?;
         if let Some(t) = timer {
             t.stop();
         }

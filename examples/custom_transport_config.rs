@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         pool_idle_timeout: Some(Duration::from_secs(60)),
     };
 
-    let transport = HttpTransport::new_with_config(cfg)?;
+    let _transport = HttpTransport::new_with_config(cfg)?;
     // Use transport via ConnectionOptions (unified path) instead of constructing adapter directly
     let _client = AiClient::with_options(
         Provider::Groq,

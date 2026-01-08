@@ -1,12 +1,14 @@
 //! Tests for generic response parsing (no business-specific structures)
 
+#[cfg(feature = "response_parser")]
 use ai_lib::response_parser::{
-    extract_code_blocks, extract_json_from_text, AutoParser, JsonResponseParser, MarkdownSectionParser,
-    ParsedResponse, ResponseParser,
+    extract_code_blocks, extract_json_from_text, AutoParser, JsonResponseParser,
+    MarkdownSectionParser, ParsedResponse, ResponseParser,
 };
 
-#[cfg(test)]
+#[cfg(all(test, feature = "response_parser"))]
 mod tests {
+    #[cfg(feature = "response_parser")]
     use super::*;
 
     #[test]
@@ -73,9 +75,9 @@ More text"#;
 
         let parser = JsonResponseParser::<TestStruct>::new();
         let json_str = r#"{"name":"foo","value":7}"#;
-        let parsed = tokio::runtime::Runtime::new().unwrap().block_on(async {
-            parser.parse(json_str).await
-        });
+        let parsed = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(async { parser.parse(json_str).await });
         assert!(parsed.is_ok());
         let parsed = parsed.unwrap();
         assert_eq!(parsed.name, "foo");
@@ -86,9 +88,9 @@ More text"#;
     fn test_auto_parser_json_first() {
         let parser = AutoParser::default();
         let input = r#"{"x":1,"y":2}"#;
-        let parsed = tokio::runtime::Runtime::new().unwrap().block_on(async {
-            parser.parse(input).await
-        });
+        let parsed = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(async { parser.parse(input).await });
         match parsed.unwrap() {
             ParsedResponse::Json(v) => assert_eq!(v["x"], 1),
             _ => panic!("expected Json"),
@@ -104,9 +106,9 @@ Step-by-step
 ## Answer
 42
 "#;
-        let parsed = tokio::runtime::Runtime::new().unwrap().block_on(async {
-            parser.parse(input).await
-        });
+        let parsed = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(async { parser.parse(input).await });
         match parsed.unwrap() {
             ParsedResponse::Sections(map) => {
                 assert!(map.contains_key("Reasoning"));
@@ -116,4 +118,3 @@ Step-by-step
         }
     }
 }
-

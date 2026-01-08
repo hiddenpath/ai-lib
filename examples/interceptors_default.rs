@@ -1,5 +1,5 @@
-use ai_lib::types::common::Content;
-use ai_lib::{AiClientBuilder, ChatCompletionRequest, Message, Provider, Role};
+#[cfg(feature = "interceptors")]
+use ai_lib::prelude::*;
 
 #[cfg(feature = "interceptors")]
 #[tokio::main]

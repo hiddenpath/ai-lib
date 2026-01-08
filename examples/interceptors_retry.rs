@@ -1,12 +1,11 @@
 #[cfg(feature = "interceptors")]
-use ai_lib::types::common::Content;
-#[cfg(feature = "interceptors")]
-use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
+use ai_lib::prelude::*;
 
 #[cfg(feature = "interceptors")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Interceptor pipeline example: Retry policy");
+    println!("🚀 AI-lib v0.5.0 Interceptor Example: Retry Policy");
+    println!("==================================================");
 
     // Simple logger interceptor
     struct Logger;
@@ -18,7 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             req: &ChatCompletionRequest,
         ) {
             println!(
-                "on_request provider={} model={} msgs={}",
+                "📡 [Request] provider={} model={} messages={}",
                 ctx.provider,
                 ctx.model,
                 req.messages.len()
@@ -30,7 +29,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             _req: &ChatCompletionRequest,
             _resp: &ai_lib::ChatCompletionResponse,
         ) {
-            println!("on_response provider={} model={}", ctx.provider, ctx.model);
+            println!(
+                "✅ [Response] provider={} model={}",
+                ctx.provider, ctx.model
+            );
         }
         async fn on_error(
             &self,
@@ -39,38 +41,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             err: &ai_lib::AiLibError,
         ) {
             eprintln!(
-                "on_error provider={} model={} err={:?}",
+                "❌ [Error] provider={} model={} err={:?}",
                 ctx.provider, ctx.model, err
             );
         }
     }
 
-    // Provider selection by env
-    let provider = std::env::var("PROVIDER").unwrap_or_else(|_| "groq".to_string());
-    let (prov, default_model) = match provider.as_str() {
-        "deepseek" => (Provider::DeepSeek, "deepseek-chat"),
-        _ => (Provider::Groq, "llama-3.3-70b-versatile"),
-    };
-    let client = AiClient::new(prov)?;
+    // v0.5.0 Pattern: Build client via builder
+    let client = AiClientBuilder::new(Provider::OpenAI)
+        .with_model("gpt-4o")
+        .build()?;
 
-    // Compose pipeline
+    // Compose interceptor pipeline
     let pipeline = ai_lib::interceptors::InterceptorPipeline::new().with(Logger);
     let ctx = ai_lib::interceptors::RequestContext {
         provider: client.provider_name().to_string(),
-        model: default_model.to_string(),
+        model: client.default_chat_model().to_string(),
     };
 
     let req = ChatCompletionRequest::new(
-        default_model.to_string(),
-        vec![Message {
-            role: Role::User,
-            content: Content::new_text("Say hello"),
-            function_call: None,
-        }],
+        client.default_chat_model().to_string(),
+        vec![Message::user("Please say hello in a creative way.")],
     );
 
     // Retry policy with exponential backoff (max 3 attempts)
+    println!("🔄 Starting execution with retry policy...");
     let mut last_err: Option<ai_lib::AiLibError> = None;
+
     for attempt in 1..=3 {
         let res = pipeline
             .execute(&ctx, &req, || async {
@@ -80,24 +77,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         match res {
             Ok(resp) => {
-                println!("ok on attempt {}: model={}", attempt, resp.model);
+                println!(
+                    "\n✨ Success on attempt {}: {}",
+                    attempt,
+                    resp.choices[0].message.content.as_text()
+                );
                 return Ok(());
             }
             Err(err) => {
                 last_err = Some(err.clone());
-                // Naive retry conditions (network/provider/ratelimit)
                 let retryable = matches!(
                     err,
                     ai_lib::AiLibError::NetworkError(_)
                         | ai_lib::AiLibError::ProviderError(_)
                         | ai_lib::AiLibError::RateLimitExceeded(_)
                 );
+
                 if attempt == 3 || !retryable {
-                    eprintln!("give up after {} attempts: {:?}", attempt, err);
+                    eprintln!(
+                        "\n🚫 Giving up after {} attempts. Error: {:?}",
+                        attempt, err
+                    );
                     break;
                 }
+
                 let backoff_ms = 200u64 * (1 << (attempt - 1));
-                println!("retrying in {} ms...", backoff_ms);
+                println!(
+                    "⚠️  Attempt {} failed, retrying in {} ms...",
+                    attempt, backoff_ms
+                );
                 tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
             }
         }

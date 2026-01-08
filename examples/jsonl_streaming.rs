@@ -5,7 +5,6 @@
 
 #[cfg(feature = "unified_sse")]
 use ai_lib::sse::jsonl_parser::{FinalData, JsonlMessage, JsonlParser};
-use ai_lib::types::AiLibError;
 
 #[cfg(feature = "unified_sse")]
 #[tokio::main]

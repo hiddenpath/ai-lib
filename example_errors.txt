@@ -1,0 +1,180 @@
+﻿cargo : warning: value assigned to `resolved_protocol` is never read
+所在位置 行:1 字符: 1
++ cargo check --examples 2>&1 | Out-File -Encoding utf8 example_errors. ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (warning: value ...` is never read:Stri 
+   ng) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+   --> src\client\builder.rs:247:17
+    |
+247 |         let mut resolved_protocol = String::new();
+    |                 ^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` on by default
+
+warning: value assigned to `resolved_protocol` is never read
+   --> src\client\builder.rs:415:21
+    |
+415 |             let mut resolved_protocol = String::new();
+    |                     ^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: `ai-lib` (lib) generated 2 warnings
+warning: unused variable: `transport`
+  --> examples\custom_transport_config.rs:13:9
+   |
+13 |     let transport = HttpTransport::new_with_config(cfg)?;
+   |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: 
+`_transport`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused import: `ai_lib::types::AiLibError`
+ --> examples\jsonl_streaming.rs:8:5
+  |
+8 | use ai_lib::types::AiLibError;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `ai_lib::types::common::Content`
+ --> examples\interceptors_default.rs:1:5
+  |
+1 | use ai_lib::types::common::Content;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `AiClientBuilder`, `ChatCompletionRequest`, `Message`, 
+`Provider`, and `Role`
+ --> examples\interceptors_default.rs:2:14
+  |
+2 | use ai_lib::{AiClientBuilder, ChatCompletionRequest, Message, Provider, Role};
+  |              ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^  ^^^^^^^^  ^^^^
+
+warning: `ai-lib` (example "custom_transport_config") generated 1 warning
+warning: `ai-lib` (example "jsonl_streaming") generated 1 warning (run `cargo fix 
+--example "jsonl_streaming"` to apply 1 suggestion)
+warning: `ai-lib` (example "interceptors_default") generated 2 warnings (run `cargo 
+fix --example "interceptors_default"` to apply 2 suggestions)
+warning: unused variable: `client`
+ --> examples\multimodal_usage.rs:6:9
+  |
+6 |     let client = AiClient::new(Provider::OpenAI)?;
+  |         ^^^^^^ help: if this is intentional, prefix it with an underscore: 
+`_client`
+  |
+  = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `mixed_messages`
+  --> examples\multimodal_usage.rs:52:9
+   |
+52 |     let mixed_messages = vec![
+   |         ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_mixed_messages`
+
+warning: `ai-lib` (example "multimodal_usage") generated 2 warnings
+warning: unused import: `ai_lib::types::common::Content`
+ --> examples\interceptors_minimal.rs:1:5
+  |
+1 | use ai_lib::types::common::Content;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `AiClientBuilder`, `ChatCompletionRequest`, `Message`, 
+`Provider`, and `Role`
+ --> examples\interceptors_minimal.rs:2:14
+  |
+2 | use ai_lib::{AiClientBuilder, ChatCompletionRequest, Message, Provider, Role};
+  |              ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^  ^^^^^^^^  ^^^^
+
+warning: `ai-lib` (example "interceptors_minimal") generated 2 warnings (run `cargo 
+fix --example "interceptors_minimal"` to apply 2 suggestions)
+warning: unused import: `std::time::Duration`
+ --> examples\model_management.rs:6:5
+  |
+6 | use std::time::Duration;
+  |     ^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `ai_lib::types::common::Content`
+ --> examples\mistral_features.rs:1:5
+  |
+1 | use ai_lib::types::common::Content;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `AiClient`, `ChatCompletionRequest`, `Message`, 
+`Provider`, and `Role`
+ --> examples\mistral_features.rs:2:14
+  |
+2 | use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
+  |              ^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^  ^^^^^^^^  ^^^^
+
+warning: `ai-lib` (example "model_management") generated 1 warning (run `cargo fix 
+--example "model_management"` to apply 1 suggestion)
+warning: `ai-lib` (example "mistral_features") generated 2 warnings (run `cargo fix 
+--example "mistral_features"` to apply 2 suggestions)
+warning: unused import: `ai_lib::types::common::Content`
+ --> examples\deepseek_features.rs:1:5
+  |
+1 | use ai_lib::types::common::Content;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `AiClient`, `ChatCompletionRequest`, `Message`, 
+`Provider`, and `Role`
+ --> examples\deepseek_features.rs:2:14
+  |
+2 | use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
+  |              ^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^  ^^^^^^^^  ^^^^
+
+warning: unused variable: `client`
+  --> examples\quickstart.rs:16:9
+   |
+16 |     let client = AiClientBuilder::new(Provider::Groq)
+   |         ^^^^^^ help: if this is intentional, prefix it with an underscore: 
+`_client`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: `ai-lib` (example "deepseek_features") generated 2 warnings (run `cargo 
+fix --example "deepseek_features"` to apply 2 suggestions)
+warning: `ai-lib` (example "quickstart") generated 1 warning
+    Checking ai-lib v0.4.0 (D:\rustapp\ai-lib)
+error[E0432]: unresolved import `ai_lib::response_parser`
+  --> examples\response_parsing.rs:6:13
+   |
+6  | use ai_lib::response_parser::{
+   |             ^^^^^^^^^^^^^^^ could not find `response_parser` in `ai_lib`
+   |
+note: found an item that was configured out
+  --> D:\rustapp\ai-lib\src\lib.rs:77:9
+   |
+77 | pub mod response_parser;
+   |         ^^^^^^^^^^^^^^^
+note: the item is gated behind the `response_parser` feature
+  --> D:\rustapp\ai-lib\src\lib.rs:76:7
+   |
+76 | #[cfg(feature = "response_parser")]
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Role`
+  --> examples\response_parsing.rs:10:66
+   |
+10 | use ai_lib::{AiClient, ChatCompletionRequest, Message, Provider, Role};
+   |                                                                  ^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+For more information about this error, try `rustc --explain E0432`.
+warning: `ai-lib` (example "response_parsing") generated 1 warning
+error: could not compile `ai-lib` (example "response_parsing") due to 1 previous 
+error; 1 warning emitted

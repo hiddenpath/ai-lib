@@ -1,0 +1,251 @@
+version: "1.0.0"
+meta:
+  description: "ai-lib Manifest v1.0"
+  last_updated: "2025-12-24"
+  author: "ai-lib team"
+
+# =========================================================
+# 第一层：标准定义
+# =========================================================
+standard_schema:
+  inference_params:
+    - name: "temperature"
+      type: "float"
+      default: 1.0
+    - name: "top_p"
+      type: "float"
+      default: 1.0
+    - name: "max_tokens"
+      type: "int"
+    - name: "stop_sequences"
+      type: "list<string>"
+      optional: true
+    - name: "stream"
+      type: "boolean"
+      default: false
+    - name: "seed"
+      type: "int"
+      optional: true
+    - name: "response_format"
+      type: "object"
+      optional: true
+
+  roles: ["system", "user", "assistant", "tool"]
+  content_parts: ["text", "image_url", "image_base64", "audio_url", "audio_base64", "video_url"]
+
+# =========================================================
+# 第二层：提供商模板
+# =========================================================
+providers:
+  openai_compatible:
+    base_url_template: "https://api.openai.com/v1"
+    auth:
+      type: "bearer"
+      header_key: "Authorization"
+      prefix: "Bearer "
+    endpoints:
+      chat: "/chat/completions"
+    parameter_mapping:
+      temperature: null
+      top_p: "top_p"
+      max_tokens: "max_tokens"
+      stop_sequences: "stop"
+      stream: "stream"
+      seed: "seed"
+      response_format: "response_format"
+    payload_format: "openai_json"
+    tools_mapping:
+      tools_schema: "openai_style"
+      tool_choice: "auto/none/required"
+      parallel_calls: true
+      strict_mode: "response_format.strict"
+    multimodal_strategy: "openai_content_array"
+    response_strategy: "openai_choices"
+    experimental_features: ["reasoning_tokens", "prompt_caching"]
+
+  anthropic:
+    base_url_template: "https://api.anthropic.com/v1"
+    auth:
+      type: "api_key"
+      header_key: "x-api-key"
+    headers:
+      "anthropic-version": "2023-06-01"
+    endpoints:
+      chat: "/messages"
+    parameter_mapping:
+      temperature: "temperature"
+      top_p: "top_p"
+      max_tokens: "max_tokens"
+      stop_sequences: "stop_sequences"
+      stream: "stream"
+      system_prompt: "system"
+    payload_format: "anthropic_messages"
+    tools_mapping:
+      tools_schema: "anthropic_input_schema"
+      tool_choice: "auto/any"
+      parallel_calls: true
+      strict_mode: "output_format"
+    multimodal_strategy: "anthropic_content_blocks"
+    response_strategy: "anthropic_content_blocks"
+    experimental_features: ["thinking_blocks"]
+
+  google_gemini:
+    base_url_template: "https://generativelanguage.googleapis.com/v1beta"
+    auth:
+      type: "api_key"
+      query_param: "key"
+    endpoints:
+      chat: "/models/{model}:generateContent"
+    parameter_mapping:
+      temperature: "generationConfig.temperature"
+      top_p: "generationConfig.topP"
+      max_tokens: "generationConfig.maxOutputTokens"
+      stop_sequences: "generationConfig.stopSequences"
+    payload_format: "gemini_contents"
+    tools_mapping:
+      tools_schema: "gemini_function_declaration"
+      tool_choice: "tool_config.mode"
+      parallel_calls: true
+    multimodal_strategy: "gemini_parts"
+    response_strategy: "gemini_candidates"
+
+  cohere:
+    base_url_template: "https://api.cohere.ai/v2"
+    auth:
+      type: "bearer"
+      header_key: "Authorization"
+      prefix: "Bearer "
+    endpoints:
+      chat: "/chat"
+    parameter_mapping:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+    payload_format: "cohere_chat"
+    tools_mapping:
+      tools_schema: "cohere_style"
+    multimodal_strategy: "cohere_basic"
+
+  # OpenAI兼容生态（继承openai_compatible）
+  groq:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://api.groq.com/openai/v1"
+
+  deepseek:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://api.deepseek.com"
+
+  mistral:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://api.mistral.ai/v1"
+
+  fireworks:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://api.fireworks.ai/inference/v1"
+
+  together_ai:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://api.together.xyz/v1"
+
+  openrouter:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://openrouter.ai/api/v1"
+
+  perplexity:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://api.perplexity.ai"
+
+  ollama_local:
+    provider_ref: "openai_compatible"
+    base_url_template: "http://localhost:11434/v1"
+
+  azure_openai:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://{your-resource}.openai.azure.com/openai/deployments/{deployment}"
+
+  aws_bedrock:
+    base_url_template: "https://bedrock-runtime.{region}.amazonaws.com"
+    auth:
+      type: "aws_sigv4"
+    payload_format: "bedrock_json"
+
+  # 更多兼容提供商（2025热门）
+  siliconflow:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://api.siliconflow.cn/v1"
+
+  novita:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://api.novita.ai/v1"
+
+  hyperbolics:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://api.hyperbolic.xyz/v1"
+
+  nscale:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://api.nscale.ai/v1"
+
+  deepinfra:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://api.deepinfra.com/v1/openai"
+
+  replicate:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://api.replicate.com/v1"
+
+  fal_ai:
+    provider_ref: "openai_compatible"
+    base_url_template: "https://fal.ai/v1"
+
+# =========================================================
+# 第三层：模型实例（示例热门模型）
+# =========================================================
+models:
+  - id: "gpt-5"
+    provider_ref: "openai_compatible"
+    model_name: "gpt-5"
+    context_window: 128000
+    capabilities: ["vision", "audio", "tools", "json_schema", "streaming"]
+
+  - id: "claude-sonnet-4-5"
+    provider_ref: "anthropic"
+    model_name: "claude-3-5-sonnet-20241022"
+    context_window: 200000
+    capabilities: ["vision", "tools", "streaming"]
+
+  - id: "gemini-2.5-pro"
+    provider_ref: "google_gemini"
+    model_name: "gemini-2.5-pro"
+    context_window: 1000000
+    capabilities: ["vision", "audio", "video", "tools"]
+
+  - id: "command-r-plus"
+    provider_ref: "cohere"
+    model_name: "command-r-plus"
+    context_window: 128000
+    capabilities: ["tools", "rag"]
+
+  - id: "llama-4-70b"
+    provider_ref: "groq"
+    model_name: "llama-4-70b"
+    context_window: 128000
+    capabilities: ["vision", "tools"]
+
+  - id: "deepseek-v3"
+    provider_ref: "deepseek"
+    model_name: "deepseek-v3"
+    context_window: 128000
+    capabilities: ["reasoning", "tools"]
+
+  # 更多示例...
+  - id: "mistral-large-latest"
+    provider_ref: "mistral"
+    model_name: "mistral-large-latest"
+    context_window: 128000
+    capabilities: ["vision", "tools"]
+
+  - id: "local-llama3"
+    provider_ref: "ollama_local"
+    model_name: "llama3.2"
+    context_window: 8192
+    capabilities: ["text"]

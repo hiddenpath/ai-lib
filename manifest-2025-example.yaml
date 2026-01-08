@@ -1,0 +1,366 @@
+version: "1.1"
+metadata:
+  description: "AI-Lib Manifest-First v1.1 - 2025年LLM API革命就绪"
+  last_updated: "2025-01-XX"
+  authors: ["AI-Lib Team"]
+
+# =========================================================
+# 第一层：标准定义（2025年扩展）
+# =========================================================
+standard_schema:
+  parameters:
+    temperature:
+      type: float
+      range: [0.0, 2.0]
+      default: 1.0
+      description: "Controls randomness in the output"
+    max_tokens:
+      type: integer
+      min: 1
+      max: 32768
+      description: "Maximum number of tokens to generate"
+    stream:
+      type: boolean
+      default: false
+      description: "Enable streaming responses"
+    top_p:
+      type: float
+      range: [0.0, 1.0]
+      default: 1.0
+      description: "Nucleus sampling parameter"
+    reasoning_effort:
+      type: string
+      values: ["low", "medium", "high", "auto"]
+      default: "auto"
+      description: "Reasoning effort for agentic tasks"
+
+  tools:
+    schema: "standard_tool_definition"
+    choice_policy: ["auto", "none", "required", "specific"]
+    strict_mode: true
+    parallel_calls: true
+
+  response_format:
+    types: ["text", "json", "structured"]
+    schema_validation: true
+
+  multimodal:
+    image:
+      formats: ["png", "jpeg", "gif", "webp"]
+      max_size: "10MB"
+    audio:
+      formats: ["mp3", "wav", "ogg", "m4a", "flac"]
+      max_size: "25MB"
+    video:
+      formats: ["mp4", "avi", "mov"]
+      max_size: "100MB"
+    document:
+      formats: ["pdf", "docx", "txt"]
+      max_size: "50MB"
+
+  # 🆕 2025年：Agentic Loop配置
+  agentic_loop:
+    max_iterations: 10
+    stop_conditions: ["tool_result", "final_answer"]
+    reasoning_effort: "auto"
+
+  # 🆕 2025年：Streaming事件模型
+  streaming_events:
+    supported_events: ["PartialContentDelta", "ThinkingDelta", "PartialToolCall", "ToolCallStarted", "ToolCallEnded", "CitationChunk", "FinalCandidate"]
+    thinking_blocks: true
+    citations_enabled: true
+    partial_tool_calls: true
+
+# =========================================================
+# 第二层：提供商映射（2025年扩展）
+# =========================================================
+providers:
+  openai:
+    version: "v1"
+    base_url: "https://api.openai.com/v1"
+    auth:
+      type: bearer
+      token_env: "OPENAI_API_KEY"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      top_p: "top_p"
+      tools: "tools"
+      tool_choice: "tool_choice"
+      reasoning_effort: "reasoning_effort"
+    special_handling:
+      system_message: "messages[0]"
+      tool_result: "tool格式"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      tool_calls: "choices[0].message.tool_calls"
+      usage: "usage"
+      finish_reason: "choices[0].finish_reason"
+    streaming:
+      event_format: "data_lines"
+      content_path: "choices[0].delta.content"
+      tool_call_path: "choices[0].delta.tool_calls"
+      finish_reason_path: "choices[0].delta.finish_reason"
+    experimental_features:
+      - "strict_tools"
+      - "parallel_tool_calls"
+    capabilities: [chat, vision, tools, streaming, agentic, parallel_tools]
+
+    # 🆕 2025年：Responses API支持
+    response_strategy: "responses_api"
+
+    # 🆕 2025年：工具映射配置
+    tools_mapping:
+      standard_tool:
+        provider_name: "functions"
+        schema_path: "functions[].parameters"
+        parallel: true
+        invoke_style: "parallel"
+        max_parallel: 5
+        timeout: 30
+
+    # 🆕 2025年：Prompt Caching
+    prompt_caching:
+      enabled: true
+      ttl: 3600
+      namespace: "openai-cache"
+
+    # 🆕 2025年：服务层级
+    service_tier:
+      priority: "high"
+      batch_supported: true
+
+    # 🆕 2025年：推理tokens管理
+    reasoning_tokens:
+      auto_reserve: true
+      billing_multiplier: 1.5
+
+  anthropic:
+    version: "v1"
+    base_url: "https://api.anthropic.com/v1"
+    auth:
+      type: bearer
+      token_env: "ANTHROPIC_API_KEY"
+      extra_headers:
+        - name: "anthropic-version"
+          value: "2023-06-01"
+        - name: "anthropic-beta"
+          value: "tools-2024-05-16"
+    payload_format: "anthropic_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      top_p: "top_p"
+      tools: "tools"
+      tool_choice: "tool_choice"
+      system_message: "system"  # 顶级字段
+      reasoning_effort: "reasoning_effort"
+    special_handling:
+      system_prompt: "system顶层字段"
+      tool_result: "tool_result格式"
+    response_format: "anthropic_style"
+    response_paths:
+      content: "content[0].text"
+      tool_calls: "content[0].tool_calls"
+      usage: "usage"
+      stop_reason: "stop_reason"
+    streaming:
+      event_format: "anthropic_sse"
+      content_path: "delta.text"
+      tool_call_path: "delta.tool_calls"
+    experimental_features:
+      - "mcp"
+      - "advanced-tool-use-2025"
+      - "thinking_blocks"
+    capabilities: [chat, vision, tools, streaming, agentic, reasoning]
+
+    # 🆕 2025年：工具映射配置
+    tools_mapping:
+      standard_tool:
+        provider_name: "tools"
+        schema_path: "tools[].input_schema"
+        parallel: false  # Anthropic单工具流
+        invoke_style: "sync"
+        timeout: 60
+
+    # 🆕 2025年：Prompt Caching
+    prompt_caching:
+      enabled: true
+      ttl: 7200
+      namespace: "anthropic-cache"
+
+    # 🆕 2025年：推理tokens管理
+    reasoning_tokens:
+      reserved: 1000
+      auto_reserve: false
+      billing_multiplier: 2.0
+
+  gemini:
+    version: "v1beta"
+    base_url: "https://generativelanguage.googleapis.com/v1beta"
+    auth:
+      type: query_param
+      param_name: "key"
+      token_env: "GEMINI_API_KEY"
+    payload_format: "gemini_style"
+    parameter_mappings:
+      temperature: "generationConfig.temperature"
+      max_tokens: "generationConfig.maxOutputTokens"
+      # stream: Gemini不支持流式，省略此映射
+      top_p: "generationConfig.topP"
+      tools: "tools"
+      tool_choice: "toolConfig"
+    special_handling:
+      message_structure: "contents数组"
+      inline_data: "inlineData格式"
+    response_format: "gemini_style"
+    response_paths:
+      content: "candidates[0].content.parts[0].text"
+      tool_calls: "candidates[0].content.parts[0].functionCall"
+      finish_reason: "candidates[0].finishReason"
+    capabilities: [chat, vision, tools, multimodal]
+
+    # 🆕 2025年：工具映射配置
+    tools_mapping:
+      standard_tool:
+        provider_name: "tools"
+        schema_path: "tools[].parameters"
+        parallel: true
+        invoke_style: "parallel"
+        max_parallel: 3
+
+  groq:
+    version: "v1"
+    base_url: "https://api.groq.com/openai/v1"
+    auth:
+      type: bearer
+      token_env: "GROQ_API_KEY"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      max_tokens: "max_tokens"
+      stream: "stream"
+      tools: "tools"
+      tool_choice: "tool_choice"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      tool_calls: "choices[0].message.tool_calls"
+      usage: "usage"
+    streaming:
+      event_format: "data_lines"
+      content_path: "choices[0].delta.content"
+    capabilities: [chat, tools, streaming, parallel_tools]
+
+    # 🆕 2025年：Groq特色 - 极快推理
+    experimental_tools: ["builtin_search", "code_execution"]
+
+# =========================================================
+# 第三层：模型实例（2025年扩展）
+# =========================================================
+models:
+  gpt-4o:
+    provider: openai
+    model_id: "gpt-4o"
+    display_name: "GPT-4o"
+    context_window: 128000
+    capabilities: [chat, vision, tools, streaming, agentic, parallel_tools]
+    pricing:
+      input_per_token: 0.000005
+      output_per_token: 0.000015
+    status: active
+    tags: ["gpt", "vision", "tools", "agentic"]
+    agentic_capabilities:
+      reasoning_effort: "high"
+      thinking_blocks: false
+      parallel_tools: true
+      max_parallel_tools: 5
+      builtin_tools: ["web_search", "code_execution"]
+
+  gpt-4o-mini:
+    provider: openai
+    model_id: "gpt-4o-mini"
+    display_name: "GPT-4o Mini"
+    context_window: 128000
+    capabilities: [chat, vision, tools, streaming, agentic, parallel_tools]
+    pricing:
+      input_per_token: 0.0000015
+      output_per_token: 0.000002
+    status: active
+    tags: ["gpt", "vision", "tools", "cost-effective", "agentic"]
+    agentic_capabilities:
+      reasoning_effort: "medium"
+      thinking_blocks: false
+      parallel_tools: true
+      max_parallel_tools: 3
+
+  claude-3-5-sonnet:
+    provider: anthropic
+    model_id: "claude-3-5-sonnet-20241022"
+    display_name: "Claude 3.5 Sonnet"
+    context_window: 200000
+    capabilities: [chat, vision, tools, streaming, agentic, reasoning]
+    pricing:
+      input_per_token: 0.000003
+      output_per_token: 0.000015
+    status: active
+    tags: ["claude", "vision", "tools", "reasoning", "agentic"]
+    agentic_capabilities:
+      reasoning_effort: "high"
+      thinking_blocks: true
+      parallel_tools: false  # Claude单工具流
+      builtin_tools: ["web_search", "document_analysis"]
+
+  gemini-pro-vision:
+    provider: gemini
+    model_id: "gemini-pro-vision"
+    display_name: "Gemini Pro Vision"
+    context_window: 16384
+    capabilities: [chat, vision, tools, multimodal]
+    pricing:
+      input_per_token: 0.00000025
+      output_per_token: 0.0000005
+    status: active
+    tags: ["gemini", "vision", "multimodal"]
+    agentic_capabilities:
+      reasoning_effort: "medium"
+      parallel_tools: true
+      max_parallel_tools: 3
+
+  llama-3-1-70b-groq:
+    provider: groq
+    model_id: "llama-3.1-70b-instruct"
+    display_name: "Llama 3.1 70B (Groq)"
+    context_window: 131072
+    capabilities: [chat, tools, streaming, parallel_tools]
+    pricing:
+      input_per_token: 0.0000005
+      output_per_token: 0.0000008
+    status: active
+    tags: ["llama", "open-source", "fast-inference", "agentic"]
+    agentic_capabilities:
+      reasoning_effort: "medium"
+      parallel_tools: true
+      max_parallel_tools: 4
+      builtin_tools: ["code_execution"]
+
+  deepseek-chat:
+    provider: openai
+    model_id: "deepseek-chat"
+    display_name: "DeepSeek Chat"
+    context_window: 32768
+    capabilities: [chat, tools, streaming, parallel_tools]
+    pricing:
+      input_per_token: 0.00000014
+      output_per_token: 0.00000028
+    status: active
+    tags: ["deepseek", "reasoning", "cost-effective", "agentic"]
+    agentic_capabilities:
+      reasoning_effort: "high"
+      thinking_blocks: true
+      parallel_tools: true
+      builtin_tools: ["web_search", "math_solver"]

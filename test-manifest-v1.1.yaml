@@ -1,0 +1,278 @@
+version: "1.1"
+metadata:
+  description: "ai-lib Manifest v1.1 - Converted from v1.0"
+  last_updated: "2025-01-XX"
+  authors: ["ai-lib team"]
+
+# =========================================================
+# 第一层：标准定义 (v1.1格式)
+# =========================================================
+standard_schema:
+  parameters:
+    temperature:
+      type: float
+      range: [0.0, 2.0]
+      default: 1.0
+      description: "Controls randomness in the output"
+    top_p:
+      type: float
+      range: [0.0, 1.0]
+      default: 1.0
+      description: "Nucleus sampling parameter"
+    max_tokens:
+      type: integer
+      min: 1
+      max: 32768
+      description: "Maximum number of tokens to generate"
+    stop_sequences:
+      type: array
+      items: string
+      description: "Stop sequences for generation"
+    stream:
+      type: boolean
+      default: false
+      description: "Enable streaming responses"
+    seed:
+      type: integer
+      description: "Random seed for reproducible outputs"
+    response_format:
+      type: object
+      description: "Response format specification"
+
+  tools:
+    schema: "standard_tool_definition"
+    choice_policy: ["auto", "none", "required", "specific"]
+    strict_mode: true
+    parallel_calls: true
+
+  response_format:
+    types: ["text", "json", "structured"]
+    schema_validation: false
+
+  multimodal:
+    image:
+      formats: ["png", "jpeg", "gif", "webp"]
+      max_size: "10MB"
+    audio:
+      formats: ["mp3", "wav", "ogg", "m4a", "flac"]
+      max_size: "25MB"
+    video:
+      formats: ["mp4", "avi", "mov"]
+      max_size: "100MB"
+
+  # 🆕 v1.1新增：Agentic Loop配置
+  agentic_loop:
+    max_iterations: 10
+    stop_conditions: ["tool_result", "final_answer"]
+    reasoning_effort: "auto"
+
+  # 🆕 v1.1新增：Streaming事件模型
+  streaming_events:
+    supported_events: ["PartialContentDelta", "ThinkingDelta", "PartialToolCall", "ToolCallStarted", "ToolCallEnded"]
+    thinking_blocks: true
+    citations_enabled: true
+
+# =========================================================
+# 第二层：提供商映射 (转换为v1.1格式)
+# =========================================================
+providers:
+  openai:
+    version: "v1"
+    base_url: "https://api.openai.com/v1"
+    auth:
+      type: bearer
+      token_env: "OPENAI_API_KEY"
+    payload_format: "openai_style"
+    parameter_mappings:
+      temperature: "temperature"
+      top_p: "top_p"
+      max_tokens: "max_tokens"
+      stop_sequences: "stop"
+      stream: "stream"
+      seed: "seed"
+      response_format: "response_format"
+    special_handling:
+      system_message: "messages[0]"
+    response_format: "openai_style"
+    response_paths:
+      content: "choices[0].message.content"
+      tool_calls: "choices[0].message.tool_calls"
+      usage: "usage"
+      finish_reason: "choices[0].finish_reason"
+    streaming:
+      event_format: "data_lines"
+      content_path: "choices[0].delta.content"
+      tool_call_path: "choices[0].delta.tool_calls"
+    experimental_features:
+      - "strict_tools"
+      - "parallel_tool_calls"
+      - "reasoning_tokens"
+      - "prompt_caching"
+    capabilities: [chat, vision, tools, streaming, agentic, parallel_tools]
+
+    # 🆕 v1.1新增：工具映射配置
+    tools_mapping:
+      standard_tool:
+        provider_name: "functions"
+        schema_path: "functions[].parameters"
+        parallel: true
+        invoke_style: "parallel"
+        max_parallel: 5
+        timeout: 30
+
+    # 🆕 v1.1新增：Prompt Caching
+    prompt_caching:
+      enabled: true
+      ttl: 3600
+      namespace: "openai-cache"
+
+    # 🆕 v1.1新增：服务层级
+    service_tier:
+      priority: "high"
+      batch_supported: true
+
+  anthropic:
+    version: "v1"
+    base_url: "https://api.anthropic.com/v1"
+    auth:
+      type: api_key
+      key_env: "ANTHROPIC_API_KEY"
+      header_name: "x-api-key"
+      extra_headers:
+        - name: "anthropic-version"
+          value: "2023-06-01"
+    payload_format: "anthropic_style"
+    parameter_mappings:
+      temperature: "temperature"
+      top_p: "top_p"
+      max_tokens: "max_tokens"
+      stop_sequences: "stop_sequences"
+      stream: "stream"
+      system_message: "system"
+    special_handling:
+      system_prompt: "system顶级字段"
+    response_format: "anthropic_style"
+    response_paths:
+      content: "content[0].text"
+      tool_calls: "content[0].tool_calls"
+      usage: "usage"
+      stop_reason: "stop_reason"
+    streaming:
+      event_format: "anthropic_sse"
+      content_path: "delta.text"
+      tool_call_path: "delta.tool_calls"
+    experimental_features:
+      - "thinking_blocks"
+      - "mcp"
+    capabilities: [chat, vision, tools, streaming, agentic, reasoning]
+
+    # 🆕 v1.1新增：工具映射配置
+    tools_mapping:
+      standard_tool:
+        provider_name: "tools"
+        schema_path: "tools[].input_schema"
+        parallel: false  # Anthropic单工具流
+        invoke_style: "sync"
+        timeout: 60
+
+    # 🆕 v1.1新增：推理tokens管理
+    reasoning_tokens:
+      reserved: 1000
+      auto_reserve: false
+      billing_multiplier: 2.0
+
+  gemini:
+    version: "v1beta"
+    base_url: "https://generativelanguage.googleapis.com/v1beta"
+    auth:
+      type: query_param
+      param_name: "key"
+      token_env: "GEMINI_API_KEY"
+    payload_format: "gemini_style"
+    parameter_mappings:
+      temperature: "generationConfig.temperature"
+      top_p: "generationConfig.topP"
+      max_tokens: "generationConfig.maxOutputTokens"
+      stop_sequences: "generationConfig.stopSequences"
+    special_handling:
+      message_structure: "contents数组"
+      inline_data: "inlineData格式"
+    response_format: "gemini_style"
+    response_paths:
+      content: "candidates[0].content.parts[0].text"
+      tool_calls: "candidates[0].content.parts[0].functionCall"
+      finish_reason: "candidates[0].finishReason"
+    capabilities: [chat, vision, tools, multimodal]
+
+    # 🆕 v1.1新增：工具映射配置
+    tools_mapping:
+      standard_tool:
+        provider_name: "tools"
+        schema_path: "tools[].parameters"
+        parallel: true
+        invoke_style: "parallel"
+        max_parallel: 3
+
+# =========================================================
+# 第三层：模型实例配置
+# =========================================================
+models:
+  gpt-4:
+    provider: openai
+    model_id: "gpt-4"
+    display_name: "GPT-4"
+    context_window: 8192
+    capabilities: [chat, vision, tools, streaming, agentic]
+    pricing:
+      input_per_token: 0.00003
+      output_per_token: 0.00006
+    status: active
+    tags: ["gpt", "vision", "tools"]
+
+  gpt-3.5-turbo:
+    provider: openai
+    model_id: "gpt-3.5-turbo"
+    display_name: "GPT-3.5 Turbo"
+    context_window: 4096
+    capabilities: [chat, tools, streaming]
+    pricing:
+      input_per_token: 0.0000015
+      output_per_token: 0.000002
+    status: active
+    tags: ["gpt", "cost-effective"]
+
+  claude-3-sonnet:
+    provider: anthropic
+    model_id: "claude-3-sonnet-20240229"
+    display_name: "Claude 3 Sonnet"
+    context_window: 200000
+    capabilities: [chat, vision, tools, streaming, reasoning]
+    pricing:
+      input_per_token: 0.000003
+      output_per_token: 0.000015
+    status: active
+    tags: ["claude", "vision", "reasoning"]
+
+  gemini-pro:
+    provider: gemini
+    model_id: "gemini-pro"
+    display_name: "Gemini Pro"
+    context_window: 32768
+    capabilities: [chat, vision, tools, multimodal]
+    pricing:
+      input_per_token: 0.0000005
+      output_per_token: 0.0000015
+    status: active
+    tags: ["gemini", "multimodal"]
+
+  gemini-pro-vision:
+    provider: gemini
+    model_id: "gemini-pro-vision"
+    display_name: "Gemini Pro Vision"
+    context_window: 16384
+    capabilities: [chat, vision, tools, multimodal]
+    pricing:
+      input_per_token: 0.0000005
+      output_per_token: 0.0000015
+    status: active
+    tags: ["gemini", "vision", "multimodal"]

@@ -50,7 +50,7 @@ impl MistralAdapter {
         #[cfg(not(feature = "unified_transport"))]
         {
             let t = HttpTransport::new();
-            return Ok(t.boxed());
+            Ok(t.boxed())
         }
     }
 
@@ -116,7 +116,7 @@ impl MistralAdapter {
     fn convert_request(&self, request: &ChatCompletionRequest) -> serde_json::Value {
         let msgs: Vec<serde_json::Value> = request.messages.iter().map(|msg| {
             serde_json::json!({
-                "role": match msg.role { Role::System => "system", Role::User => "user", Role::Assistant => "assistant" },
+                "role": match msg.role { Role::System => "system", Role::User => "user", Role::Assistant => "assistant", Role::Tool => "tool" },
                 "content": msg.content.as_text()
             })
         }).collect();
@@ -401,7 +401,7 @@ impl ChatProvider for MistralAdapter {
             .transport
             .post_json(&url, Some(headers), provider_request)
             .await
-            .map_err(|e| e.with_context(&format!("Mistral chat request to {}", url)))?;
+            .map_err(|e| e.with_context(format!("Mistral chat request to {}", url)))?;
         if let Some(t) = timer {
             t.stop();
         }

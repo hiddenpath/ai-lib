@@ -1,6 +1,38 @@
-# ai-lib 🦀✨  
+# ⚠️ Important Notice: This Repository is Archived
+
+> **This repository (ai-lib) is no longer maintained. We are not accepting new PRs, Issues, or feature updates.**
+
+## 🚀 Migrate to ai-lib-rust
+
+**The ai-lib project has fully migrated to [ai-lib-rust](https://github.com/hiddenpath/ai-lib-rust)**, a brand new, **manifest-first (protocol-first)** and **data-driven** universal AI interface runtime.
+
+### Why Migrate?
+
+- ✅ **Protocol-Driven Architecture**: All logic is driven by YAML protocol files, no hardcoded provider logic
+- ✅ **Unified Standard**: Based on [AI-Protocol](https://github.com/hiddenpath/ai-protocol) specification, ensuring cross-runtime consistency
+- ✅ **Cleaner API**: Developer-friendly interface, avoiding complex and confusing user interfaces
+- ✅ **Better Maintainability**: Modular design with clear architectural layers
+- ✅ **Production Ready**: Complete test coverage, CI/CD integration, protocol validation
+
+### How to Migrate?
+
+1. **Check out the new project**: [ai-lib-rust](https://github.com/hiddenpath/ai-lib-rust)
+2. **Review the protocol specification**: [AI-Protocol](https://github.com/hiddenpath/ai-protocol)
+3. **Migration guide**: Please refer to ai-lib-rust's README and example code, or see [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md)
+
+### Get Help
+
+- **New project Issues**: [ai-lib-rust Issues](https://github.com/hiddenpath/ai-lib-rust/issues)
+- **Protocol specification**: [AI-Protocol](https://github.com/hiddenpath/ai-protocol)
+- **Discussions**: Please raise questions and suggestions in the ai-lib-rust repository
+
+---
+
+# ai-lib 🦀✨ (Archived)
 
 > A unified, reliable, high-performance multi-provider AI SDK for Rust
+
+**⚠️ Note**: This repository is no longer updated. Please migrate to [ai-lib-rust](https://github.com/hiddenpath/ai-lib-rust).
 
 A production-grade, provider-agnostic SDK that provides a unified Rust API for 20+ AI platforms and growing (OpenAI, Groq, Anthropic, Gemini, Mistral, Cohere, Azure OpenAI, Ollama, DeepSeek, Qwen, Baidu ERNIE, Tencent Hunyuan, iFlytek Spark, Kimi, HuggingFace, TogetherAI, xAI Grok, OpenRouter, Replicate, Perplexity, AI21, ZhipuAI, MiniMax, and more).  
 Eliminates fragmented authentication flows, streaming formats, error semantics, model naming differences, and inconsistent function calling. Scale from one-liner scripts to production systems without rewriting integration code.

@@ -75,7 +75,7 @@ pub trait ChatProvider: Send + Sync {
 pub use ChatProvider as ChatApi;
 
 /// Streaming response data chunk
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ChatCompletionChunk {
     pub id: String,
     pub object: String,
@@ -85,7 +85,7 @@ pub struct ChatCompletionChunk {
 }
 
 /// Streaming response choice delta
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ChoiceDelta {
     pub index: u32,
     pub delta: MessageDelta,
@@ -93,7 +93,7 @@ pub struct ChoiceDelta {
 }
 
 /// Message delta
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct MessageDelta {
     pub role: Option<Role>,
     pub content: Option<String>,
@@ -112,7 +112,7 @@ pub struct ModelInfo {
 }
 
 /// Model permission
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ModelPermission {
     pub id: String,
     pub object: String,

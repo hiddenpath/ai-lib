@@ -40,7 +40,7 @@ async fn test_circuit_breaker_with_rate_limiter() {
     // Test circuit breaker metrics
     let metrics = breaker.get_metrics();
     assert_eq!(metrics.state, ai_lib::circuit_breaker::CircuitState::Closed);
-    assert!(metrics.total_requests >= 0);
+    // total_requests is u32, so it's always >= 0, no need to check
 }
 
 #[tokio::test]

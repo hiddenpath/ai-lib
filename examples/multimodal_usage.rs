@@ -2,98 +2,59 @@ use ai_lib::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), AiLibError> {
-    // Initialize the AI client
-    let client = AiClient::new(Provider::OpenAI)?;
+    println!("🤖 AI-Lib v0.5.0 Multimodal Example");
+    println!("====================================");
 
-    println!("🤖 AI-Lib Multimodal Example");
-    println!("=============================");
+    // v0.5.0 Pattern: Initialize with a multimodal-capable model
+    let client = AiClientBuilder::new(Provider::OpenAI)
+        .with_model("gpt-4o")
+        .build()?;
 
-    // Example 1: Text-only message
+    // Example 1: Simple text message
     println!("\n1. Text Message:");
-    let text_message = Message {
-        role: Role::User,
-        content: Content::new_text("Hello, can you help me analyze this image?"),
-        function_call: None,
-    };
+    let text_message = Message::user("Hello, can you help me analyze this image?");
 
-    // Example 2: Image content from file path (auto-processed)
-    println!("\n2. Image from File Path:");
-    let image_content = Content::from_image_file("examples/assets/sample.png");
-    let image_message = Message {
-        role: Role::User,
-        content: image_content,
-        function_call: None,
-    };
-
-    // Example 3: Image content with explicit URL
-    println!("\n3. Image with URL:");
-    let url_image_content = Content::new_image(
-        Some("https://example.com/sample.jpg".to_string()),
-        Some("image/jpeg".to_string()),
-        Some("sample.jpg".to_string()),
-    );
-    let url_image_message = Message {
-        role: Role::User,
-        content: url_image_content,
-        function_call: None,
-    };
-
-    // Example 4: Audio content from file path
-    println!("\n4. Audio from File Path:");
-    let audio_content = Content::from_audio_file("examples/assets/sample.mp3");
-    let audio_message = Message {
-        role: Role::User,
-        content: audio_content,
-        function_call: None,
-    };
-
-    // Example 5: Mixed content (text + image)
-    println!("\n5. Mixed Content (Text + Image):");
-    let mixed_messages = vec![
-        Message {
-            role: Role::User,
-            content: Content::new_text("Please analyze this image and tell me what you see."),
-            function_call: None,
-        },
-        Message {
-            role: Role::User,
-            content: Content::from_image_file("examples/assets/sample.png"),
-            function_call: None,
-        },
+    // Example 2: Multimodal content (Text + Image URL)
+    println!("\n2. Multimodal Content (Text + Image URL):");
+    let multimodal_messages = vec![
+        Message::user("Describe the following image in detail:"),
+        Message::user_with_content(Content::Image {
+            url: Some("https://example.com/sample.jpg".to_string()),
+            mime: Some("image/jpeg".to_string()),
+            name: None,
+        }),
     ];
 
-    // Example 6: Data URL content
-    println!("\n6. Data URL Content:");
+    // Example 3: Data URL (Inlined Image)
+    println!("\n3. Inlined Image (Data URL):");
     let data_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
-    let data_url_content = Content::from_data_url(
+    let data_url_message = Message::user_with_content(Content::from_data_url(
         data_url.to_string(),
         Some("image/png".to_string()),
         Some("tiny.png".to_string()),
+    ));
+
+    println!("\n📝 Multimodal Message Structures Created:");
+    println!("   • Simple User Message: {:?}", text_message.role);
+    println!(
+        "   • Mixed Content Elements: {}",
+        match &mixed_message.content {
+            Content::Mixed(v) => v.len(),
+            _ => 1,
+        }
     );
-    let data_url_message = Message {
-        role: Role::User,
-        content: data_url_content,
-        function_call: None,
-    };
+    println!("   • Data URL Message: Created successfully");
 
-    println!("\n📝 Content Types Created:");
-    println!("   • Text: {:?}", text_message.content);
-    println!("   • Image from file: {:?}", image_message.content);
-    println!("   • Image from URL: {:?}", url_image_message.content);
-    println!("   • Audio from file: {:?}", audio_message.content);
-    println!("   • Data URL: {:?}", data_url_message.content);
+    println!("\n💡 Usage Notes for v0.5.0:");
+    println!("   • Use Message::user_with_content() for complex multimodal inputs.");
+    println!(
+        "   • The Manifest defines which models support 'vision' or 'multimodal' capabilities."
+    );
+    println!("   • The SDK handles the mapping to provider-specific multimodal formats (OpenAI, Gemini, Anthropic).");
 
-    println!("\n💡 Usage Notes:");
-    println!("   • Content::from_image_file() and Content::from_audio_file() automatically detect MIME types");
-    println!("   • The AI client handles file processing (upload or inline) based on provider capabilities");
-    println!("   • File size limits are respected - large files are uploaded, small files are inlined as data URLs");
-    println!("   • Mixed content messages are supported for complex multimodal interactions");
-
-    // Note: In a real application, you would send these messages to the AI client:
-    // let response = client.chat_completion(ChatCompletionRequest::new(
-    //     client.default_chat_model(),
-    //     mixed_messages,
-    // )).await?;
+    // Note: To send these:
+    // let request = ChatCompletionRequest::new("gpt-4o".to_string(), vec![mixed_message]);
+    // let response = client.chat_completion(request).await?;
 
     Ok(())
 }

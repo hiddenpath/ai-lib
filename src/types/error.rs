@@ -20,7 +20,7 @@ pub enum ErrorSeverity {
     Fatal,
 }
 
-#[derive(Error, Debug, Clone)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum AiLibError {
     #[error("Provider error: {0}")]
     ProviderError(String),
@@ -48,6 +48,9 @@ pub enum AiLibError {
 
     #[error("Retry exhausted: {0}")]
     RetryExhausted(String),
+
+    #[error("Parse error: {0}")]
+    ParseError(String),
 
     #[error("Serialization error: {0}")]
     SerializationError(String),
@@ -103,6 +106,7 @@ impl AiLibError {
                     ErrorSeverity::Server
                 }
             },
+            AiLibError::ParseError(_) => ErrorSeverity::Client,
         }
     }
 
@@ -125,6 +129,7 @@ impl AiLibError {
             AiLibError::ModelNotFound(_) => "MODEL_NOT_FOUND",
             AiLibError::InvalidModelResponse(_) => "INVALID_RESPONSE",
             AiLibError::ContextLengthExceeded(_) => "CONTEXT_TOO_LONG",
+            AiLibError::ParseError(_) => "PARSE_ERROR",
         }
     }
 
@@ -175,6 +180,7 @@ impl AiLibError {
             AiLibError::TransportError(err) => {
                 AiLibError::TransportError(transport_with_context(err, &ctx))
             }
+            AiLibError::ParseError(msg) => AiLibError::ParseError(prepend_context(&ctx, msg)),
         }
     }
 
@@ -223,6 +229,7 @@ impl AiLibError {
             AiLibError::ModelNotFound(_) => "Specified model not found",
             AiLibError::InvalidModelResponse(_) => "Invalid response from model",
             AiLibError::ContextLengthExceeded(_) => "Context length limit exceeded",
+            AiLibError::ParseError(_) => "Data parsing failed",
         }
     }
 

@@ -8,16 +8,21 @@
 mod batch;
 mod builder;
 mod client_impl;
+mod config_merger;
 mod helpers;
+mod manifest_client;
 mod metadata;
 mod model_options;
 mod provider;
 mod provider_factory;
+mod registry_resolver;
 mod request;
 mod stream;
+mod transport_builder;
 
 pub use builder::AiClientBuilder;
 pub use client_impl::AiClient;
+pub use manifest_client::ManifestClient;
 pub use model_options::ModelOptions;
 pub use provider::Provider;
 pub use stream::CancelHandle;

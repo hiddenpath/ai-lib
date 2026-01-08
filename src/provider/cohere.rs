@@ -181,7 +181,7 @@ impl CohereAdapter {
         #[cfg(not(feature = "unified_transport"))]
         {
             let t = HttpTransport::new();
-            return Ok(t.boxed());
+            Ok(t.boxed())
         }
     }
 
@@ -268,6 +268,7 @@ impl CohereAdapter {
                         Role::System => "system",
                         Role::User => "user",
                         Role::Assistant => "assistant",
+                        Role::Tool => "tool",
                     },
                     "content": msg.content.as_text()
                 })
@@ -436,6 +437,7 @@ impl ChatProvider for CohereAdapter {
                 Role::System => format!("System: {}", msg.content.as_text()),
                 Role::User => format!("Human: {}", msg.content.as_text()),
                 Role::Assistant => format!("Assistant: {}", msg.content.as_text()),
+                Role::Tool => format!("Tool: {}", msg.content.as_text()),
             })
             .collect::<Vec<_>>()
             .join("\n");

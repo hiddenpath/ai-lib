@@ -11,7 +11,12 @@ use crate::types::{
 use futures::stream::{Stream, StreamExt};
 use std::env;
 use std::sync::Arc;
+
 /// Configuration-driven generic adapter for OpenAI-compatible APIs
+#[deprecated(
+    since = "0.5.0",
+    note = "Use ConfigDrivenAdapter instead via ProviderFactory"
+)]
 pub struct GenericAdapter {
     transport: DynHttpTransportRef,
     config: ProviderConfig,
@@ -29,10 +34,16 @@ mod legacy_sse_tests {
         let event2 = "data: {\"id\":\"2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"m\",\"choices\":[{\"delta\":{\"content\":\"世界！\"}}]}\n\n";
         let mut buffer = [event1.as_bytes(), event2.as_bytes()].concat();
         let mut out: Vec<String> = Vec::new();
-        while let Some(boundary) = GenericAdapter::find_event_boundary(&buffer) {
+        while let Some(boundary) = {
+            #[allow(deprecated)]
+            GenericAdapter::find_event_boundary(&buffer)
+        } {
             let event_bytes = buffer.drain(..boundary).collect::<Vec<_>>();
             if let Ok(event_text) = std::str::from_utf8(&event_bytes) {
-                if let Some(parsed) = GenericAdapter::parse_sse_event(event_text) {
+                if let Some(parsed) = {
+                    #[allow(deprecated)]
+                    GenericAdapter::parse_sse_event(event_text)
+                } {
                     let chunk = parsed.expect("ok").expect("chunk");
                     if let Some(c) = &chunk.choices[0].delta.content {
                         out.push(c.clone());
@@ -44,6 +55,7 @@ mod legacy_sse_tests {
     }
 }
 
+#[allow(deprecated)]
 impl GenericAdapter {
     pub fn new(config: ProviderConfig) -> Result<Self, AiLibError> {
         // Validate configuration
@@ -578,6 +590,7 @@ impl GenericAdapter {
         })
     }
 }
+#[allow(deprecated)]
 #[async_trait::async_trait]
 impl ChatProvider for GenericAdapter {
     fn name(&self) -> &str {
@@ -617,7 +630,7 @@ impl ChatProvider for GenericAdapter {
             .transport
             .post_json(&url, Some(headers), provider_request)
             .await
-            .map_err(|e| e.with_context(&format!("GenericAdapter chat request to {}", url)))?;
+            .map_err(|e| e.with_context(format!("GenericAdapter chat request to {}", url)))?;
 
         // Stop timer
         if let Some(t) = timer {
@@ -798,14 +811,13 @@ impl ChatProvider for GenericAdapter {
             let response = self.transport.get_json(&url, Some(headers)).await?;
             Ok(response["data"]
                 .as_array()
-                .unwrap_or(&vec![])
+                .cloned()
+                .unwrap_or_default()
                 .iter()
-                .filter_map(|model| model["id"].as_str().map(|s| s.to_string()))
+                .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
                 .collect())
         } else {
-            Err(AiLibError::ProviderError(
-                "Models endpoint not configured".to_string(),
-            ))
+            Ok(vec!["generic-model".to_string()])
         }
     }
 
@@ -815,20 +827,7 @@ impl ChatProvider for GenericAdapter {
             object: "model".to_string(),
             created: 0,
             owned_by: "generic".to_string(),
-            permission: vec![ModelPermission {
-                id: "default".to_string(),
-                object: "model_permission".to_string(),
-                created: 0,
-                allow_create_engine: false,
-                allow_sampling: true,
-                allow_logprobs: false,
-                allow_search_indices: false,
-                allow_view: true,
-                allow_fine_tuning: false,
-                organization: "*".to_string(),
-                group: None,
-                is_blocking: false,
-            }],
+            permission: vec![ModelPermission::default()],
         })
     }
 }

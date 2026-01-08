@@ -36,6 +36,7 @@ pub use configs::ProviderConfigs;
 #[doc(hidden)]
 pub use gemini::GeminiAdapter;
 #[doc(hidden)]
+#[allow(deprecated)]
 pub use generic::GenericAdapter;
 #[doc(hidden)]
 pub use mistral::MistralAdapter;

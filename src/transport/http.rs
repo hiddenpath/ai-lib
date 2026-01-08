@@ -142,10 +142,19 @@ impl HttpTransport {
     /// Create HTTP transport instance with timeout
     ///
     /// Automatically detects AI_PROXY_URL environment variable for proxy configuration
+    /// Phase 3 Enhancement: Improved connection pool defaults for production
     pub fn with_timeout(timeout: Duration) -> Self {
-        let mut client_builder = Client::builder().timeout(timeout);
+        let mut client_builder = Client::builder()
+            .timeout(timeout)
+            // Phase 3: Better pool defaults for production (OSS)
+            .pool_max_idle_per_host(32) // Increased from reqwest default (32 vs ~10)
+            .pool_idle_timeout(Duration::from_secs(90)) // Keep connections alive longer
+            // HTTP/2 optimizations for better performance
+            .http2_adaptive_window(true) // Enable adaptive flow control
+            .http2_keep_alive_interval(Duration::from_secs(30)) // Prevent connection timeout
+            .http2_keep_alive_timeout(Duration::from_secs(10)); // Detect broken connections
 
-        // Optional: connection pool tuning via environment variables for OSS defaults
+        // Allow environment variable overrides
         if let Ok(v) = env::var("AI_HTTP_POOL_MAX_IDLE_PER_HOST") {
             if let Ok(n) = v.parse::<usize>() {
                 client_builder = client_builder.pool_max_idle_per_host(n);
@@ -179,10 +188,18 @@ impl HttpTransport {
     /// Create HTTP transport instance with timeout without automatic proxy detection
     ///
     /// This method creates a transport instance with timeout but without checking AI_PROXY_URL environment variable.
+    /// Phase 3 Enhancement: Same connection pool optimizations as with_timeout
     pub fn with_timeout_without_proxy(timeout: Duration) -> Self {
-        let mut client_builder = Client::builder().timeout(timeout);
+        let mut client_builder = Client::builder()
+            .timeout(timeout)
+            // Phase 3: Better pool defaults for production (OSS)
+            .pool_max_idle_per_host(32)
+            .pool_idle_timeout(Duration::from_secs(90))
+            .http2_adaptive_window(true)
+            .http2_keep_alive_interval(Duration::from_secs(30))
+            .http2_keep_alive_timeout(Duration::from_secs(10));
 
-        // Optional: connection pool tuning via environment variables for OSS defaults
+        // Allow environment variable overrides
         if let Ok(v) = env::var("AI_HTTP_POOL_MAX_IDLE_PER_HOST") {
             if let Ok(n) = v.parse::<usize>() {
                 client_builder = client_builder.pool_max_idle_per_host(n);

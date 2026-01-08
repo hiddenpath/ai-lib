@@ -1,8 +1,6 @@
-use ai_lib::AiLibError;
-
 #[cfg(feature = "unified_sse")]
 #[test]
-fn golden_non_ascii_concatenated_frames() -> Result<(), AiLibError> {
+fn golden_non_ascii_concatenated_frames() -> Result<(), Box<dyn std::error::Error>> {
     // Two SSE events back-to-back with multibyte UTF-8
     let event1 = "data: {\"id\":\"1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"m\",\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"你好，\"}}]}\n\n";
     let event2 = "data: {\"id\":\"2\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"m\",\"choices\":[{\"delta\":{\"content\":\"世界！\"}}]}\n\n";
@@ -26,7 +24,7 @@ fn golden_non_ascii_concatenated_frames() -> Result<(), AiLibError> {
 
 #[cfg(feature = "unified_sse")]
 #[test]
-fn golden_large_payload_split_boundaries() -> Result<(), AiLibError> {
+fn golden_large_payload_split_boundaries() -> Result<(), Box<dyn std::error::Error>> {
     // Build a large content and split across artificial chunks with CRLF boundaries
     let large = "a".repeat(8192) + "结束";
     let json = format!(

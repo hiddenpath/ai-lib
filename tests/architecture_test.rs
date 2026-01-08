@@ -14,7 +14,10 @@ mod tests {
     fn test_client_creation() {
         // Test client creation (without actual API calls)
         let client_result = AiClient::new(Provider::Groq);
-        assert!(client_result.is_ok());
+        if let Err(e) = &client_result {
+            eprintln!("Client creation failed: {}", e);
+        }
+        assert!(client_result.is_ok(), "Client creation should succeed");
 
         let client = client_result.unwrap();
         assert_eq!(client.provider_name(), "Groq");

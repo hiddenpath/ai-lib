@@ -65,17 +65,71 @@
 //!
 //! Note: In ai-lib-pro, these can be centrally configured and hot-reloaded
 //! via external configuration providers for enterprise deployments.
+//!
+//! # Architecture (v0.5.0+)
+//!
+//! ai-lib uses a **Manifest-First Data-Driven Architecture** where model and provider configurations
+//! are loaded from an embedded `aimanifest.yaml` registry:
+//!
+//! ```text
+//! ┌─────────────────────────────────────────────────────────────┐
+//! │                     AiClientBuilder                         │
+//! │  .with_model("gpt-4o")  OR  .new(Provider::OpenAI)          │
+//! └───────────────────────────┬─────────────────────────────────┘
+//!                             │
+//!                             ▼
+//! ┌─────────────────────────────────────────────────────────────┐
+//! │                    ModelRegistry                            │
+//! │  - Resolves model ID → ModelInfo                            │
+//! │  - Resolves provider → ProviderConfig                       │
+//! │  - Loaded from embedded defaults/aimanifest.yaml            │
+//! └───────────────────────────┬─────────────────────────────────┘
+//!                             │
+//!                             ▼
+//! ┌─────────────────────────────────────────────────────────────┐
+//! │                   ProviderFactory                           │
+//! │  - Creates adapters based on Manifest definition            │
+//! │  - Drives streaming behavior via Operators                  │
+//! └─────────────────────────────────────────────────────────────┘
+//! ```
+//!
+//! ## Model-Driven Usage (Recommended)
+//!
+//! ```rust,ignore
+//! use ai_lib::{AiClientBuilder, Provider};
+//!
+//! let client = AiClientBuilder::new(Provider::OpenAI)
+//!     .with_model("gpt-4o")
+//!     .build()?;
+//! ```
+//!
+//! ## Hot Reload (Feature-Gated)
+//!
+//! Enable with `features = ["config_hot_reload"]` to watch a custom `aimanifest.yaml`:
+//!
+//! ```rust,ignore
+//! use ai_lib::registry::watcher::FileWatcher;
+//! let watcher = FileWatcher::new("./my_manifest.yaml")?;
+//! watcher.spawn(); // Background task
+//! ```
 
+pub mod adapter;
+pub mod agentic;
 pub mod api;
+pub mod builder;
 pub mod client;
 pub mod config;
+pub mod manifest;
+pub mod mapping;
 pub mod metrics;
 pub mod model;
 pub mod provider;
-pub mod transport;
-pub mod types;
+pub mod registry;
 #[cfg(feature = "response_parser")]
 pub mod response_parser;
+pub mod streaming;
+pub mod transport;
+pub mod types;
 pub mod utils; // minimal explicit configuration entrypoint
 
 // Feature-gated modules (OSS progressive complexity)
@@ -109,6 +163,10 @@ pub use types::{
     AiLibError, ChatCompletionRequest, ChatCompletionResponse, Choice, FunctionCall,
     FunctionCallPolicy, Message, Role, Tool,
 };
+
+/// Result type alias for ai-lib operations
+pub type Result<T> = std::result::Result<T, AiLibError>;
+
 // Convenience re-exports: make the most-used types available from the crate root so
 // users don't need deep imports for common flows.
 pub use api::ChatCompletionChunk;

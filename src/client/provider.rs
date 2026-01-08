@@ -110,4 +110,68 @@ impl Provider {
             Provider::AI21 => "AI21",
         }
     }
+
+    /// Map the provider variant to its underlying protocol.
+    ///
+    /// This is the bridge between the legacy Enum-based architecture and the
+    /// new v0.5.0 Data-Driven Registry.
+    pub fn as_protocol(&self) -> &'static str {
+        match self {
+            // OpenAI Compatible
+            Provider::Groq
+            | Provider::XaiGrok
+            | Provider::Ollama
+            | Provider::DeepSeek
+            | Provider::Qwen
+            | Provider::AzureOpenAI
+            | Provider::HuggingFace
+            | Provider::TogetherAI
+            | Provider::OpenRouter
+            | Provider::Replicate
+            | Provider::BaiduWenxin
+            | Provider::TencentHunyuan
+            | Provider::IflytekSpark
+            | Provider::Moonshot
+            | Provider::ZhipuAI
+            | Provider::MiniMax
+            | Provider::OpenAI => "openai",
+
+            // Native Protocols
+            Provider::Anthropic => "anthropic",
+            Provider::Gemini => "gemini",
+            Provider::Mistral => "mistral",
+            Provider::Cohere => "cohere",
+            Provider::Perplexity => "perplexity",
+            Provider::AI21 => "ai21",
+        }
+    }
+
+    /// Map the provider variant to its registry configuration key.
+    pub fn as_registry_key(&self) -> &'static str {
+        match self {
+            Provider::Groq => "groq",
+            Provider::XaiGrok => "xai_grok",
+            Provider::Ollama => "ollama",
+            Provider::DeepSeek => "deepseek",
+            Provider::Qwen => "qwen",
+            Provider::Anthropic => "anthropic",
+            Provider::AzureOpenAI => "azure",
+            Provider::HuggingFace => "huggingface",
+            Provider::TogetherAI => "together",
+            Provider::OpenRouter => "openrouter",
+            Provider::Replicate => "replicate",
+            Provider::BaiduWenxin => "baidu_wenxin",
+            Provider::TencentHunyuan => "tencent_hunyuan",
+            Provider::IflytekSpark => "iflytek",
+            Provider::Moonshot => "moonshot",
+            Provider::ZhipuAI => "zhipu",
+            Provider::MiniMax => "minimax",
+            Provider::OpenAI => "openai",
+            Provider::Gemini => "gemini",
+            Provider::Mistral => "mistral",
+            Provider::Cohere => "cohere",
+            Provider::Perplexity => "perplexity",
+            Provider::AI21 => "ai21",
+        }
+    }
 }
